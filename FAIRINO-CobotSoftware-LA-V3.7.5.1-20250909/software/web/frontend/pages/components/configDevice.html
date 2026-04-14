@@ -1,0 +1,55 @@
+<div class="config-device">
+    <div class="device-icon">
+        <svg aria-hidden="true">
+            <use href="{{$ctrl.icon}}"></use>
+        </svg>
+    </div>
+    <div class="device-config">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex-column justify-content-between">
+                <span>{{$ctrl.label}}</span><span class="ml-10" ng-show="$ctrl.id != undefined">ID:{{$ctrl.id}}</span>
+                <div ng-show="$ctrl.title1 != undefined">
+                    <span>{{$ctrl.title1}}:</span><span class="ml-10">{{$ctrl.value1}}</span>
+                </div>
+                <div ng-show="$ctrl.title2 != undefined" style="word-wrap: break-word;word-break: break-all;">
+                    <span>{{$ctrl.title2}}:</span><span class="ml-10">{{$ctrl.value2}}</span>
+                </div>
+                <div class="d-flex" ng-show="$ctrl.title3 != undefined">
+                    <span>{{$ctrl.title3}}:</span>
+                    <span class="ml-10 d-flex align-items-center" ng-show="$ctrl.value3 != undefined">
+                        <svg class="icon ioa-icon" ng-show="$ctrl.value3 == 0" aria-hidden="true">
+                            <use href="#frbaideng"></use>
+                        </svg>
+                        <svg class="icon ioa-icon" ng-show="$ctrl.value3 == 1" aria-hidden="true">
+                            <use href="#frlvdeng"></use>
+                        </svg>
+                    </span>
+                </div>
+                <div ng-show="$ctrl.value4 != undefined">
+                    <span>{{$ctrl.title4}}:</span><span id="updateError" class="ml-10">{{$ctrl.value4}}</span>
+                </div>
+            </div>
+            <div class="d-flex justify-content-between" ng-show="$ctrl.icon2 != undefined">
+                <svg class="icon state-icon" aria-hidden="true" ng-click="$ctrl.clickToggle1($ctrl.value1)">
+                    <use href="{{$ctrl.icon2}}"></use>
+                </svg>
+                <svg class="icon state-icon margin-left-4" aria-hidden="true" ng-show="$ctrl.icon3 != undefined" ng-click="$ctrl.clickToggle2($ctrl.value1)">
+                    <use href="{{$ctrl.icon3}}"></use>
+                </svg>
+            </div>
+        </div>
+        <div class="d-flex">
+            <ul>
+                <li ng-repeat="item in $ctrl.configs">
+                  <svg class="icon ioa-icon" ng-show="!item.state" aria-hidden="true">
+                    <use href="#frbaideng"></use>
+                  </svg>
+                  <svg class="icon ioa-icon" ng-show="item.state" aria-hidden="true">
+                    <use href="#frlvdeng"></use>
+                  </svg>
+                  <span ng-bind="item.name"></span>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>

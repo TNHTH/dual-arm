@@ -1,0 +1,58 @@
+<div class="modal-header system-account-header">
+	<span ng-bind="_Title | translate"></span>
+	<a class="file-operation-close" ng-click="cancel()"><span aria-hidden="true">&times;</span></a>
+</div>
+<span class="warning-info">*触发功能暂未开放，设置完图表后直接点击查询即可。</span>
+<form>
+	<table class="table">
+		<tr>
+			<th ng-bind="_Trigger_Mode | translate"></th>
+			<td>
+				<select style="width: 60%;" ng-change="modepage(selectedTriggerMode);" ng-model="selectedTriggerMode" ng-options="a as a.optionname for a in TriggerModeData"></select>
+			</td> 
+		</tr>
+	</table>
+	<div class="form-group" ng-show="AutoTrigger" >
+		<table class="table">
+			<tr>
+				<th ng-bind="_Auto_Mode_Detail | translate"></th>
+				<td>
+					<select style="width: 60%;" ng-change="Autopage(selectedTriggerAutoMode);" ng-model="selectedTriggerAutoMode" ng-options="a as a.classname for a in allVarList"></select>
+				</td> 
+			</tr>
+			<tr>
+				<td>
+					<select style="width: 60%;" ng-change="SignalType(selectedTriggerAutoType);" ng-model="selectedTriggerAutoType" ng-options="a as a.typename for a in TriggerSignalType"></select>
+				</td> 
+				<td>
+					<select style="width: 60%;" ng-model="selectedTriggerAutoSignal" ng-options="a as a.varname for a in TriggerSignalData"></select>
+				</td> 
+			</tr>
+		</table>
+		<div class="form-group" ng-show="IOTrigger" >
+			<table class="table">
+				<tr>
+					<td>
+						<input name="IOMode" ng-click="UporDown(0)" type="radio" checked = "checked"/>上升沿
+						<br>
+						<input name="IOMode" ng-click="UporDown(1)" type="radio"/>下降沿
+					</td>
+				</tr>
+			</table>									
+		</div>
+		<div class="form-group" ng-show="ValueTrigger" >
+			<table class="table">
+				<tr>
+					<th ng-bind="_Varable_Value | translate"></th>
+					<td>
+						<input style="width: 60%;" class="left" type="number" ng-model="VarableValue">
+					</td>
+				</tr>
+			</table>
+		</div>								
+	</div>
+</form>
+<div class="modal-footer">
+	<button class="btn btn-frgrey" ng-click="cancel()" ng-bind="_cancel | translate"></button>
+    <button class="btn btn-frblue" id="btn_settrigger" ng-click="setTrigger()" ng-bind="_set | translate"></button>
+</div>

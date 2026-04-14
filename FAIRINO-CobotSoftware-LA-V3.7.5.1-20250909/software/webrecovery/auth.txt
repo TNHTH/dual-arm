@@ -1,0 +1,3 @@
+user name=admin password=521b1615546a7f6395dbd89fb50ac1e8
+user name=programmer password=740a354210678eab192d13081f06f0e8
+user name=operator password=78317efe83692f1d8184d4851c7cddec

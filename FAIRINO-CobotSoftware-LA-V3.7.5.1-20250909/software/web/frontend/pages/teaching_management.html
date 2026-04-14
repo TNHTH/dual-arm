@@ -1,0 +1,383 @@
+<div class="row no-margin" id="teachingManagement">
+    <div class="col-md-12 no-padding">
+        <div class="teaching-management-box boxbody-nohead-auto-height newScrollbar">
+            <div class="page-title-container d-flex justify-content-flex-start align-items-center">
+                <label class="page-title" ng-bind="'_teach_managent' | translate"></label>
+                <div class="page-ctrl-container d-flex margin-left-24">
+                    <div class="margin-right-12" ng-bind="'_current_point_mode' | translate"></div>
+                    <div class="general-itemgeneral-item d-flex justify-content-center align-items-center">
+                        <input id="pointMode1" class="margin-0" ng-model="pointTableFlag" value="0" type="radio" ng-click="changePointMode(0)">
+                        <label for="pointMode1"><span class="fw-400 mr-10" ng-bind="'_system_mode' | translate"></span></label>
+    
+                        <input id="pointMode2" class="margin-0" ng-model="pointTableFlag" value="1" type="radio" ng-click="changePointMode(1)">
+                        <label for="pointMode2"><span class="fw-400 mr-10" ng-bind="'_point_table_mode' | translate"></span></label>
+                    </div>
+                </div>
+            </div>
+            <hr class="box-divider">
+            <div class="page-ctrl-container d-flex justify-content-between align-items-center outer-border" ng-show="pointTableFlag == 1">
+                <div class="d-flex align-items-center">
+                    <span ng-bind="'_current_point_table' | translate"></span>
+                    <span class="margin-left-12 margin-right-24" ng-bind="pointTableName"></span>
+                    <div class="d-flex justify-content-around align-items-center">
+                        <a class="btn btn-frblue-auto margin-right-4" ng-click="addTableName()">
+                            <i class="fa fa-thin fa-plus fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_add_newly' | translate"></span>
+                        </a>
+                        <a id="btnImportPointTable" type="file" class="btn btn-frgreen-auto margin-right-4" ng-show="userAuthData.funcs.teaching_management.import == '1'">
+                            <i class="fa fa-thin fa-download fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_import' | translate"></span>
+                        </a>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-flex-end align-items-center">
+                    <span ng-bind="'_select_point_table' | translate"></span>
+                    <select class="ip-select margin-right-8 margin-left-4 h-32" ng-model="selectedPointTable" ng-options="a as a for a in pointTableList"></select>
+                    <div class="d-flex justify-content-around align-items-center">
+                        <a class="btn btn-frblue-auto margin-right-4" ng-click="applyPointTable(selectedPointTable)">
+                            <i class="fa fa-thin fa-floppy-disk fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_apply' | translate"></span>
+                        </a>
+                        <a class="btn btn-frblue-auto margin-right-4" ng-click="renameTableName()">
+                            <i class="fa fa-thin fa-pencil-square-o fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_rename' | translate"></span>
+                        </a>
+                        <a class="btn  btn-frblue-auto margin-right-4" ng-click="removePointTable(selectedPointTable)">
+                            <i class="fa fa-thin fa-trash-can fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_delete' | translate"></span>
+                        </a>
+                        <a class="btn btn-frgreen-auto" ng-click="exportPointTable()" ng-show="userAuthData.funcs.teaching_management.export == '1'">
+                            <i class="fa fa-thin fa-upload fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_export' | translate"></span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="page-ctrl-container d-flex justify-content-between align-items-center outer-border">
+                <div class="d-flex justify-content-flex-end align-items-center">
+                    <span ng-bind="'_chosen' | translate"></span>
+                    <span ng-bind="deleteItemsArray.length"></span>
+                    <span class="margin-right-24" ng-bind="'_row' | translate"></span>
+                    <div class="d-flex justify-content-around align-items-center">
+                        <a type="submit" class="btn btn-frblue-auto margin-right-4" ng-click="clickmodItem()">
+                            <i class="fa fa-thin fa-pencil-square-o fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_modify' | translate"></span>
+                        </a>
+                        <a type="submit" class="btn btn-frblue-auto margin-right-4" ng-click="deletePoints()">
+                            <i class="fa fa-thin fa-trash-can fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_delete' | translate"></span>
+                        </a>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-flex-end align-items-center">
+                    <div class="d-flex justify-content-around align-items-center margin-right-8">
+                        <a id="btnImportPoints" type="file" class="btn btn-frgreen-auto margin-right-4" ng-click="importPoints()" ng-show="userAuthData.funcs.teaching_management.import == '1' && pointTableFlag == 0">
+                            <i class="fa fa-thin fa-download fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_import' | translate"></span>
+                        </a>
+                        <a class="btn btn-frgreen-auto margin-right-4" ng-click="exportPoints()" ng-show="userAuthData.funcs.teaching_management.export == '1' && pointTableFlag == 0">
+                            <i class="fa fa-thin fa-upload fa-lg icon-color"></i>
+                            <span aria-hidden="true" ng-bind="'_export' | translate"></span>
+                        </a>
+                    </div>
+                    <div style="border: 1px solid #eae6e6; border-radius: 20px;">
+                        <input class="search-input" type="text" placeholder="{{placeholderTip}}"  id="pointNameFind" ng-change="searchPointName()" oninput="limitInput_special(this)" autocomplete="off" ng-model="teachPointName">
+                        <i class="fa fa-thin fa-magnifying-glass fa-lg" style="color:#eae6e6"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="teach-management-table newScrollbar" style="border: 1px solid #d1d0d0; width: 100%;height: calc(100% - 260px);">
+                <table id="tbPointsData" class="table table-bordered table-striped" style="margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th class="check-box table-width-40">
+                                <input type="checkbox" id="cbMain" ng-click="setAllCbs()">
+                            </th>
+                            <th class="w-120" ng-bind="'_name' | translate"></th>
+                            <th>X</th>
+                            <th>Y</th>
+                            <th>Z</th>
+                            <th>RX</th>
+                            <th>RY</th>
+                            <th>RZ</th>
+                            <th>J1</th>
+                            <th>J2</th>
+                            <th>J3</th>
+                            <th>J4</th>
+                            <th>J5</th>
+                            <th>J6</th>
+                            <th class="table-width-80">TOOL</th>
+                            <th>WOBJ</th>
+                            <th>V</th>
+                            <th ng-bind="'_operate' | translate" class="table-width-100"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody">
+                        <tr ng-repeat="item in recordPointTableList">
+                            <td class="check-box table-width-40">
+                                <input type="checkbox" id="cbItem{{item.name}}" name="cbItem" ng-click="clickCbItem($index, item.name)">
+                            </td>
+                            <td class="p-10 w-120" contenteditable ng-blur="renamePoint($event, $index)">
+                                <span class="word-wrap" ng-bind="item.name"></span>
+                            </td>
+                            <td ng-bind="item.x" contenteditable="{{userAuthData.funcs.teaching_management.modify == '1'}}"></td>
+                            <td ng-bind="item.y" contenteditable="{{userAuthData.funcs.teaching_management.modify == '1'}}"></td>
+                            <td ng-bind="item.z" contenteditable="{{userAuthData.funcs.teaching_management.modify == '1'}}"></td>
+                            <td ng-bind="item.rx" contenteditable="{{userAuthData.funcs.teaching_management.modify == '1'}}"></td>
+                            <td ng-bind="item.ry" contenteditable="{{userAuthData.funcs.teaching_management.modify == '1'}}"></td>
+                            <td ng-bind="item.rz" contenteditable="{{userAuthData.funcs.teaching_management.modify == '1'}}"></td>
+                            <td ng-bind="item.j1"></td>
+                            <td ng-bind="item.j2"></td>
+                            <td ng-bind="item.j3"></td>
+                            <td ng-bind="item.j4"></td>
+                            <td ng-bind="item.j5"></td>
+                            <td ng-bind="item.j6"></td>
+                            <td ng-bind="item.toolnum" class="table-width-80" style="word-wrap: break-word;overflow-wrap: break-word;"></td>
+                            <td ng-bind="item.workpiecenum"></td>
+                            <td ng-bind="item.speed" contenteditable="{{userAuthData.funcs.teaching_management.modify == '1'}}"></td>
+                            <td class="table-width-100">
+                                <a ng-click="openPointDetailsModal(item)">
+                                    <i ng-attr-title="{{'_details' | translate}}" class="fa fa-eye" aria-hidden="true"></i>
+                                </a>
+                                <a ng-click="runGlobalTeachingPoint(item)" ng-attr-title="{{'_start_program' | translate}}">
+                                    <i class="frfont frkaishianniu"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <div class="page-total">
+                    <span ng-bind="'_a_toal_of' | translate"></span>
+                    <span>{{pageTotal}}</span>
+                    <span ng-bind="'_data' | translate"></span>
+                </div>
+                <div class="page-right">
+                    <div class="page-size">
+                        <select ng-model="pageSize" ng-options="a as a.text for a in pageSelect" ng-change="pageSelectChange()"></select>
+                    </div>
+                    <div class="page-number">
+                        <ul class="page-number-ul" ng-class="pageNumTotal > 7 ? 'page-number-ul-between' : 'page-number-ul-unset'">
+                            <li>
+                                <span class="page-jump page-prev" ng-class="{ 'page-jump-prohibit': currentPageNum == 1 }" ng-click="pageJumpStep('prev', currentPageNum)">&lt;</span>
+                            </li>
+                            <li>
+                                <span class="page-jump" ng-class="currentPageNum == 1 ? 'currentPage' : 'otherPage'" ng-click="pageJumpStep('specify', 1)">1</span>
+                            </li>
+                            <li ng-show="paginationSize[0] > 2">
+                                <span class="page-jump page-jump-more" id="page-less" ng-click="pageJumpStep('less', currentPageNum)">•••</span>
+                            </li>
+                            <li ng-repeat="item in paginationSize track by $index">
+                                <span class="page-jump" ng-class="currentPageNum == item ? 'currentPage' : 'otherPage'" ng-click="pageJumpStep('specify', item)">{{item}}</span>
+                            </li>
+                            <li ng-show="pageNumTotal > 2 && pageNumTotal - paginationSize[paginationSize.length - 1] > 1">
+                                <span class="page-jump page-jump-more" id="page-more" ng-click="pageJumpStep('more', currentPageNum)">•••</span>
+                            </li>
+                            <li ng-show="pageNumTotal > 1">
+                                <span class="page-jump" ng-class="currentPageNum == pageNumTotal ? 'currentPage' : 'otherPage'" ng-click="pageJumpStep('specify', pageNumTotal)">{{pageNumTotal}}</span>
+                            </li>
+                            <li>
+                                <span class="page-jump page-next" ng-class="{ 'page-jump-prohibit': currentPageNum == pageNumTotal }" ng-click="pageJumpStep('next', currentPageNum)">&gt;</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="page-change">
+                        <span ng-bind="'_jump_to' | translate"></span>
+                        <input type="text" id="currentPageNum" ng-model="currentInputPageNum" oninput="limitInput_int(this)" min="1" max="{{pageNumTotal}}" ng-blur="currentPageNumChange(currentInputPageNum)">
+                        <span>/</span>
+                        <span>{{pageNumTotal}}</span>
+                        <span ng-bind="'_page' | translate"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" aria-hidden="true" data-backdrop="static" id="importPointsModal" tabindex="-1" role="dialog" aria-labelledby="importModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content file-operation-content">
+            <div class="modal-header file-operation-header">
+                <span id="importModalLabel" ng-bind="'_import_point' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body">
+                <input type="file" name="importPoints" id="pointsImported" value="" accept=".db">
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey" data-dismiss="modal">
+                    <span aria-hidden="true" ng-bind="'_close' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="submitPoints()">
+                    <span aria-hidden="true" ng-bind="'_import' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal" aria-hidden="true" data-backdrop="static" id="importPointTableModal" tabindex="-1" role="dialog" aria-labelledby="importModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content file-operation-content">
+            <div class="modal-header file-operation-header">
+                <span id="importModalLabel" ng-bind="'_import_file' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body">
+                <input type="file" name="importPoints" id="pointTableImported" value="" accept=".db">
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey" data-dismiss="modal">
+                    <span aria-hidden="true" ng-bind="'_close' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="importPointTable()">
+                    <span aria-hidden="true" ng-bind="'_import' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal" aria-hidden="true" data-backdrop="static" id="pointDetailsModal" tabindex="-1" role="dialog" aria-labelledby="pointDetails">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content teach-details">
+            <div class="modal-header teach-details-header">
+                <span id="pointDetails" ng-bind="'_details' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body teach-details-content">
+                <ul>
+                    <li>
+                        <span class="title">X</span>:<span class="value">{{teachManagementDetails.x}}</span>
+                    </li>
+                    <li>
+                        <span class="title">Y</span>:<span class="value">{{teachManagementDetails.y}}</span>
+                    </li>
+                    <li>
+                        <span class="title">Z</span>:<span class="value">{{teachManagementDetails.z}}</span>
+                    </li>
+                    <li>
+                        <span class="title">RX</span>:<span class="value">{{teachManagementDetails.rx}}</span>
+                    </li>
+                    <li>
+                        <span class="title">RY</span>:<span class="value">{{teachManagementDetails.ry}}</span>
+                    </li>
+                    <li>
+                        <span class="title">RZ</span>:<span class="value">{{teachManagementDetails.rz}}</span>
+                    </li>
+                    <li>
+                        <span class="title">J1</span>:<span class="value">{{teachManagementDetails.j1}}</span>
+                    </li>
+                    <li>
+                        <span class="title">J2</span>:<span class="value">{{teachManagementDetails.j2}}</span>
+                    </li>
+                    <li>
+                        <span class="title">J3</span>:<span class="value">{{teachManagementDetails.j3}}</span>
+                    </li>
+                    <li>
+                        <span class="title">J4</span>:<span class="value">{{teachManagementDetails.j4}}</span>
+                    </li>
+                    <li>
+                        <span class="title">J5</span>:<span class="value">{{teachManagementDetails.j5}}</span>
+                    </li>
+                    <li>
+                        <span class="title">J6</span>:<span class="value">{{teachManagementDetails.j6}}</span>
+                    </li>
+                    <li>
+                        <span class="title">TOOL</span>:<span class="value">{{teachManagementDetails.toolnum}}</span>
+                    </li>
+                    <li>
+                        <span class="title">WOBJ</span>:<span class="value">{{teachManagementDetails.workpiecenum}}</span>
+                    </li>
+                    <li>
+                        <span class="title">V</span>:<span class="value">{{teachManagementDetails.speed}}</span>
+                    </li>
+                    <li>
+                        <span class="title">ACC</span>:<span class="value">{{teachManagementDetails.acc}}</span>
+                    </li>
+                    <li>
+                        <span class="title">E1</span>:<span class="value">{{teachManagementDetails.E1}}</span>
+                    </li>
+                    <li>
+                        <span class="title">E2</span>:<span class="value">{{teachManagementDetails.E2}}</span>
+                    </li>
+                    <li>
+                        <span class="title">E3</span>:<span class="value">{{teachManagementDetails.E3}}</span>
+                    </li>
+                    <li>
+                        <span class="title">E4</span>:<span class="value">{{teachManagementDetails.E4}}</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey" data-dismiss="modal">
+                    <span aria-hidden="true" ng-bind="'_close' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal" aria-hidden="true" data-backdrop="static" id="addPointTableModal" tabindex="-1" role="dialog" aria-labelledby="addPointTable">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content teach-details">
+            <div class="modal-header teach-details-header">
+                <span id="addPointTable" ng-bind="'_add_newly' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body teach-details-content">
+                <span ng-bind="'_point_table_name' | translate"></span>
+                <input type="text" ng-model="addPointTableContent" oninput="limitInput_special(this)" maxlength="15">
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey float-left" data-dismiss="modal">
+                    <span aria-hidden="true" ng-bind="'_close' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="createPointTable(addPointTableContent)">
+                    <span aria-hidden="true" ng-bind="'_apply' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal" aria-hidden="true" data-backdrop="static" id="renamePointTableModal" tabindex="-1" role="dialog" aria-labelledby="renamePointTable">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content teach-details">
+            <div class="modal-header teach-details-header">
+                <span id="renamePointTable" ng-bind="'_rename' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body teach-details-content">
+                <span ng-bind="'_point_table_name' | translate"></span>
+                <input type="text" ng-model="renamePointTableContent" oninput="limitInput_special(this)">
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey float-left" data-dismiss="modal">
+                    <span aria-hidden="true" ng-bind="'_close' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="renamePointTable(renamePointTableContent, selectedPointTable)">
+                    <span aria-hidden="true" ng-bind="'_apply' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal" aria-hidden="true" data-backdrop="static" id="enterSystemModeModal" tabindex="-1" role="dialog" aria-labelledby="enterSystemModeTable">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content teach-details">
+            <div class="modal-header teach-details-header">
+                <span id="enterSystemMode" ng-bind="'_confirm' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true" ng-click="cancelSwitchSystemMode()">&times;</span></a>
+            </div>
+            <div class="modal-body teach-details-content">
+                <span ng-bind="'_please_confirm_whether_enter' | translate"></span>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey float-left" data-dismiss="modal" ng-click="cancelSwitchSystemMode()">
+                    <span aria-hidden="true" ng-bind="'_close' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="applyPointTable()">
+                    <span aria-hidden="true" ng-bind="'_confirm' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

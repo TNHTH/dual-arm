@@ -1,0 +1,109 @@
+V3.7.5.1版本说明：
+该版本主要优化项：
+1）优化程序编程指令编辑框；
+2）系统升级优化；
+3）末端拖动功能优化；
+4）优化485扩展轴；
+ 
+该版本新增项：
+ 1）增加打磨头类设备开放协议功能；
+ 2）增加电弧跟踪适配多层多道焊焊接功能；
+ 3）增加增加碰撞策略-碰撞回弹功能； 
+ 4）增加运动仿真接口SimMoveJ、SimMoveL、SimMoveC；
+ 5）增加TCP校准功能；
+
+---
+
+### 繁體中文
+#### 優化項：
+1）優化程式編程指令編輯框；  
+2）系統升級優化；  
+3）末端拖動功能優化；  
+4）優化485擴展軸；  
+
+#### 新增項：
+1）增加打磨頭類設備開放協議功能；  
+2）增加電弧跟蹤適配多層多道焊接功能；  
+3）增加碰撞策略 - 碰撞回彈功能；  
+4）增加運動模擬接口 SimMoveJ、SimMoveL、SimMoveC；  
+5）增加 TCP 校準功能；  
+
+---
+
+### English
+#### Optimizations:
+1) Optimized program instruction editor;  
+2) Optimized system upgrade process;  
+3) Optimized end-effector drag function;  
+4) Optimized 485 extension axis;  
+
+#### New Features:
+1) Added open protocol support for grinding head devices;  
+2) Added arc tracking function for multi-layer multi-pass welding;  
+3) Added collision strategy – collision rebound function;  
+4) Added motion simulation interfaces: SimMoveJ, SimMoveL, SimMoveC;  
+5) Added TCP calibration function;  
+
+---
+
+### 日本語
+#### 最適化項目：
+1）プログラム命令エディタを最適化；  
+2）システムアップグレードを最適化；  
+3）エンドエフェクタのドラッグ機能を最適化；  
+4）485拡張軸を最適化；  
+
+#### 新規項目：
+1）研磨ヘッド装置のオープンプロトコル機能を追加；  
+2）アークトラッキングの多層多パス溶接対応機能を追加；  
+3）衝突戦略 - 衝突反発機能を追加；  
+4）動作シミュレーションインターフェース SimMoveJ、SimMoveL、SimMoveC を追加；  
+5）TCPキャリブレーション機能を追加；  
+
+---
+
+### Français
+#### Optimisations :
+1) Optimisation de l’éditeur d’instructions de programmation ;  
+2) Optimisation du processus de mise à jour système ;  
+3) Optimisation de la fonction de déplacement de l’effecteur terminal ;  
+4) Optimisation de l’axe d’extension 485 ;  
+
+#### Nouveautés :
+1) Ajout du support protocole ouvert pour les dispositifs de tête de polissage ;  
+2) Ajout de la fonction de suivi d’arc pour le soudage multi-couches et multi-passes ;  
+3) Ajout de la stratégie de collision – fonction de rebond après collision ;  
+4) Ajout des interfaces de simulation de mouvement : SimMoveJ, SimMoveL, SimMoveC ;  
+5) Ajout de la fonction d’étalonnage TCP ;  
+
+---
+
+### 한국어
+#### 최적화 항목:
+1) 프로그램 명령 편집기 최적화;  
+2) 시스템 업그레이드 최적화;  
+3) 엔드 이펙터 드래그 기능 최적화;  
+4) 485 확장 축 최적화;  
+
+#### 신규 항목:
+1) 연마 헤드 장치 오픈 프로토콜 기능 추가;  
+2) 아크 추적 다층 다층 용접 지원 기능 추가;  
+3) 충돌 전략 - 충돌 반발 기능 추가;  
+4) 동작 시뮬레이션 인터페이스 SimMoveJ, SimMoveL, SimMoveC 추가;  
+5) TCP 보정 기능 추가;  
+
+---
+
+### Русский
+#### Оптимизации:
+1) Оптимизировано окно редактирования программных инструкций;  
+2) Оптимизирован процесс обновления системы;  
+3) Оптимизирована функция перетаскивания на конце (end-effector drag);  
+4) Оптимизирован расширительный ось 485;  
+
+#### Новые функции:
+1) Добавлена поддержка открытого протокола для устройств с шлифовальными головками;  
+2) Добавлена функция слежения за дугой для многослойной многопроходной сварки;  
+3) Добавлена стратегия столкновений – функция отскока при столкновении;  
+4) Добавлены интерфейсы имитации движения: SimMoveJ, SimMoveL, SimMoveC;  
+5) Добавлена функция калибровки TCP;  

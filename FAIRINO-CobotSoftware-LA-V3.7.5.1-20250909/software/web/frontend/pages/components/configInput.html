@@ -1,0 +1,12 @@
+<div>
+    <span class="d-block w-full">{{$ctrl.label}} {{$ctrl.unit != undefined ? '(' + $ctrl.unit + ')' : ''}}</span>
+    <input
+        class="d-block {{$ctrl.styles}}"
+        type="{{$ctrl.type}}"
+        limit-input="$ctrl.val"
+        placeholder="{{placeholder}}"
+        ng-model="$ctrl.val"
+        ng-disabled="$ctrl.disable"
+        ng-blur="$ctrl.blurToggle()"
+    >
+</div> 

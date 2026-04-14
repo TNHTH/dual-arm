@@ -1,0 +1,137 @@
+<div class="row no-margin">
+    <div class="col-md-12 no-padding" style="background-color: #fff;">
+        <div class="log-box boxbody-nohead-auto-height newScrollbar">
+            <div class="page-title-container">
+                <label class="page-title" ng-bind="'_sys_log' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="fr-log log" ng-show="loginType == '0'">
+                <div class="page-ctrl-container">
+                    <span ng-bind="'_select_date' | translate"></span>
+                    <select ng-change="clickDataClass()" ng-model="selectrecordname" ng-options="x for x in recordname"></select>
+                    <a class="btn btn-frblue" ng-click="exportRecordData()" ng-bind="'_export_all_log' | translate" ng-show="userAuthData.funcs.system_log.export_log == '1'"></a>
+                </div>
+                <div class="page-ctrl-container">
+                    <input name="logType" class="inputZoom" ng-click="typeRecord(0)" type="radio" checked = "checked"/> <span ng-bind="'_log_type_all' | translate"></span>
+                    <input name="logType" class="inputZoom" ng-click="typeRecord(1)" type="radio"/>   <span ng-bind="'_log_type_error' | translate"></span>
+                    <input name="logType" class="inputZoom" ng-click="typeRecord(2)" type="radio"/>   <span ng-bind="'_log_type_alarm' | translate"></span>
+                    <input name="logType" class="inputZoom" ng-click="typeRecord(3)" type="radio" />   <span ng-bind="'_log_type_normal' | translate"></span>
+                    <input name="logType" class="inputZoom" ng-click="typeRecord(4)" type="radio" />   <span ng-bind="'_log_type_apply' | translate"></span>
+                    <input name="logType" class="inputZoom" ng-click="typeRecord(5)" type="radio" />   <span ng-bind="'_log_type_robot' | translate"></span>
+                </div>
+                <table id="tbLogData" class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th ng-bind="'_log_time_menu' | translate" class="table-per-w-15"></th>
+                            <th ng-bind="'_log_type_menu' | translate" class="table-per-w-15"></th>
+                            <th ng-bind="'_log_operator_menu' | translate" class="table-per-w-15"></th>
+                            <th ng-bind="'_log_content_menu' | translate" class="table-per-w-55"></th>
+    
+                        </tr>
+                    </thead>
+                    <tbody id="tbLogBody" class="newScrollbar">
+                        <tr ng-repeat="item in logTypeContent track by $index">
+                            <td class="table-per-w-15">{{item.time}}</td>
+                            <td class="table-per-w-15">{{item.class}}</td>
+                            <td class="table-per-w-15">{{item.user}}</td>
+                            <td class="table-per-w-55">{{item.content}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="catl-log log" ng-show="loginType == '1'">
+                <div class="page-ctrl-container catl-log-type">
+                    <span ng-bind="'_type_selection' | translate"></span>
+                    <input name="catlLogType" class="inputZoom" ng-click="selectCATLLogType('0')" type="radio" checked="checked"/><span ng-bind="'_system_operation' | translate"></span>
+                    <input name="catlLogType" class="inputZoom" ng-click="selectCATLLogType('1')" type="radio"/><span ng-bind="'_parameter_modification' | translate"></span>
+                    <input name="catlLogType" class="inputZoom" ng-click="selectCATLLogType('2')" type="radio"/><span ng-bind="'_program_modification' | translate"></span>
+                    <input name="catlLogType" class="inputZoom" ng-click="selectCATLLogType('3')" type="radio"/><span ng-bind="'_security_configuration_modification' | translate"></span>
+                </div>
+                <div class="page-ctrl-container">
+                    <span ng-bind="'_select_date' | translate"></span>
+                    <select ng-change="selectCATLDate()" ng-model="catlRecordDate" ng-options="item for item in catlRecordDateList"></select>
+                    <a class="btn btn-frblue" ng-click="exportCATLLogDB()" ng-show="userAuthData.funcs.system_log.export_log == '1'" ng-bind="'_export_log' | translate"></a>
+                </div>
+                <table id="tbCatlLogData" class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th ng-bind="'_log_time_menu' | translate" class="table-per-w-15"></th>
+                            <th ng-bind="'_log_operator_menu' | translate" class="table-per-w-15"></th>
+                            <th ng-bind="'_operation_record' | translate" class="table-per-w-70" ng-show="catlLogType == '0'"></th>
+                            <th ng-bind="'_before_fixing' | translate" class="table-per-w-70" ng-show="catlLogType == '1' || catlLogType == '3'"></th>
+                            <th ng-bind="'_after_modification' | translate" class="table-per-w-70" ng-show="catlLogType == '1' || catlLogType == '3'"></th>
+                            <th ng-bind="'_original_value' | translate" class="table-per-w-70" ng-show="catlLogType == '2'"></th>
+                            <th ng-bind="'_backup_value' | translate" class="table-per-w-70" ng-show="catlLogType == '2'"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbCatlLogBody" class="newScrollbar">
+                        <tr ng-repeat="item in catlLogData track by $index">
+                            <td class="table-per-w-15">{{item.time}}</td>
+                            <td class="table-per-w-15">{{item.user}}</td>
+                            <td class="table-per-w-70" ng-show="catlLogType == '0'">
+                                {{item.content}}
+                            </td>
+                            <td class="table-per-w-70" ng-show="catlLogType == '1' || catlLogType == '3'">
+                                {{item.before}}
+                            </td>
+                            <td class="table-per-w-70" ng-show="catlLogType == '1' || catlLogType == '3'">
+                                {{item.after}}
+                            </td>
+                            <td class="table-per-w-70" ng-show="catlLogType == '2'">
+                                {{item.origin}}
+                            </td>
+                            <td class="table-per-w-70" ng-show="catlLogType == '2'">
+                                {{item.backup}}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="pagination" ng-show="catlLogData.length">
+                    <div class="page-total">
+                        <span ng-bind="'_a_toal_of' | translate"></span>
+                        <span>{{pageTotal}}</span>
+                        <span ng-bind="'_data' | translate"></span>
+                    </div>
+                    <div class="page-right">
+                        <div class="page-size">
+                            <select ng-model="pageSize" ng-options="a as a.text for a in pageSelect" ng-change="pageSelectChange()"></select>
+                        </div>
+                        <div class="page-number">
+                            <ul class="page-number-ul" ng-class="pageNumTotal > 7 ? 'page-number-ul-between' : 'page-number-ul-unset'">
+                                <li>
+                                    <span class="page-jump page-prev" ng-class="{ 'page-jump-prohibit': currentPageNum == 1 }" ng-click="pageJumpStep('prev', currentPageNum)">&lt;</span>
+                                </li>
+                                <li>
+                                    <span class="page-jump" ng-class="currentPageNum == 1 ? 'currentPage' : 'otherPage'" ng-click="pageJumpStep('specify', 1)">1</span>
+                                </li>
+                                <li ng-show="paginationSize[0] > 2">
+                                    <span class="page-jump page-jump-more" id="page-less" ng-click="pageJumpStep('less', currentPageNum)">•••</span>
+                                </li>
+                                <li ng-repeat="item in paginationSize track by $index">
+                                    <span class="page-jump" ng-class="currentPageNum == item ? 'currentPage' : 'otherPage'" ng-click="pageJumpStep('specify', item)">{{item}}</span>
+                                </li>
+                                <li ng-show="pageNumTotal > 2 && pageNumTotal - paginationSize[paginationSize.length - 1] > 1">
+                                    <span class="page-jump page-jump-more" id="page-more" ng-click="pageJumpStep('more', currentPageNum)">•••</span>
+                                </li>
+                                <li ng-show="pageNumTotal > 1">
+                                    <span class="page-jump" ng-class="currentPageNum == pageNumTotal ? 'currentPage' : 'otherPage'" ng-click="pageJumpStep('specify', pageNumTotal)">{{pageNumTotal}}</span>
+                                </li>
+                                <li>
+                                    <span class="page-jump page-next" ng-class="{ 'page-jump-prohibit': currentPageNum == pageNumTotal }" ng-click="pageJumpStep('next', currentPageNum)">&gt;</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="page-change">
+                            <span ng-bind="'_jump_to' | translate"></span>
+                            <input type="text" id="currentPageNum" ng-model="currentInputPageNum" oninput="limitInput_int(this)" min="1" max="{{pageNumTotal}}" ng-blur="currentPageNumChange(currentInputPageNum)">
+                            <span>/</span>
+                            <span>{{pageNumTotal}}</span>
+                            <span ng-bind="'_page' | translate"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

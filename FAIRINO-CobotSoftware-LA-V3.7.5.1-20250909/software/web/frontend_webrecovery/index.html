@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Access-Control-Allow-Origin" content="*">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <!-- User-defined CSS  -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="wrap plugScrollbar">
+        <div class="recover-item-container">
+            <div class="container-body">
+				<span class="child-header">系统安全模式恢复</span>
+				<!-- <span class="child-title">控制器IP</span>
+				<input type="text" id="webip" readonly="readonly">
+				<span class="child-title">控制器子网掩码</span>
+				<input type="text" id="netmask" readonly="readonly">
+				<span class="child-title">控制器网关</span>
+				<input type="text" id="route" readonly="readonly"> -->
+				<span class="child-title">软件升级包导入</span>
+                <input type="file" name="importFile" id="webpkgImported" value="" accept=".tar.gz">
+                <div class="right-btn">
+                    <span ng-bind="webProgressText"></span>
+                    <a class="recoverbtn recoverbtn-frblue" style="float:right;margin-top:20px" onclick="updateWebPkg()">升级</a>
+                </div>
+				
+            </div>
+        </div>
+    </div>
+</body>
+<script src="index.js"></script>
+</html>

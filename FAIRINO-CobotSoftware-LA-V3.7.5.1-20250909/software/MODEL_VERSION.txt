@@ -1,0 +1,10 @@
+modelCount=9
+fr3=v1.0.0
+FR3MT=v1.0.0
+fr5=v1.0.0
+FR5WM=v1.0.0
+fr10=v1.0.0
+FR10YD=v1.0.0
+fr16=v1.0.0
+fr20=v1.0.0
+fr30=v1.0.0
