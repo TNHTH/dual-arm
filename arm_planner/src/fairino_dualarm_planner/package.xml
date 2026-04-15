@@ -12,8 +12,13 @@
 
   <depend>dualarm_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <depend>moveit_msgs</depend>
+  <depend>moveit_ros_planning_interface</depend>
+  <depend>robo_ctrl</depend>
+  <depend>rclcpp</depend>
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
+  <depend>tf2_geometry_msgs</depend>
   <depend>trajectory_msgs</depend>
 
   <export>

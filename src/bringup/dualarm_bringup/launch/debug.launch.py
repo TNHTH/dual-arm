@@ -5,11 +5,12 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 
-def _include(package_name: str, relative_launch: str):
+def _include(package_name: str, relative_launch: str, launch_arguments=None):
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory(package_name), "launch", relative_launch)
-        )
+        ),
+        launch_arguments=launch_arguments or {},
     )
 
 
@@ -23,6 +24,11 @@ def generate_launch_description():
             _include("scene_fusion", "scene_fusion.launch.py"),
             _include("planning_scene_sync", "planning_scene_sync.launch.py"),
             _include("grasp_pose_generator", "grasp_pose_generator.launch.py"),
+            _include(
+                "fairino_dualarm_moveit_config",
+                "move_group.launch.py",
+                launch_arguments={"publish_fake_joint_states": "true"}.items(),
+            ),
             _include("fairino_dualarm_planner", "fairino_dualarm_planner.launch.py"),
             _include("execution_adapter", "execution_adapter.launch.py"),
             _include("dualarm_task_manager", "dualarm_task_manager.launch.py"),

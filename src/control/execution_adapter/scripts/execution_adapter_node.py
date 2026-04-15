@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Dict, Optional
 import time
 
@@ -173,7 +174,7 @@ class ExecutionAdapterNode(Node):
         for point in joint_trajectory.points:
             joint_state = JointState()
             joint_state.name = list(joint_trajectory.joint_names)
-            joint_state.position = list(point.positions)
+            joint_state.position = [math.degrees(value) for value in point.positions]
             request.joint_positions.append(joint_state)
 
         future = client.call_async(request)
@@ -228,7 +229,7 @@ class ExecutionAdapterNode(Node):
         for point in joint_trajectory.points:
             joint_state = JointState()
             joint_state.name = list(joint_trajectory.joint_names)
-            joint_state.position = list(point.positions)
+            joint_state.position = [math.degrees(value) for value in point.positions]
             request.joint_positions.append(joint_state)
         return request
 
@@ -285,7 +286,7 @@ class ExecutionAdapterNode(Node):
             return joint_state
         prefix = "left" if arm_group == "left_arm" else "right"
         joint_state.header = robot_state.header
-        joint_state.name = [f"{prefix}_joint_{index}" for index in range(1, 7)]
+        joint_state.name = [f"{prefix}_j{index}" for index in range(1, 7)]
         joint_state.position = [
             robot_state.joint_position.j1,
             robot_state.joint_position.j2,

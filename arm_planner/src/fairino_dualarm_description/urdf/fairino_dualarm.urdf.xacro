@@ -1,41 +1,29 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fairino_dualarm">
-  <link name="world"/>
-  <link name="left_base"/>
-  <link name="right_base"/>
-  <link name="left_tool0"/>
-  <link name="right_tool0"/>
-  <link name="left_tcp"/>
-  <link name="right_tcp"/>
+  <xacro:include filename="$(find fairino_dualarm_description)/urdf/fairino3_v6_macro.xacro"/>
 
+  <link name="world"/>
+  <link name="table"/>
+  <joint name="world_to_table" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="table"/>
+  </joint>
+
+  <link name="left_base"/>
   <joint name="world_to_left_base" type="fixed">
+    <origin xyz="0 0.35 0" rpy="0 0 0"/>
     <parent link="world"/>
     <child link="left_base"/>
-    <origin xyz="0 0.35 0" rpy="0 0 0"/>
   </joint>
+
+  <link name="right_base"/>
   <joint name="world_to_right_base" type="fixed">
+    <origin xyz="0 -0.35 0" rpy="0 0 3.141592653589793"/>
     <parent link="world"/>
     <child link="right_base"/>
-    <origin xyz="0 -0.35 0" rpy="0 0 0"/>
   </joint>
-  <joint name="left_base_to_left_tool0" type="fixed">
-    <parent link="left_base"/>
-    <child link="left_tool0"/>
-    <origin xyz="0 0 0.5" rpy="0 0 0"/>
-  </joint>
-  <joint name="right_base_to_right_tool0" type="fixed">
-    <parent link="right_base"/>
-    <child link="right_tool0"/>
-    <origin xyz="0 0 0.5" rpy="0 0 0"/>
-  </joint>
-  <joint name="left_tool0_to_left_tcp" type="fixed">
-    <parent link="left_tool0"/>
-    <child link="left_tcp"/>
-    <origin xyz="0 0 0.1" rpy="0 0 0"/>
-  </joint>
-  <joint name="right_tool0_to_right_tcp" type="fixed">
-    <parent link="right_tool0"/>
-    <child link="right_tcp"/>
-    <origin xyz="0 0 0.1" rpy="0 0 0"/>
-  </joint>
+
+  <xacro:fairino3_v6_arm prefix="left_" parent="left_base" xyz="0 0 0" rpy="0 0 0"/>
+  <xacro:fairino3_v6_arm prefix="right_" parent="right_base" xyz="0 0 0" rpy="0 0 0"/>
 </robot>

@@ -20,7 +20,9 @@
   <depend>epg50_gripper_ros</depend>
   <depend>execution_adapter</depend>
   <depend>fairino_dualarm_planner</depend>
+  <depend>fairino_dualarm_moveit_config</depend>
   <depend>grasp_pose_generator</depend>
+  <depend>joint_state_aggregator</depend>
   <depend>planning_scene_sync</depend>
   <depend>robo_ctrl</depend>
   <depend>scene_fusion</depend>

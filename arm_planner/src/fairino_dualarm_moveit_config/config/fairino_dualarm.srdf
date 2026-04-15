@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="fairino_dualarm">
+  <group name="left_arm">
+    <chain base_link="left_base_link" tip_link="left_tcp"/>
+  </group>
+  <group name="right_arm">
+    <chain base_link="right_base_link" tip_link="right_tcp"/>
+  </group>
+  <group name="dual_arm">
+    <group name="left_arm"/>
+    <group name="right_arm"/>
+  </group>
+  <group_state name="home" group="left_arm">
+    <joint name="left_j1" value="0"/>
+    <joint name="left_j2" value="0"/>
+    <joint name="left_j3" value="0"/>
+    <joint name="left_j4" value="0"/>
+    <joint name="left_j5" value="0"/>
+    <joint name="left_j6" value="0"/>
+  </group_state>
+  <group_state name="home" group="right_arm">
+    <joint name="right_j1" value="0"/>
+    <joint name="right_j2" value="0"/>
+    <joint name="right_j3" value="0"/>
+    <joint name="right_j4" value="0"/>
+    <joint name="right_j5" value="0"/>
+    <joint name="right_j6" value="0"/>
+  </group_state>
+  <disable_collisions link1="left_base_link" link2="left_shoulder_link" reason="Adjacent"/>
+  <disable_collisions link1="left_shoulder_link" link2="left_upperarm_link" reason="Adjacent"/>
+  <disable_collisions link1="left_upperarm_link" link2="left_forearm_link" reason="Adjacent"/>
+  <disable_collisions link1="left_forearm_link" link2="left_wrist1_link" reason="Adjacent"/>
+  <disable_collisions link1="left_wrist1_link" link2="left_wrist2_link" reason="Adjacent"/>
+  <disable_collisions link1="left_wrist2_link" link2="left_wrist3_link" reason="Adjacent"/>
+  <disable_collisions link1="right_base_link" link2="right_shoulder_link" reason="Adjacent"/>
+  <disable_collisions link1="right_shoulder_link" link2="right_upperarm_link" reason="Adjacent"/>
+  <disable_collisions link1="right_upperarm_link" link2="right_forearm_link" reason="Adjacent"/>
+  <disable_collisions link1="right_forearm_link" link2="right_wrist1_link" reason="Adjacent"/>
+  <disable_collisions link1="right_wrist1_link" link2="right_wrist2_link" reason="Adjacent"/>
+  <disable_collisions link1="right_wrist2_link" link2="right_wrist3_link" reason="Adjacent"/>
+</robot>
