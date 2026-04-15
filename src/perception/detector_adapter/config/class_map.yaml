@@ -1,0 +1,4 @@
+class_map:
+  "0": water_bottle
+  "1": cola_bottle
+  "2": cup

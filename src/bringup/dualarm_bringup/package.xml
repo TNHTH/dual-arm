@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>dualarm_bringup</name>
+  <version>0.1.0</version>
+  <description>双臂系统生产/调试启动链。</description>
+
+  <maintainer email="gwh@example.com">gwh</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>ball_basket_pose_estimator</depend>
+  <depend>camera_info_interceptor</depend>
+  <depend>depth_handler</depend>
+  <depend>detector</depend>
+  <depend>detector_adapter</depend>
+  <depend>dualarm_task_manager</depend>
+  <depend>epg50_gripper_ros</depend>
+  <depend>execution_adapter</depend>
+  <depend>fairino_dualarm_planner</depend>
+  <depend>grasp_pose_generator</depend>
+  <depend>robo_ctrl</depend>
+  <depend>scene_fusion</depend>
+  <depend>tf_node</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

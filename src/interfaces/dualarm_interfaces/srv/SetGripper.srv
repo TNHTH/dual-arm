@@ -1,0 +1,9 @@
+string arm_name
+uint8 command
+int32 slave_id
+int32 position
+int32 speed
+int32 torque
+---
+bool success
+string message

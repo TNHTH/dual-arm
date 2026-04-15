@@ -1,553 +1,435 @@
 #include "depth_handler/depth_processor_node.hpp"
 
-depth_handler::depth_node::depth_node(const rclcpp::NodeOptions& options): Node("depth_processor_node", options) {
-    // 参数声明与获取
-    this->declare_parameters();
-    this->update_parameters();
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstring>
 
-    // 初始化TF2相关组件
-    tf_buffer_   = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+#include <geometry_msgs/msg/quaternion.hpp>
+#include <sensor_msgs/msg/point_field.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+
+#include "dualarm_interfaces/msg/scene_object.hpp"
+#include "dualarm_interfaces/msg/subframe.hpp"
+
+namespace depth_handler {
+
+namespace {
+
+constexpr std::array<float, 3> kBottleSize {0.07f, 0.07f, 0.24f};
+constexpr std::array<float, 3> kCupSize {0.09f, 0.09f, 0.12f};
+
+std::array<float, 3> guessSize(const std::string& semantic_type, const Eigen::Vector3f& observed_size) {
+    if (semantic_type.find("bottle") != std::string::npos) {
+        return {
+            std::max(observed_size.x(), kBottleSize[0]),
+            std::max(observed_size.y(), kBottleSize[1]),
+            std::max(observed_size.z(), kBottleSize[2]),
+        };
+    }
+    if (semantic_type.find("cup") != std::string::npos) {
+        return {
+            std::max(observed_size.x(), kCupSize[0]),
+            std::max(observed_size.y(), kCupSize[1]),
+            std::max(observed_size.z(), kCupSize[2]),
+        };
+    }
+    return {observed_size.x(), observed_size.y(), observed_size.z()};
+}
+
+}  // namespace
+
+DepthProcessorNode::DepthProcessorNode(const rclcpp::NodeOptions& options)
+    : Node("depth_processor_node", options) {
+    declareParameters();
+    loadParameters();
+
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-    // 创建参数回调
-    params_callback_handle_ =
-        this->add_on_set_parameters_callback(std::bind(&depth_node::parameters_callback, this, std::placeholders::_1));
+    bbox3d_publisher_ = create_publisher<depth_handler::msg::Bbox3dArray>(bbox3d_topic_, 10);
+    scene_objects_publisher_ =
+        create_publisher<dualarm_interfaces::msg::SceneObjectArray>(scene_objects_topic_, 10);
+    pointcloud_publisher_ = create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic_, 10);
+    marker_publisher_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>(visualization_topic_, 10);
 
-    // 配置ROS2发布者
-    pointcloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic_, 10);
-    bbox3d_pub_     = this->create_publisher<depth_handler::msg::Bbox3dArray>(bbox3d_topic_, 10);
-    image_pub_      = this->create_publisher<sensor_msgs::msg::Image>(result_visulization_topic_, 10);
-
-    if (enable_visualization_) {
-        marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(visualization_topic_, 10);
-    }
-
-    // 先订阅相机信息，以获取相机内参
-    temp_camera_info_sub_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
+    camera_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
         camera_info_topic_,
         rclcpp::QoS(rclcpp::KeepLast(10)),
-        std::bind(&depth_node::camera_info_callback, this, std::placeholders::_1)
-    );
+        std::bind(&DepthProcessorNode::cameraInfoCallback, this, std::placeholders::_1));
 
-    // 使用消息过滤器同步检测结果和深度图像 - 修改为使用正确的QoS格式
     auto qos_profile = rclcpp::QoS(rclcpp::KeepLast(10)).get_rmw_qos_profile();
-    bbox_sub_.subscribe(this, bbox2d_topic_, qos_profile);
+    detection_sub_.subscribe(this, detection_topic_, qos_profile);
     depth_sub_.subscribe(this, depth_topic_, qos_profile);
+    synchronizer_ = std::make_shared<message_filters::Synchronizer<SyncPolicy>>(
+        SyncPolicy(10), detection_sub_, depth_sub_);
+    synchronizer_->registerCallback(
+        std::bind(&DepthProcessorNode::synchronizedCallback, this, std::placeholders::_1, std::placeholders::_2));
 
-    sync_ = std::make_shared<message_filters::Synchronizer<
-        message_filters::sync_policies::ApproximateTime<detector::msg::Bbox2dArray, sensor_msgs::msg::Image>>>(
-        message_filters::sync_policies::ApproximateTime<detector::msg::Bbox2dArray, sensor_msgs::msg::Image>(10),
-        bbox_sub_,
-        depth_sub_
-    );
+    parameters_callback_handle_ = add_on_set_parameters_callback(
+        std::bind(&DepthProcessorNode::onParametersChanged, this, std::placeholders::_1));
 
-    sync_->registerCallback(std::bind(&depth_node::callback, this, std::placeholders::_1, std::placeholders::_2));
-
-    RCLCPP_INFO(this->get_logger(), "Depth Processor Node initialized");
+    RCLCPP_INFO(
+        get_logger(),
+        "depth_handler 已启动，检测输入: %s，深度输入: %s，场景输出: %s",
+        detection_topic_.c_str(),
+        depth_topic_.c_str(),
+        scene_objects_topic_.c_str());
 }
 
-depth_handler::depth_node::~depth_node() {
-    RCLCPP_INFO(this->get_logger(), "depth_node destroyed");
+void DepthProcessorNode::declareParameters() {
+    declare_parameter("camera_info_topic", "/camera/depth/camera_info");
+    declare_parameter("depth_topic", "/camera/depth/image_raw");
+    declare_parameter("detection_topic", "/perception/detection_2d");
+    declare_parameter("bbox3d_topic", "/depth_handler/bbox3d");
+    declare_parameter("scene_objects_topic", "/perception/scene_objects");
+    declare_parameter("pointcloud_topic", "/depth_handler/pointcloud");
+    declare_parameter("visualization_topic", "/depth_handler/visualization");
+    declare_parameter("target_frame", "world");
+    declare_parameter("enable_visualization", true);
+    declare_parameter("enable_pointcloud", true);
+    declare_parameter("min_points", 50);
+    declare_parameter("fill_target_offset", 0.03);
+    declare_parameter("roi_margin_ratio", 0.1);
 }
 
-void depth_handler::depth_node::callback(
-    const std::shared_ptr<const detector::msg::Bbox2dArray>& detectmsg,
-    const std::shared_ptr<const sensor_msgs::msg::Image>& depthmsg
-) {
-    // RCLCPP_INFO(this->get_logger(), "msg recved");
-    if (!camera_info_received_) {
-        RCLCPP_INFO(this->get_logger(), "CameraInfo not received yet, subscribing to camera info topic");
-        return;
-    }
-    // 默认图像已经对齐
-    // 计算深度图像的宽高
-    int width  = depthmsg->width;
-    int height = depthmsg->height;
-    std::vector<std::vector<Eigen::Vector3f>> points;
-    std::vector<int> cluster_ids;
-    for (int i = 0; i < static_cast<int>(detectmsg->results.size()); ++i) {
-        auto bbox2d = detectmsg->results[i];
-        // 计算深度图像的 ROI
-        cv::Rect roi(bbox2d.x, bbox2d.y, bbox2d.width, bbox2d.height);
-        // roi = scale_bbox(roi, width, height, camera_info_.width, camera_info_.height);
-        // 检查 ROI 是否在图像范围内
-        if (roi.x < 0 || roi.y < 0 || roi.x + roi.width / 2 > width || roi.y + roi.height / 2 > height) {
-            RCLCPP_WARN(this->get_logger(), "ROI is out of image bounds");
-            continue;
-        }
-
-        // 将 ROS 图像转换为 OpenCV Mat
-        cv::Mat depth_img;
-        if (depthmsg->encoding == "16UC1") {
-            depth_img = cv::Mat(height, width, CV_16UC1, const_cast<uint8_t*>(depthmsg->data.data()));
-        } else if (depthmsg->encoding == "32FC1") {
-            depth_img = cv::Mat(height, width, CV_32FC1, const_cast<uint8_t*>(depthmsg->data.data()));
-        } else {
-            RCLCPP_ERROR(this->get_logger(), "Unsupported encoding: %s", depthmsg->encoding.c_str());
-            return;
-        }
-        // 计算深度图像的方向
-        points.push_back(depthToPoints(depth_img, pixel_directions_, roi, 0.001f));
-        cluster_ids.push_back(detectmsg->results[i].class_id);
-    }
-    std::vector<Eigen::Vector3f> all_points;
-    // 计算每个聚类的bbox3d
-    std::vector<depth_handler::msg::Bbox3d> bbox3d_array;
-    visualization_msgs::msg::MarkerArray marker_array;
-    visualization_msgs::msg::Marker marker;
-    visualization_msgs::msg::Marker marker_point;
-    int i = 0;
-    for (const auto& cluster: points) {
-        if (cluster.empty()) {
-            continue;
-        }
-
-        // 创建点云的副本用于坐标变换
-        std::vector<Eigen::Vector3f> transformed_cluster = cluster;
-
-        // 将点云从相机坐标系转换到robotbase坐标系
-        bool transform_success = transformPointCloud(transformed_cluster, target_frame_, source_frame_, this->now());
-
-        if (!transform_success) {
-            RCLCPP_WARN(this->get_logger(), "点云坐标变换失败，使用原始点云");
-            transformed_cluster = cluster; // 如果转换失败，使用原始点云
-        }
-
-        Eigen::Vector3f min_point = transformed_cluster[0];
-        Eigen::Vector3f max_point = transformed_cluster[0];
-        for (const auto& point: transformed_cluster) {
-            min_point = min_point.cwiseMin(point);
-            max_point = max_point.cwiseMax(point);
-            all_points.emplace_back(point);
-        }
-        // 地面消除，直接使用简单的z轴过滤
-        transformed_cluster.erase(
-            std::remove_if(
-                transformed_cluster.begin(),
-                transformed_cluster.end(),
-                [min_point](const Eigen::Vector3f& point) { return (abs(point.z() - min_point.z()) < 0.01f || point.x() > min_point.x() + 0.10f); }
-            ),
-            transformed_cluster.end()
-        );
-        if (transformed_cluster.empty()) {
-            RCLCPP_WARN(this->get_logger(), "经过地面消除后，点云为空");
-            continue;
-        }
-        min_point = transformed_cluster[0];
-        max_point = transformed_cluster[0];
-        for (const auto& point: transformed_cluster) {
-            min_point = min_point.cwiseMin(point);
-            max_point = max_point.cwiseMax(point);
-            all_points.emplace_back(point);
-        }
-
-        depth_handler::msg::Bbox3d bbox3d;
-        bbox3d.x        = min_point.x();
-        bbox3d.y        = min_point.y();
-        bbox3d.z        = min_point.z();
-        bbox3d.width    = max_point.x() - min_point.x();
-        bbox3d.height   = max_point.y() - min_point.y();
-        bbox3d.depth    = max_point.z() - min_point.z();
-        bbox3d.class_id = cluster_ids[i];
-
-        // 可视化 - 现在使用robotbase坐标系
-        marker.header.frame_id    = target_frame_; // 使用目标坐标系
-        marker.header.stamp       = depthmsg->header.stamp;
-        marker.ns                 = "bbox3d";
-        marker.id                 = i;
-        marker.type               = visualization_msgs::msg::Marker::CUBE;
-        marker.action             = visualization_msgs::msg::Marker::ADD;
-        marker.lifetime           = rclcpp::Duration::from_seconds(marker_lifetime_);
-        marker.pose.position.x    = bbox3d.x + bbox3d.width / 2;
-        marker.pose.position.y    = bbox3d.y + bbox3d.height / 2;
-        marker.pose.position.z    = bbox3d.z + bbox3d.depth / 2;
-        marker.pose.orientation.x = 0.0;
-        marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x            = bbox3d.width;
-        marker.scale.y            = bbox3d.height;
-        marker.scale.z            = bbox3d.depth;
-        marker.color.r            = 0.0;
-        marker.color.g            = 1.0;
-        marker.color.b            = 0.0;
-        marker.color.a            = 1.0;
-
-        marker_array.markers.push_back(marker);
-
-        marker_point.header.frame_id    = target_frame_; // 使用目标坐标系
-        marker_point.header.stamp       = depthmsg->header.stamp;
-        marker_point.ns                 = "center_point";
-        marker_point.id                 = i;
-        marker_point.type               = visualization_msgs::msg::Marker::SPHERE;
-        marker_point.action             = visualization_msgs::msg::Marker::ADD;
-        marker_point.lifetime           = rclcpp::Duration::from_seconds(marker_lifetime_);
-        marker_point.pose.position.x    = bbox3d.x + bbox3d.width / 2;
-        marker_point.pose.position.y    = bbox3d.y + bbox3d.height / 2;
-        marker_point.pose.position.z    = bbox3d.z + bbox3d.depth / 2;
-        marker_point.pose.orientation.x = 0.0;
-        marker_point.pose.orientation.y = 0.0;
-        marker_point.pose.orientation.z = 0.0;
-        marker_point.pose.orientation.w = 1.0;
-        marker_point.scale.x            = 0.01;
-        marker_point.scale.y            = 0.01;
-        marker_point.scale.z            = 0.01;
-        marker_point.color.r            = 1.0;
-        marker_point.color.g            = 0.0;
-        marker_point.color.b            = 0.0;
-        marker_point.color.a            = 1.0;
-        marker_array.markers.push_back(marker_point);
-        marker_point.header.frame_id    = target_frame_; // 使用目标坐标系
-        marker_point.header.stamp       = depthmsg->header.stamp;
-        marker_point.ns                 = "point";
-        marker_point.id                 = i;
-        marker_point.type               = visualization_msgs::msg::Marker::SPHERE;
-        marker_point.action             = visualization_msgs::msg::Marker::ADD;
-        marker_point.lifetime           = rclcpp::Duration::from_seconds(marker_lifetime_);
-        marker_point.pose.position.x    = bbox3d.x;
-        marker_point.pose.position.y    = bbox3d.y;
-        marker_point.pose.position.z    = bbox3d.z;
-        marker_point.pose.orientation.x = 0.0;
-        marker_point.pose.orientation.y = 0.0;
-        marker_point.pose.orientation.z = 0.0;
-        marker_point.pose.orientation.w = 1.0;
-        marker_point.scale.x            = 0.01;
-        marker_point.scale.y            = 0.01;
-        marker_point.scale.z            = 0.01;
-        marker_point.color.r            = 0.0;
-        marker_point.color.g            = 0.0;
-        marker_point.color.b            = 1.0;
-        marker_point.color.a            = 1.0;
-        marker_array.markers.push_back(marker_point);
-        // std::cout << "bbox3d in " << target_frame_ << ": " << bbox3d.x << " " << bbox3d.y << " " << bbox3d.z << " "
-        //           << bbox3d.width << " " << bbox3d.height << " " << bbox3d.depth << " "
-        //           << "class_id: " << bbox3d.class_id << std::endl;
-        bbox3d_array.push_back(bbox3d);
-        i++;
-    }
-
-    // 发布可视化标记
-    if (enable_visualization_ && !marker_array.markers.empty()) {
-        marker_pub_->publish(marker_array);
-    }
-
-    // 发布 bbox3d
-    depth_handler::msg::Bbox3dArray bbox3d_msg;
-    bbox3d_msg.header          = depthmsg->header;
-    bbox3d_msg.header.frame_id = target_frame_; // 使用目标坐标系
-    bbox3d_msg.header.stamp    = depthmsg->header.stamp;
-    bbox3d_msg.results         = bbox3d_array;
-    bbox3d_pub_->publish(bbox3d_msg);
-
-    // 发布点云
-    if (enable_pointcloud_ && !all_points.empty()) {
-        sensor_msgs::msg::PointCloud2 pointcloud_msg;
-        eigenToPointCloud2(all_points, pointcloud_msg);
-        pointcloud_msg.header          = depthmsg->header;
-        pointcloud_msg.header.frame_id = target_frame_; // 使用目标坐标系
-        pointcloud_msg.header.stamp    = depthmsg->header.stamp;
-        pointcloud_pub_->publish(pointcloud_msg);
-        // RCLCPP_INFO(this->get_logger(), "发布点云到 %s 坐标系, 点数: %zu", target_frame_.c_str(), all_points.size());
-    }
-};
-
-std::vector<Eigen::Vector3f> depth_handler::depth_node::depthToPoints(
-    const cv::Mat& depth_img,
-    const std::vector<Eigen::Vector3f>& pixel_directions,
-    float depth_scale
-) {
-    std::vector<Eigen::Vector3f> points;
-    int width  = depth_img.cols;
-    int height = depth_img.rows;
-
-    for (int v = 0; v < height; ++v) {
-        for (int u = 0; u < width; ++u) {
-            float depth = depth_img.at<float>(v, u) * depth_scale;
-            if (depth <= 0.0f || std::isnan(depth))
-                continue;
-
-            const Eigen::Vector3f& dir = pixel_directions[v * width + u];
-            points.emplace_back(dir * depth);
-        }
-    }
-    return points;
+void DepthProcessorNode::loadParameters() {
+    camera_info_topic_ = get_parameter("camera_info_topic").as_string();
+    depth_topic_ = get_parameter("depth_topic").as_string();
+    detection_topic_ = get_parameter("detection_topic").as_string();
+    bbox3d_topic_ = get_parameter("bbox3d_topic").as_string();
+    scene_objects_topic_ = get_parameter("scene_objects_topic").as_string();
+    pointcloud_topic_ = get_parameter("pointcloud_topic").as_string();
+    visualization_topic_ = get_parameter("visualization_topic").as_string();
+    target_frame_ = get_parameter("target_frame").as_string();
+    enable_visualization_ = get_parameter("enable_visualization").as_bool();
+    enable_pointcloud_ = get_parameter("enable_pointcloud").as_bool();
+    min_points_ = get_parameter("min_points").as_int();
+    fill_target_offset_ = get_parameter("fill_target_offset").as_double();
+    roi_margin_ratio_ = get_parameter("roi_margin_ratio").as_double();
 }
 
-std::vector<Eigen::Vector3f> depth_handler::depth_node::depthToPoints(
-    const cv::Mat& depth_img,
-    const std::vector<Eigen::Vector3f>& pixel_directions,
-    cv::Rect roi,
-    float depth_scale
-) {
-    cv::Mat clean_depth_img;
-    depth_img.copyTo(clean_depth_img); // 重新拷贝一份真正干净的深度图
-
-    std::vector<Eigen::Vector3f> unclassed_points;
-    std::vector<Eigen::Vector3f> points;
-    int width  = clean_depth_img.cols;
-    int height = clean_depth_img.rows;
-
-    roi.x      = std::clamp(roi.x - roi.width / 2, 0, width - 1);
-    roi.y      = std::clamp(roi.y - roi.height / 2, 0, height - 1);
-    roi.width  = std::min(roi.width, width - roi.x);
-    roi.height = std::min(roi.height, height - roi.y);
-
-    for (int v = roi.y; v < roi.y + roi.height; ++v) {
-        const uint16_t* row_ptr = clean_depth_img.ptr<uint16_t>(v);
-        for (int u = roi.x; u < roi.x + roi.width; ++u) {
-            uint16_t raw_depth = row_ptr[u];
-            float depth        = static_cast<float>(raw_depth) * depth_scale;
-            if (depth <= 0.0f || std::isnan(depth))
-                continue;
-
-            size_t idx = v * width + u;
-            if (idx >= pixel_directions.size()) {
-                std::cerr << "Pixel index out of range: idx=" << idx << " size=" << pixel_directions.size()
-                          << std::endl;
-                continue;
-            }
-
-            const Eigen::Vector3f& dir = pixel_directions[idx];
-            unclassed_points.emplace_back(dir * depth);
-        }
-    }
-    // downsample
-    auto start = std::chrono::high_resolution_clock::now();
-    if (unclassed_points.size() > 5000) {
-        std::vector<Eigen::Vector3f> downsampled_points;
-        downsampled_points.reserve(5000);
-        for (size_t i = 0; i < unclassed_points.size(); i += 5) {
-            downsampled_points.emplace_back(unclassed_points[i]);
-        }
-        unclassed_points = downsampled_points;
-    }
-    // classify the points
-    // auto result                           = clusterPointsKDTree(unclassed_points, 0.01f, 3000, 100000);
-    auto result                           = voxelClustering(unclassed_points, 0.01f, 3000);
-    auto end                              = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
-    auto end2                             = std::chrono::high_resolution_clock::now();
-    // return largest cluster
-    for (const auto& cluster: result) {
-        if (cluster.size() < 3000 || cluster.size() > 100000)
-            continue;
-        for (auto& point: cluster) {
-            points.emplace_back(point);
-        }
-    }
-
-    std::chrono::duration<double> elapsed2 = end2 - end;
-
-    return points;
-}
-
-// 实现点云坐标变换函数
-bool depth_handler::depth_node::transformPointCloud(
-    std::vector<Eigen::Vector3f>& points,
-    const std::string& target_frame,
-    const std::string& source_frame,
-    const rclcpp::Time& time
-) {
-    if (points.empty()) {
-        RCLCPP_WARN(this->get_logger(), "点云为空，无法进行变换");
-        return false;
-    }
-
-    try {
-        // 查找坐标变换
-        geometry_msgs::msg::TransformStamped transform_stamped =
-            tf_buffer_->lookupTransform(target_frame, source_frame, time, rclcpp::Duration::from_seconds(1.0));
-
-        // 将ROS变换转换为Eigen变换矩阵
-        Eigen::Isometry3d transform  = tf2::transformToEigen(transform_stamped);
-        Eigen::Isometry3f transformf = transform.cast<float>();
-
-// 应用变换到每个点
-#pragma omp parallel for
-        for (auto& point: points) {
-            point = transformf * point;
-        }
-        // RCLCPP_INFO(
-        //     this->get_logger(),
-        //     "成功将点云从 %s 坐标系转换到 %s 坐标系",
-        //     source_frame.c_str(),
-        //     target_frame.c_str()
-        // );
-        return true;
-    } catch (const tf2::TransformException& ex) {
-        RCLCPP_ERROR(this->get_logger(), "点云坐标变换失败: %s", ex.what());
-        return false;
-    }
-}
-
-// 实现单个点的坐标变换
-bool depth_handler::depth_node::transformPoint(
-    Eigen::Vector3f& point,
-    const std::string& target_frame,
-    const std::string& source_frame,
-    const rclcpp::Time& time
-) {
-    try {
-        // 查找坐标变换
-        geometry_msgs::msg::TransformStamped transform_stamped =
-            tf_buffer_->lookupTransform(target_frame, source_frame, time, rclcpp::Duration::from_seconds(1.0));
-
-        // 将ROS变换转换为Eigen变换矩阵
-        Eigen::Isometry3d transform  = tf2::transformToEigen(transform_stamped);
-        Eigen::Isometry3f transformf = transform.cast<float>();
-
-        // 应用变换到点
-        point = transformf * point;
-
-        return true;
-    } catch (const tf2::TransformException& ex) {
-        RCLCPP_ERROR(this->get_logger(), "点坐标变换失败: %s", ex.what());
-        return false;
-    }
-}
-
-// 实现边界框的坐标变换
-bool depth_handler::depth_node::transformBoundingBox(
-    depth_handler::msg::Bbox3d& bbox,
-    const std::string& target_frame,
-    const std::string& source_frame,
-    const rclcpp::Time& time
-) {
-    try {
-        // 获取边界框的8个顶点
-        std::vector<Eigen::Vector3f> vertices;
-        vertices.push_back(Eigen::Vector3f(bbox.x, bbox.y, bbox.z));
-        vertices.push_back(Eigen::Vector3f(bbox.x + bbox.width, bbox.y, bbox.z));
-        vertices.push_back(Eigen::Vector3f(bbox.x, bbox.y + bbox.height, bbox.z));
-        vertices.push_back(Eigen::Vector3f(bbox.x + bbox.width, bbox.y + bbox.height, bbox.z));
-        vertices.push_back(Eigen::Vector3f(bbox.x, bbox.y, bbox.z + bbox.depth));
-        vertices.push_back(Eigen::Vector3f(bbox.x + bbox.width, bbox.y, bbox.z + bbox.depth));
-        vertices.push_back(Eigen::Vector3f(bbox.x, bbox.y + bbox.height, bbox.z + bbox.depth));
-        vertices.push_back(Eigen::Vector3f(bbox.x + bbox.width, bbox.y + bbox.height, bbox.z + bbox.depth));
-
-        // 变换所有顶点
-        if (!transformPointCloud(vertices, target_frame, source_frame, time)) {
-            return false;
-        }
-
-        // 计算变换后的包围盒
-        Eigen::Vector3f min_point = vertices[0];
-        Eigen::Vector3f max_point = vertices[0];
-
-        for (const auto& vertex: vertices) {
-            min_point = min_point.cwiseMin(vertex);
-            max_point = max_point.cwiseMax(vertex);
-        }
-
-        // 更新边界框
-        bbox.x      = min_point.x();
-        bbox.y      = min_point.y();
-        bbox.z      = min_point.z();
-        bbox.width  = max_point.x() - min_point.x();
-        bbox.height = max_point.y() - min_point.y();
-        bbox.depth  = max_point.z() - min_point.z();
-
-        return true;
-    } catch (const tf2::TransformException& ex) {
-        RCLCPP_ERROR(this->get_logger(), "边界框坐标变换失败: %s", ex.what());
-        return false;
-    }
-}
-
-void depth_handler::depth_node::declare_parameters() {
-    // 主题相关参数
-    this->declare_parameter<std::string>("camera_info_topic", camera_info_topic_);
-    this->declare_parameter<std::string>("depth_topic", depth_topic_);
-    this->declare_parameter<std::string>("image_topic", image_topic_);
-    this->declare_parameter<std::string>("bbox3d_topic", bbox3d_topic_);
-    this->declare_parameter<std::string>("result_visualization_topic", result_visulization_topic_);
-    this->declare_parameter<std::string>("bbox2d_topic", bbox2d_topic_);
-    this->declare_parameter<std::string>("pointcloud_topic", pointcloud_topic_);
-    this->declare_parameter<std::string>("visualization_topic", visualization_topic_);
-
-    // 可视化相关参数
-    this->declare_parameter<bool>("enable_visualization", enable_visualization_);
-    this->declare_parameter<bool>("enable_pointcloud", enable_pointcloud_);
-    this->declare_parameter<double>("marker_lifetime", marker_lifetime_);
-    this->declare_parameter<double>("marker_scale", marker_scale_);
-
-    // 深度处理相关参数
-    this->declare_parameter<float>("depth_scale", depth_scale_);
-    this->declare_parameter<int>("min_points", min_points_);
-    this->declare_parameter<float>("outlier_threshold", outlier_threshold_);
-}
-
-void depth_handler::depth_node::update_parameters() {
-    // 获取主题相关参数
-    camera_info_topic_         = this->get_parameter("camera_info_topic").as_string();
-    depth_topic_               = this->get_parameter("depth_topic").as_string();
-    image_topic_               = this->get_parameter("image_topic").as_string();
-    bbox3d_topic_              = this->get_parameter("bbox3d_topic").as_string();
-    result_visulization_topic_ = this->get_parameter("result_visualization_topic").as_string();
-    bbox2d_topic_              = this->get_parameter("bbox2d_topic").as_string();
-    pointcloud_topic_          = this->get_parameter("pointcloud_topic").as_string();
-    visualization_topic_       = this->get_parameter("visualization_topic").as_string();
-
-    // 获取可视化相关参数
-    enable_visualization_ = this->get_parameter("enable_visualization").as_bool();
-    enable_pointcloud_    = this->get_parameter("enable_pointcloud").as_bool();
-    marker_lifetime_      = this->get_parameter("marker_lifetime").as_double();
-    marker_scale_         = this->get_parameter("marker_scale").as_double();
-
-    // 获取深度处理相关参数
-    depth_scale_       = this->get_parameter("depth_scale").as_double();
-    min_points_        = this->get_parameter("min_points").as_int();
-    outlier_threshold_ = this->get_parameter("outlier_threshold").as_double();
-
-    RCLCPP_INFO(this->get_logger(), "参数已更新:");
-    RCLCPP_INFO(this->get_logger(), "  相机信息主题: %s", camera_info_topic_.c_str());
-    RCLCPP_INFO(this->get_logger(), "  深度图主题: %s", depth_topic_.c_str());
-    RCLCPP_INFO(this->get_logger(), "  RGB图像主题: %s", image_topic_.c_str());
-    RCLCPP_INFO(this->get_logger(), "  3D边界框主题: %s", bbox3d_topic_.c_str());
-    RCLCPP_INFO(this->get_logger(), "  可视化: %s", enable_visualization_ ? "开启" : "关闭");
-    RCLCPP_INFO(this->get_logger(), "  点云发布: %s", enable_pointcloud_ ? "开启" : "关闭");
-    RCLCPP_INFO(this->get_logger(), "  深度缩放因子: %.6f", depth_scale_);
-}
-
-// 参数回调函数实现
-rcl_interfaces::msg::SetParametersResult depth_handler::depth_node::parameters_callback(
-    const std::vector<rclcpp::Parameter>& parameters
-) {
+rcl_interfaces::msg::SetParametersResult DepthProcessorNode::onParametersChanged(
+    const std::vector<rclcpp::Parameter>&) {
+    loadParameters();
     rcl_interfaces::msg::SetParametersResult result;
     result.successful = true;
-    result.reason     = "成功";
-
-    for (const auto& param: parameters) {
-        if (param.get_name() == "enable_visualization") {
-            enable_visualization_ = param.as_bool();
-            RCLCPP_INFO(this->get_logger(), "可视化已%s", enable_visualization_ ? "启用" : "禁用");
-        } else if (param.get_name() == "enable_pointcloud") {
-            enable_pointcloud_ = param.as_bool();
-            RCLCPP_INFO(this->get_logger(), "点云发布已%s", enable_pointcloud_ ? "启用" : "禁用");
-        } else if (param.get_name() == "marker_lifetime") {
-            marker_lifetime_ = param.as_double();
-            RCLCPP_INFO(this->get_logger(), "标记存在时间更新为: %.2f 秒", marker_lifetime_);
-        } else if (param.get_name() == "marker_scale") {
-            marker_scale_ = param.as_double();
-            RCLCPP_INFO(this->get_logger(), "标记缩放比例更新为: %.2f", marker_scale_);
-        } else if (param.get_name() == "depth_scale") {
-            depth_scale_ = param.as_double();
-            RCLCPP_INFO(this->get_logger(), "深度缩放因子更新为: %.6f", depth_scale_);
-        } else if (param.get_name() == "min_points") {
-            min_points_ = param.as_int();
-            RCLCPP_INFO(this->get_logger(), "最小点云数量更新为: %d", min_points_);
-        } else if (param.get_name() == "outlier_threshold") {
-            outlier_threshold_ = param.as_double();
-            RCLCPP_INFO(this->get_logger(), "异常值阈值更新为: %.4f", outlier_threshold_);
-        }
-    }
-
     return result;
 }
 
+void DepthProcessorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr message) {
+    camera_info_ = message;
+}
+
+void DepthProcessorNode::synchronizedCallback(
+    const DetectionArray::ConstSharedPtr& detections,
+    const DepthImage::ConstSharedPtr& depth_image) {
+    if (!camera_info_) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "尚未收到 camera_info，跳过本帧");
+        return;
+    }
+
+    const auto transform = lookupTransform(
+        target_frame_,
+        depth_image->header.frame_id.empty() ? camera_info_->header.frame_id : depth_image->header.frame_id,
+        depth_image->header.stamp);
+
+    Eigen::Isometry3d transform_matrix = Eigen::Isometry3d::Identity();
+    std::string output_frame = depth_image->header.frame_id;
+    if (transform) {
+        transform_matrix = *transform;
+        output_frame = target_frame_;
+    }
+
+    std::vector<DetectionGeometry> geometries;
+    std::vector<Eigen::Vector3f> all_points;
+    depth_handler::msg::Bbox3dArray bbox_array;
+    dualarm_interfaces::msg::SceneObjectArray scene_array;
+    bbox_array.header = depth_image->header;
+    bbox_array.header.frame_id = output_frame;
+    scene_array.header = depth_image->header;
+    scene_array.header.frame_id = output_frame;
+
+    for (size_t index = 0; index < detections->detections.size(); ++index) {
+        const auto& detection = detections->detections[index];
+        const auto geometry = buildGeometry(detection, depth_image, transform_matrix);
+        if (!geometry) {
+            continue;
+        }
+
+        geometries.push_back(*geometry);
+        const int legacy_class_id = static_cast<int>(index);
+        bbox_array.results.push_back(makeLegacyBbox(*geometry, legacy_class_id));
+        scene_array.objects.push_back(makeSceneObject(*geometry, static_cast<int>(index), scene_array.header));
+        all_points.push_back(geometry->center);
+    }
+
+    bbox3d_publisher_->publish(bbox_array);
+    scene_objects_publisher_->publish(scene_array);
+
+    if (enable_pointcloud_ && !all_points.empty()) {
+        pointcloud_publisher_->publish(makePointCloudMessage(all_points, scene_array.header));
+    }
+    if (enable_visualization_ && !geometries.empty()) {
+        marker_publisher_->publish(makeMarkers(geometries, scene_array.header));
+    }
+}
+
+std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGeometry(
+    const dualarm_interfaces::msg::Detection2D& detection,
+    const DepthImage::ConstSharedPtr& depth_image,
+    const Eigen::Isometry3d& transform) const {
+    if (!camera_info_) {
+        return std::nullopt;
+    }
+
+    const int image_width = static_cast<int>(depth_image->width);
+    const int image_height = static_cast<int>(depth_image->height);
+    const int margin_x = static_cast<int>(detection.width * roi_margin_ratio_);
+    const int margin_y = static_cast<int>(detection.height * roi_margin_ratio_);
+
+    const int x0 = std::max(0, static_cast<int>(detection.x - detection.width / 2.0f) + margin_x);
+    const int y0 = std::max(0, static_cast<int>(detection.y - detection.height / 2.0f) + margin_y);
+    const int x1 = std::min(image_width, static_cast<int>(detection.x + detection.width / 2.0f) - margin_x);
+    const int y1 = std::min(image_height, static_cast<int>(detection.y + detection.height / 2.0f) - margin_y);
+
+    if (x1 <= x0 || y1 <= y0) {
+        return std::nullopt;
+    }
+
+    auto points = extractRoiPoints(depth_image, x0, y0, x1, y1);
+    if (static_cast<int>(points.size()) < min_points_) {
+        return std::nullopt;
+    }
+
+    DetectionGeometry geometry;
+    geometry.semantic_type = detection.semantic_type;
+    geometry.confidence = detection.score;
+
+    geometry.min_point = (transform * points.front().cast<double>()).cast<float>();
+    geometry.max_point = geometry.min_point;
+
+    for (const auto& point : points) {
+        const Eigen::Vector3f transformed = (transform * point.cast<double>()).cast<float>();
+        geometry.min_point = geometry.min_point.cwiseMin(transformed);
+        geometry.max_point = geometry.max_point.cwiseMax(transformed);
+    }
+
+    geometry.center = (geometry.min_point + geometry.max_point) / 2.0f;
+    return geometry;
+}
+
+std::vector<Eigen::Vector3f> DepthProcessorNode::extractRoiPoints(
+    const DepthImage::ConstSharedPtr& depth_image,
+    int x0,
+    int y0,
+    int x1,
+    int y1) const {
+    std::vector<Eigen::Vector3f> points;
+    if (!camera_info_) {
+        return points;
+    }
+
+    const double fx = camera_info_->k[0];
+    const double fy = camera_info_->k[4];
+    const double cx = camera_info_->k[2];
+    const double cy = camera_info_->k[5];
+
+    for (int v = y0; v < y1; ++v) {
+        for (int u = x0; u < x1; ++u) {
+            const auto depth = readDepthMeters(depth_image, u, v);
+            if (!depth) {
+                continue;
+            }
+
+            const float x = static_cast<float>((u - cx) * *depth / fx);
+            const float y = static_cast<float>((v - cy) * *depth / fy);
+            points.emplace_back(x, y, static_cast<float>(*depth));
+        }
+    }
+
+    return points;
+}
+
+std::optional<float> DepthProcessorNode::readDepthMeters(
+    const DepthImage::ConstSharedPtr& depth_image,
+    int u,
+    int v) const {
+    const size_t index = static_cast<size_t>(v) * depth_image->width + static_cast<size_t>(u);
+    if (depth_image->encoding == "16UC1") {
+        const auto* raw = reinterpret_cast<const uint16_t*>(depth_image->data.data());
+        const uint16_t depth_mm = raw[index];
+        if (depth_mm == 0) {
+            return std::nullopt;
+        }
+        return static_cast<float>(depth_mm) / 1000.0f;
+    }
+    if (depth_image->encoding == "32FC1") {
+        const auto* raw = reinterpret_cast<const float*>(depth_image->data.data());
+        const float depth_m = raw[index];
+        if (!std::isfinite(depth_m) || depth_m <= 0.0f) {
+            return std::nullopt;
+        }
+        return depth_m;
+    }
+    return std::nullopt;
+}
+
+std::optional<Eigen::Isometry3d> DepthProcessorNode::lookupTransform(
+    const std::string& target_frame,
+    const std::string& source_frame,
+    const builtin_interfaces::msg::Time& stamp) const {
+    if (target_frame.empty() || target_frame == source_frame) {
+        return Eigen::Isometry3d::Identity();
+    }
+
+    try {
+        const auto transform = tf_buffer_->lookupTransform(
+            target_frame, source_frame, rclcpp::Time(stamp), tf2::durationFromSec(0.1));
+        return tf2::transformToEigen(transform);
+    } catch (const tf2::TransformException& exception) {
+        RCLCPP_WARN(get_logger(), "TF 查询失败，退回源坐标系: %s", exception.what());
+        return std::nullopt;
+    }
+}
+
+depth_handler::msg::Bbox3d DepthProcessorNode::makeLegacyBbox(
+    const DetectionGeometry& geometry,
+    int class_id) const {
+    depth_handler::msg::Bbox3d bbox;
+    bbox.x = geometry.min_point.x();
+    bbox.y = geometry.min_point.y();
+    bbox.z = geometry.min_point.z();
+    bbox.width = geometry.max_point.x() - geometry.min_point.x();
+    bbox.height = geometry.max_point.y() - geometry.min_point.y();
+    bbox.depth = geometry.max_point.z() - geometry.min_point.z();
+    bbox.class_id = class_id;
+    bbox.orientation.w = 1.0;
+    return bbox;
+}
+
+dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
+    const DetectionGeometry& geometry,
+    int index,
+    const std_msgs::msg::Header& header) const {
+    dualarm_interfaces::msg::SceneObject object;
+    object.id = geometry.semantic_type + "_" + std::to_string(index + 1);
+    object.semantic_type = geometry.semantic_type;
+    object.pose.header = header;
+    object.pose.pose.position.x = geometry.center.x();
+    object.pose.pose.position.y = geometry.center.y();
+    object.pose.pose.position.z = geometry.center.z();
+    object.pose.pose.orientation.w = 1.0;
+
+    const auto observed_size = geometry.max_point - geometry.min_point;
+    const auto size = guessSize(geometry.semantic_type, observed_size);
+    object.size.x = size[0];
+    object.size.y = size[1];
+    object.size.z = size[2];
+    object.confidence = geometry.confidence;
+    object.graspable = true;
+    object.movable = true;
+    object.source = "depth_handler";
+
+    auto add_subframe = [&](const std::string& name, const Eigen::Vector3f& position) {
+        dualarm_interfaces::msg::Subframe subframe;
+        subframe.name = name;
+        subframe.pose.header = header;
+        subframe.pose.pose.position.x = position.x();
+        subframe.pose.pose.position.y = position.y();
+        subframe.pose.pose.position.z = position.z();
+        subframe.pose.pose.orientation.w = 1.0;
+        object.subframes.push_back(subframe);
+    };
+
+    add_subframe("object_center", geometry.center);
+    if (geometry.semantic_type.find("bottle") != std::string::npos) {
+        add_subframe(
+            "bottle_mouth",
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.max_point.z()));
+    }
+    if (geometry.semantic_type.find("cup") != std::string::npos) {
+        add_subframe(
+            "cup_rim_center",
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.max_point.z()));
+        add_subframe(
+            "cup_fill_target",
+            Eigen::Vector3f(
+                geometry.center.x(), geometry.center.y(), geometry.max_point.z() - fill_target_offset_));
+    }
+
+    return object;
+}
+
+sensor_msgs::msg::PointCloud2 DepthProcessorNode::makePointCloudMessage(
+    const std::vector<Eigen::Vector3f>& points,
+    const std_msgs::msg::Header& header) const {
+    sensor_msgs::msg::PointCloud2 cloud;
+    cloud.header = header;
+    cloud.height = 1;
+    cloud.width = static_cast<uint32_t>(points.size());
+    cloud.is_dense = false;
+    cloud.is_bigendian = false;
+    cloud.point_step = 12;
+    cloud.row_step = cloud.point_step * cloud.width;
+    cloud.fields.resize(3);
+
+    cloud.fields[0].name = "x";
+    cloud.fields[0].offset = 0;
+    cloud.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    cloud.fields[0].count = 1;
+    cloud.fields[1].name = "y";
+    cloud.fields[1].offset = 4;
+    cloud.fields[1].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    cloud.fields[1].count = 1;
+    cloud.fields[2].name = "z";
+    cloud.fields[2].offset = 8;
+    cloud.fields[2].datatype = sensor_msgs::msg::PointField::FLOAT32;
+    cloud.fields[2].count = 1;
+
+    cloud.data.resize(cloud.row_step);
+    auto* cursor = cloud.data.data();
+    for (const auto& point : points) {
+        std::memcpy(cursor, point.data(), 12);
+        cursor += 12;
+    }
+    return cloud;
+}
+
+visualization_msgs::msg::MarkerArray DepthProcessorNode::makeMarkers(
+    const std::vector<DetectionGeometry>& geometries,
+    const std_msgs::msg::Header& header) const {
+    visualization_msgs::msg::MarkerArray markers;
+    for (size_t index = 0; index < geometries.size(); ++index) {
+        const auto& geometry = geometries[index];
+        visualization_msgs::msg::Marker marker;
+        marker.header = header;
+        marker.ns = "scene_objects";
+        marker.id = static_cast<int>(index);
+        marker.type = visualization_msgs::msg::Marker::CUBE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = geometry.center.x();
+        marker.pose.position.y = geometry.center.y();
+        marker.pose.position.z = geometry.center.z();
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = std::max(0.01f, geometry.max_point.x() - geometry.min_point.x());
+        marker.scale.y = std::max(0.01f, geometry.max_point.y() - geometry.min_point.y());
+        marker.scale.z = std::max(0.01f, geometry.max_point.z() - geometry.min_point.z());
+        marker.color.r = geometry.semantic_type.find("bottle") != std::string::npos ? 0.2f : 0.8f;
+        marker.color.g = geometry.semantic_type.find("cup") != std::string::npos ? 0.8f : 0.2f;
+        marker.color.b = 0.3f;
+        marker.color.a = 0.8f;
+        markers.markers.push_back(marker);
+    }
+    return markers;
+}
+
+}  // namespace depth_handler
+
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<depth_handler::depth_node>(rclcpp::NodeOptions()));
+    rclcpp::spin(std::make_shared<depth_handler::DepthProcessorNode>());
     rclcpp::shutdown();
     return 0;
 }

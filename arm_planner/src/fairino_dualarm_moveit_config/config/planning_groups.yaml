@@ -1,0 +1,21 @@
+planning_groups:
+  left_arm:
+    joint_names: [left_joint_1, left_joint_2, left_joint_3, left_joint_4, left_joint_5, left_joint_6]
+    tcp_frame: left_tcp
+  right_arm:
+    joint_names: [right_joint_1, right_joint_2, right_joint_3, right_joint_4, right_joint_5, right_joint_6]
+    tcp_frame: right_tcp
+  dual_arm:
+    joint_names:
+      - left_joint_1
+      - left_joint_2
+      - left_joint_3
+      - left_joint_4
+      - left_joint_5
+      - left_joint_6
+      - right_joint_1
+      - right_joint_2
+      - right_joint_3
+      - right_joint_4
+      - right_joint_5
+      - right_joint_6

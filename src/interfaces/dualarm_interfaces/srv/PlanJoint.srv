@@ -1,0 +1,7 @@
+string arm_group
+sensor_msgs/JointState target_joints
+string planner_id
+---
+bool success
+string message
+trajectory_msgs/JointTrajectory joint_trajectory

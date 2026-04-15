@@ -1,0 +1,12 @@
+ball_basket_pose_estimator:
+  ros__parameters:
+    world_frame: world
+    output_topic: /perception/ball_basket_scene_objects
+    depth_topic: /camera/depth/image_raw
+    camera_info_topic: /camera/depth/camera_info
+    basketball_roi: [220, 120, 120, 120]
+    soccer_ball_roi: [380, 120, 120, 120]
+    basket_roi: [280, 240, 160, 120]
+    basketball_diameter: 0.12
+    soccer_ball_diameter: 0.12
+    basket_size: [0.32, 0.22, 0.18]

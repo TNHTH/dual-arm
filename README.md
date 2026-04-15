@@ -1,71 +1,98 @@
-# FairinoDualArm
+# dual-arm
 
-## 概述
-FairinoDualArm 是一个基于 ROS2 Humble 的双臂协作机器人控制包，集成了感知、运动规划与执行功能，可用于实现复杂的抓取、搬运与协作任务。
+当前 `test` 工作区已按 `/home/gwh/现存问题.md` 与 `/home/gwh/修改方案.md` 开始重构为“冻结 2D detector、补全 3D/规划/执行/任务管理器”的双臂比赛架构。
 
-## 主要功能
-- 传感器接入：支持深度相机、激光雷达输入
-- 运动规划：基于 MoveIt2 实现双臂协同规划
-- 抓取与放置：自定义抓取策略与末端工具
-- 可视化调试：RViz 工具链支持
+## 当前目录结构
 
-## 软件结构
-```plaintext
-src/
-├── camera_info_interceptor    # 相机信息拦截与转换节点
-├── depth_handler              # 深度图像处理节点
-├── detector                   # 目标检测与定位节点
-├── dualarm                    # 双臂运动规划与执行核心
-├── epg50_gripper_ros          # EPG50 电磁夹爪驱动
-├── robo_ctrl                  # 机器人整体控制管理节点
-├── tools                      # 辅助脚本与工具
-└── tf_node                    # TF 坐标变换广播节点
+```text
+dual-arm/
+├── arm_planner/src/                  # 旧单臂规划资产 + 新 dual-arm planner 骨架
+├── depth_handler/                    # 兼容保留的 3D 估计包，现已输出 SceneObjectArray
+├── detector/                         # 冻结，不改模型/训练/TensorRT 导出
+├── dualarm/                          # 兼容 launch 壳层，转发到 dualarm_task_manager
+├── launch/competition.launch.py      # 顶层兼容启动入口
+├── src/interfaces/dualarm_interfaces
+├── src/perception/
+│   ├── detector_adapter
+│   ├── ball_basket_pose_estimator
+│   └── scene_fusion
+├── src/planning/
+│   └── grasp_pose_generator
+├── src/control/
+│   └── execution_adapter
+├── src/tasks/
+│   └── dualarm_task_manager
+├── src/transforms/
+│   └── tf_node
+├── src/bringup/
+│   └── dualarm_bringup
+└── third_party/fairino_sdk/          # 迁入的新第三方 Fairino 资产目录
 ```
 
-## 安装与构建
+## 生产链
+
+生产链现在按下面的顺序组织：
+
+1. `detector` 输出旧的 `detector/msg/Bbox2dArray`
+2. `detector_adapter` 归一化为 `dualarm_interfaces/msg/Detection2DArray`
+3. `depth_handler` 生成瓶子/杯子的 `SceneObjectArray`
+4. `ball_basket_pose_estimator` 生成球和篮筐的 `SceneObjectArray`
+5. `scene_fusion` 输出权威场景状态
+6. `grasp_pose_generator` 生成 `GraspTarget`
+7. `fairino_dualarm_planner` 暴露 `PlanPose/PlanCartesian/PlanJoint`
+8. `execution_adapter` 暴露 `ExecuteTrajectory` action 与 `SetGripper` 服务
+9. `dualarm_task_manager` 以 `RunCompetition` action 驱动状态机
+
+## 启动方式
+
+### 生产 bringup
+
 ```bash
-# 安装依赖
-sudo apt update
-sudo apt install -y ros-humble-ros-base ros-humble-moveit2 ros-humble-rviz2
-
-# 克隆仓库
-cd ~/ros2_ws/src
-git clone <仓库地址> FairinoDualArm
-
-# 构建
-cd ~/ros2_ws
-trt
-colcon build --symlink-install
+cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+source /opt/ros/humble/setup.bash
 source install/setup.bash
+ros2 launch dualarm_bringup competition.launch.py
 ```
 
-# ！！！！！! 要跑的节点 ！！！！！！！！
-```
-ros2 launch robo_ctrl robo_ctrl.launch.py
-ros2 run robo_ctrl high_level_node
-ros2 launch orbbec_camera gemini_330_series.launch.py
-ros2 run depth_handler depth_processor_node
-ros2 run detector detector_node_exe
-ros2 run tools tf_point_query_node
-ros2 launch tools static_tf_publisher.launch.py
-ros2 launch tools fake_gripper_tf_publisher.launch.py
-ros2 run epg50_gripper_ros epg50_gripper_node
+顶层兼容入口也保留：
+
+```bash
+ros2 launch dualarm_bringup competition.launch.py
+# 或
+ros2 launch dualarm_bringup debug.launch.py
+# 或
+ros2 launch dualarm robot_main.launch.py
 ```
 
-foxglove观察用（可选）
-```
-ros2 run camera_info_interceptor camera_info_interceptor_node
+### 构建
+
+```bash
+cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+./build_workspace.sh
 ```
 
-记得检查下夹爪的供电情况，大疆电池有休眠
+### 进入环境
 
-## 需要的service和话题
-机器人控制
+```bash
+cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+./use_workspace.sh
 ```
-/robot_state
-/depth_handler/visualization 的 center_point
-/transform_point
-/epg50_gripper/command
-/robot_move_cart
-/robot_act
+
+## 当前约束
+
+- `detector` 视为冻结包，不改模型、训练、导出和类别定义。
+- 球和篮筐的能力由 `ball_basket_pose_estimator` 提供几何 RGB-D 骨架。
+- `high_level_node` 仍保留用于调试，但默认不进入生产链。
+- `robo_ctrl_L.launch.py` / `robo_ctrl_R.launch.py` 已移除 `sudo chmod 777 /dev/ttyACM0`。
+
+## 验证
+
+```bash
+colcon list --names-only
+ros2 interface show dualarm_interfaces/msg/SceneObjectArray
+ros2 interface show dualarm_interfaces/action/RunCompetition
+ros2 pkg executables detector_adapter
+ros2 pkg executables fairino_dualarm_planner
+ros2 pkg executables execution_adapter
+ros2 pkg executables dualarm_task_manager
 ```

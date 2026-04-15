@@ -1,36 +1,18 @@
-#!/usr/bin/env python3
-
-import os
 from launch import LaunchDescription
-from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
+import os
 
 
 def generate_launch_description():
-    # Get the launch directory
-    pkg_dir = get_package_share_directory('dualarm')
-    
-    # Declare launch arguments
-    config_file_arg = DeclareLaunchArgument(
-        'config_file',
-        default_value=os.path.join(pkg_dir, 'config', 'config.yaml'),
-        description='Path to the config file'
+    task_manager_launch = os.path.join(
+        get_package_share_directory("dualarm_task_manager"),
+        "launch",
+        "dualarm_task_manager.launch.py",
     )
-    
-    # Robot main node
-    robot_main_node = Node(
-        package='dualarm',
-        executable='robot_main',
-        name='robot_main',
-        parameters=[LaunchConfiguration('config_file')],
-        output='screen',
-        emulate_tty=True,
-        arguments=['--ros-args', '--log-level', 'info']
+    return LaunchDescription(
+        [
+            IncludeLaunchDescription(PythonLaunchDescriptionSource(task_manager_launch)),
+        ]
     )
-    
-    return LaunchDescription([
-        config_file_arg,
-        robot_main_node
-    ])

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>ball_basket_pose_estimator</name>
+  <version>0.1.0</version>
+  <description>基于 RGB-D 几何先验的球与篮筐估计骨架。</description>
+
+  <maintainer email="gwh@example.com">gwh</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>dualarm_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

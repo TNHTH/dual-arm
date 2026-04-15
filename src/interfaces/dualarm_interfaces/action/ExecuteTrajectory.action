@@ -1,0 +1,10 @@
+string arm_group
+trajectory_msgs/JointTrajectory joint_trajectory
+geometry_msgs/PoseStamped[] cartesian_waypoints
+bool use_cartesian_execution
+---
+bool success
+string message
+---
+float32 progress
+string state

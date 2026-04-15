@@ -1,0 +1,9 @@
+string id
+string semantic_type
+geometry_msgs/PoseStamped pose
+geometry_msgs/Vector3 size
+float32 confidence
+Subframe[] subframes
+bool graspable
+bool movable
+string source

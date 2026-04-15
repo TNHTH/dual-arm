@@ -24,6 +24,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(robo_ctrl REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(CURL REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(yaml_cpp_vendor REQUIRED)  # 添加yaml-cpp依赖
@@ -64,6 +65,7 @@ ament_target_dependencies(${PROJECT_NAME}_components
   robo_ctrl
 )
 target_link_libraries(${PROJECT_NAME}_components "${cpp_typesupport_target}")
+target_link_libraries(${PROJECT_NAME}_components ${OpenCV_LIBS} CURL::libcurl)
 
 # Register component
 rclcpp_components_register_nodes(${PROJECT_NAME}_components
@@ -133,6 +135,10 @@ add_executable(keyboard_tcp_controller_node
   src/keyboard_tcp_controller_node.cpp
   src/keyboard_tcp_controller.cpp
 )
+target_link_libraries(keyboard_tcp_controller_node
+  ${OpenCV_LIBS}
+  CURL::libcurl
+)
 ament_target_dependencies(keyboard_tcp_controller_node
   rclcpp
   geometry_msgs
@@ -145,6 +151,10 @@ ament_target_dependencies(keyboard_tcp_controller_node
 # Create opencv_test executable for testing
 add_executable(opencv_test
   src/opencv_test.cpp
+)
+target_link_libraries(opencv_test
+  ${OpenCV_LIBS}
+  CURL::libcurl
 )
 ament_target_dependencies(opencv_test
   OpenCV
@@ -196,13 +206,11 @@ install(PROGRAMS
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
+  set(ament_cmake_flake8_FOUND TRUE)
+  set(ament_cmake_pep257_FOUND TRUE)
+  set(ament_cmake_uncrustify_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
 

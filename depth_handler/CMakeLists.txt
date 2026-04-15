@@ -16,16 +16,16 @@ add_compile_options(-O3)
 
 # 查找依赖包
 find_package(ament_cmake REQUIRED)
+find_package(dualarm_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED) # 添加 geometry_msgs 依赖
-find_package(detector REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(rosidl_default_generators REQUIRED) # 确保在此处添加
-find_package(OpenMP REQUIRED) # 添加 OpenMP 支持
+find_package(OpenMP QUIET) # OpenMP 可选
 find_package(visualization_msgs REQUIRED) # 添加 visualization_msgs 依赖
 
 # 添加TF2相关依赖
@@ -59,10 +59,10 @@ target_link_libraries(depth_processor_node ${cpp_typesupport_target})
 # 设置依赖
 ament_target_dependencies(depth_processor_node
   rclcpp
+  dualarm_interfaces
   std_msgs
   sensor_msgs
   geometry_msgs
-  detector
   message_filters
   cv_bridge
   OpenCV
@@ -102,10 +102,10 @@ install(DIRECTORY
 ament_export_include_directories(include)
 ament_export_dependencies(
   rclcpp
+  dualarm_interfaces
   std_msgs
   sensor_msgs
   geometry_msgs
-  detector
   message_filters
   rosidl_default_runtime
   # 添加导出TF2相关依赖

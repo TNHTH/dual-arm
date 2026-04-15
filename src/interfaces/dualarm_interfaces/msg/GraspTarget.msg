@@ -1,0 +1,8 @@
+string object_id
+string arm_mode
+geometry_msgs/PoseStamped pregrasp
+geometry_msgs/PoseStamped grasp
+geometry_msgs/PoseStamped operate
+geometry_msgs/PoseStamped retreat
+geometry_msgs/PoseStamped place
+geometry_msgs/PoseStamped release

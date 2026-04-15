@@ -1,0 +1,9 @@
+string arm_group
+geometry_msgs/PoseStamped target_pose
+string planner_id
+bool cartesian
+---
+bool success
+string message
+trajectory_msgs/JointTrajectory joint_trajectory
+geometry_msgs/PoseStamped[] cartesian_waypoints

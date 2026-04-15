@@ -1,0 +1,7 @@
+string arm_group
+geometry_msgs/PoseStamped[] waypoints
+string planner_id
+---
+bool success
+string message
+trajectory_msgs/JointTrajectory joint_trajectory

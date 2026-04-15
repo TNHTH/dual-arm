@@ -1,0 +1,25 @@
+transforms:
+  - parent: world
+    child: table
+    translation: [0.0, 0.0, 0.0]
+    rotation_rpy: [0.0, 0.0, 0.0]
+  - parent: world
+    child: left_base
+    translation: [0.0, 0.35, 0.0]
+    rotation_rpy: [0.0, 0.0, 0.0]
+  - parent: world
+    child: right_base
+    translation: [0.0, -0.35, 0.0]
+    rotation_rpy: [0.0, 0.0, 0.0]
+  - parent: left_base
+    child: left_tcp
+    translation: [0.0, 0.0, 0.0]
+    rotation_rpy: [0.0, 0.0, 0.0]
+  - parent: right_base
+    child: right_tcp
+    translation: [0.0, 0.0, 0.0]
+    rotation_rpy: [0.0, 0.0, 0.0]
+  - parent: left_tcp
+    child: left_camera
+    translation: [0.0, 0.0, 0.0]
+    rotation_rpy: [0.0, 0.0, 0.0]

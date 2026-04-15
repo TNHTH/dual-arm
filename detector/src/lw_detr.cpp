@@ -10,6 +10,70 @@ static class Logger: public nvinfer1::ILogger {
     }
 } gLogger;
 
+namespace {
+
+template <typename T>
+void destroy_trt_object(T*& object) {
+    if (object != nullptr) {
+        delete object;
+        object = nullptr;
+    }
+}
+
+int get_binding_count(nvinfer1::ICudaEngine* engine) {
+#if NV_TENSORRT_MAJOR >= 10
+    return static_cast<int>(engine->getNbIOTensors());
+#else
+    return engine->getNbBindings();
+#endif
+}
+
+nvinfer1::ICudaEngine* deserialize_engine(
+    nvinfer1::IRuntime* runtime,
+    const std::vector<char>& engine_data
+) {
+#if NV_TENSORRT_MAJOR >= 10
+    return runtime->deserializeCudaEngine(engine_data.data(), engine_data.size());
+#else
+    return runtime->deserializeCudaEngine(engine_data.data(), engine_data.size(), nullptr);
+#endif
+}
+
+bool set_input_shape(
+    nvinfer1::IExecutionContext* context,
+    nvinfer1::ICudaEngine* engine,
+    int index,
+    const nvinfer1::Dims& dims
+) {
+#if NV_TENSORRT_MAJOR >= 10
+    return context->setInputShape(engine->getIOTensorName(index), dims);
+#else
+    context->setBindingDimensions(index, dims);
+    return true;
+#endif
+}
+
+bool enqueue_inference(
+    nvinfer1::IExecutionContext* context,
+    nvinfer1::ICudaEngine* engine,
+    void** bindings,
+    cudaStream_t stream
+) {
+#if NV_TENSORRT_MAJOR >= 10
+    const int io_count = get_binding_count(engine);
+    for (int i = 0; i < io_count; ++i) {
+        if (!context->setTensorAddress(engine->getIOTensorName(i), bindings[i])) {
+            return false;
+        }
+    }
+    return context->enqueueV3(stream);
+#else
+    return context->enqueueV2(bindings, stream, nullptr);
+#endif
+}
+
+} // namespace
+
 detector::LwDetr::LwDetr() {
     // 分配模型输入内存
     host_inputs = new float[batch_size * 3 * input_h * input_w];
@@ -33,9 +97,9 @@ detector::LwDetr::~LwDetr() {
     cudaStreamDestroy(stream);
 
     // 释放TensorRT资源
-    context->destroy();
-    engine->destroy();
-    runtime->destroy();
+    destroy_trt_object(context);
+    destroy_trt_object(engine);
+    destroy_trt_object(runtime);
 
     // 释放绑定
     delete[] bindings;
@@ -65,12 +129,13 @@ int detector::LwDetr::init(std::string engine_path, std::string plugin_path) {
     // 加载和反序列化引擎
     runtime = nvinfer1::createInferRuntime(gLogger);
     std::vector<char> engine_data((std::istreambuf_iterator<char>(engine_file)), std::istreambuf_iterator<char>());
-    engine  = runtime->deserializeCudaEngine(engine_data.data(), engine_data.size(), nullptr);
+    engine  = deserialize_engine(runtime, engine_data);
     context = engine->createExecutionContext();
 
     // 验证引擎输入输出
-    if (engine->getNbBindings() != 3) { // 输入+2个输出(检测框和类别)
-        std::cerr << "错误: LwDetr模型应有3个绑定点 (1个输入, 2个输出), 但找到 " << engine->getNbBindings()
+    const int binding_count = get_binding_count(engine);
+    if (binding_count != 3) { // 输入+2个输出(检测框和类别)
+        std::cerr << "错误: LwDetr模型应有3个绑定点 (1个输入, 2个输出), 但找到 " << binding_count
                   << std::endl;
         return -1;
     }
@@ -105,12 +170,13 @@ int detector::LwDetr::init(std::string engine_path) {
     // 加载和反序列化引擎
     runtime = nvinfer1::createInferRuntime(gLogger);
     std::vector<char> engine_data((std::istreambuf_iterator<char>(engine_file)), std::istreambuf_iterator<char>());
-    engine  = runtime->deserializeCudaEngine(engine_data.data(), engine_data.size(), nullptr);
+    engine  = deserialize_engine(runtime, engine_data);
     context = engine->createExecutionContext();
 
     // 验证引擎输入输出
-    if (engine->getNbBindings() != 3) { // 输入+2个输出(检测框和类别)
-        std::cerr << "错误: LwDetr模型应有3个绑定点 (1个输入, 2个输出), 但找到 " << engine->getNbBindings()
+    const int binding_count = get_binding_count(engine);
+    if (binding_count != 3) { // 输入+2个输出(检测框和类别)
+        std::cerr << "错误: LwDetr模型应有3个绑定点 (1个输入, 2个输出), 但找到 " << binding_count
                   << std::endl;
         return -1;
     }
@@ -178,7 +244,17 @@ detector::LwDetr::infer(std::vector<cv::Mat>& raw_image_generator) {
 
     // 设置输入张量的维度
     nvinfer1::Dims4 inputDims { batch_size, 3, input_h, input_w };
-    context->setBindingDimensions(0, inputDims);
+    if (!set_input_shape(context, engine, 0, inputDims)) {
+        std::cerr << "错误: 无法设置输入张量维度" << std::endl;
+        return std::make_tuple(
+            batch_image_raw,
+            0.0,
+            std::vector<std::vector<float>> {},
+            std::vector<std::vector<float>> {},
+            std::vector<std::vector<int>> {},
+            std::vector<std::vector<float>> {}
+        );
+    }
 
     // 检查维度是否有效
     if (!context->allInputDimensionsSpecified()) {
@@ -195,10 +271,7 @@ detector::LwDetr::infer(std::vector<cv::Mat>& raw_image_generator) {
 
     // 执行推理
     auto start = std::chrono::high_resolution_clock::now();
-    // 使用enqueueV2替代enqueue
-    auto input_dims = context->getBindingDimensions(0);
-
-    bool status = context->enqueueV2(bindings, stream, nullptr);
+    bool status = enqueue_inference(context, engine, bindings, stream);
     if (!status) {
         std::cerr << "错误: 推理执行失败" << std::endl;
     }
