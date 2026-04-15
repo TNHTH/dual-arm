@@ -149,6 +149,12 @@ class BallBasketPoseEstimatorNode(Node):
         object_msg.graspable = spec.semantic_type != "basket"
         object_msg.movable = spec.semantic_type != "basket"
         object_msg.source = "ball_basket_pose_estimator"
+        object_msg.last_seen = self._depth_image.header.stamp
+        object_msg.scene_version = 0
+        object_msg.lifecycle_state = "observed"
+        object_msg.reserved_by = "none"
+        object_msg.attached_link = ""
+        object_msg.pose_covariance_diagonal = [-1.0] * 6
 
         if spec.semantic_type == "basket":
             object_msg.subframes.extend(

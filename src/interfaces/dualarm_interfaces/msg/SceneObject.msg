@@ -7,3 +7,9 @@ Subframe[] subframes
 bool graspable
 bool movable
 string source
+builtin_interfaces/Time last_seen
+uint32 scene_version
+string lifecycle_state
+string reserved_by
+string attached_link
+float32[6] pose_covariance_diagonal

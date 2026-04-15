@@ -4,6 +4,10 @@ int32 slave_id
 int32 position
 int32 speed
 int32 torque
+string object_id
+string link_name
+bool attach_on_success
+bool detach_on_success
 ---
 bool success
 string message

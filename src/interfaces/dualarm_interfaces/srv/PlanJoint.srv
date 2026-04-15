@@ -4,4 +4,13 @@ string planner_id
 ---
 bool success
 string message
+uint32 scene_version
+builtin_interfaces/Time start_state_stamp
+string result_code
+string failure_stage
+bool synchronized
+string primary_arm_group
+string secondary_arm_group
 trajectory_msgs/JointTrajectory joint_trajectory
+trajectory_msgs/JointTrajectory secondary_joint_trajectory
+float32 planning_time_ms

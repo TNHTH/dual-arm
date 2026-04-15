@@ -1,10 +1,23 @@
 string arm_group
+string secondary_arm_group
 trajectory_msgs/JointTrajectory joint_trajectory
+trajectory_msgs/JointTrajectory secondary_joint_trajectory
 geometry_msgs/PoseStamped[] cartesian_waypoints
+bool synchronized
 bool use_cartesian_execution
+string execution_profile
 ---
 bool success
 string message
+string result_code
+float32 actual_duration_s
+float32 sync_skew_ms
+bool primary_started
+bool secondary_started
+bool primary_completed
+bool secondary_completed
+sensor_msgs/JointState final_primary_joint_state
+sensor_msgs/JointState final_secondary_joint_state
 ---
 float32 progress
 string state

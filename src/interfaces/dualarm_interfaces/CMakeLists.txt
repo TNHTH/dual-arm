@@ -22,6 +22,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SceneObjectArray.msg"
   "msg/GraspTarget.msg"
   "msg/TaskEvent.msg"
+  "srv/ReserveObject.srv"
+  "srv/ReleaseObject.srv"
   "srv/SetGripper.srv"
   "srv/AttachObject.srv"
   "srv/DetachObject.srv"

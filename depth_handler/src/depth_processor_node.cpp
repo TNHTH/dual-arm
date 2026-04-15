@@ -331,6 +331,12 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
     object.graspable = true;
     object.movable = true;
     object.source = "depth_handler";
+    object.last_seen = header.stamp;
+    object.scene_version = 0;
+    object.lifecycle_state = "observed";
+    object.reserved_by = "none";
+    object.attached_link = "";
+    object.pose_covariance_diagonal = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
 
     auto add_subframe = [&](const std::string& name, const Eigen::Vector3f& position) {
         dualarm_interfaces::msg::Subframe subframe;

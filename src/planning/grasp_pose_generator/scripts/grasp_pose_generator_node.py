@@ -35,6 +35,13 @@ class GraspPoseGeneratorNode(Node):
         target = GraspTarget()
         target.object_id = scene_object.id
         target.arm_mode = self._select_arm_mode(scene_object.semantic_type)
+        target.partner_arm_mode = "right_arm" if target.arm_mode == "left_arm" else "left_arm"
+        target.source_scene_id = scene_object.scene_version
+        target.position_tolerance = 0.01
+        target.orientation_tolerance_deg = 10.0
+        target.guarded_motion = False
+        target.requires_bimanual_sync = scene_object.semantic_type in ("basketball", "soccer_ball")
+        target.requires_attached_object = False
 
         target.grasp = deepcopy(scene_object.pose)
         target.operate = deepcopy(scene_object.pose)
@@ -45,14 +52,25 @@ class GraspPoseGeneratorNode(Node):
         target.place = deepcopy(scene_object.pose)
         target.release = deepcopy(target.place)
         target.release.pose.position.z += self._release_offset
+        target.approach_axis.z = -1.0
+        target.retreat_axis.z = 1.0
+        target.target_type = "grasp"
+        target.strategy_id = self._strategy_id_for(scene_object.semantic_type)
+        target.gripper_profile = self._gripper_profile_for(scene_object.semantic_type)
+        target.execution_profile = self._execution_profile_for(scene_object.semantic_type)
 
         for subframe in scene_object.subframes:
             if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_mouth":
                 target.operate = deepcopy(subframe.pose)
+                target.target_type = "operate"
+                target.guarded_motion = True
             if scene_object.semantic_type.startswith("cup") and subframe.name == "cup_fill_target":
                 target.operate = deepcopy(subframe.pose)
+                target.target_type = "prepour"
             if scene_object.semantic_type == "basket" and subframe.name == "basket_release_center":
                 target.release = deepcopy(subframe.pose)
+                target.target_type = "release"
+                target.guarded_motion = True
 
         return target
 
@@ -62,6 +80,33 @@ class GraspPoseGeneratorNode(Node):
         if semantic_type == "cola_bottle":
             return "right_arm"
         return "left_arm"
+
+    def _strategy_id_for(self, semantic_type: str) -> str:
+        if semantic_type in ("basketball", "soccer_ball"):
+            return "ball_bimanual_handover"
+        if semantic_type == "basket":
+            return "basket_release"
+        if semantic_type.endswith("bottle"):
+            return "bottle_body_grasp"
+        return "cup_side_grasp"
+
+    def _gripper_profile_for(self, semantic_type: str) -> str:
+        if semantic_type in ("basketball", "soccer_ball"):
+            return "ball_dual_hold"
+        if semantic_type.endswith("bottle"):
+            return "bottle_hold"
+        if semantic_type.startswith("cup"):
+            return "cup_hold"
+        return "default_hold"
+
+    def _execution_profile_for(self, semantic_type: str) -> str:
+        if semantic_type in ("basketball", "soccer_ball"):
+            return "dual_arm_transport"
+        if semantic_type == "basket":
+            return "basket_release_lift_and_open"
+        if semantic_type.endswith("bottle"):
+            return "bottle_transport"
+        return "cup_transport"
 
 
 def main() -> None:

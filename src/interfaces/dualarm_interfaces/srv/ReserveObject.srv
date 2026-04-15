@@ -1,0 +1,6 @@
+string object_id
+string reserved_by
+string arm_mode
+---
+bool success
+string message

@@ -21,6 +21,7 @@ def generate_launch_description():
             _include("depth_handler", "depth_processor.launch.py"),
             _include("ball_basket_pose_estimator", "ball_basket_pose_estimator.launch.py"),
             _include("scene_fusion", "scene_fusion.launch.py"),
+            _include("planning_scene_sync", "planning_scene_sync.launch.py"),
             _include("grasp_pose_generator", "grasp_pose_generator.launch.py"),
             _include("fairino_dualarm_planner", "fairino_dualarm_planner.launch.py"),
             _include("execution_adapter", "execution_adapter.launch.py"),
