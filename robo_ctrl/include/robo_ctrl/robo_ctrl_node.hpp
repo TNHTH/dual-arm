@@ -74,6 +74,9 @@ private:
     // 初始化机器人连接
     bool init_robot_connection();
 
+    // 运动前准备：退出拖动，并按配置决定是否切自动，再上使能
+    bool prepare_robot_for_motion(std::string& error_message);
+
     // 发布TF变换
     void publish_tf_transforms(const robo_ctrl::msg::TCPPose& tcp_pose);
 
@@ -91,6 +94,7 @@ private:
     int robot_port_;
     bool is_connected_;
     std::string robot_name_;
+    bool force_auto_mode_before_motion_ = false;
 
     // 服务
     rclcpp::Service<robo_ctrl::srv::RobotMove>::SharedPtr robot_move_service_;

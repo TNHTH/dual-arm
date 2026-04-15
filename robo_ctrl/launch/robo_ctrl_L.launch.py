@@ -8,6 +8,7 @@ import os
 
 
 ROBOT_NAME = "L"
+SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
 
 
 def generate_launch_description():
@@ -80,6 +81,7 @@ def generate_launch_description():
                 package="robo_ctrl",
                 executable="robo_ctrl_node",
                 name=f"{ROBOT_NAME}_robo_ctrl",
+                additional_env={"LD_PRELOAD": SYSTEM_LIBSTDCXX},
                 parameters=[
                     {
                         "robot_ip": robot_ip,
@@ -94,6 +96,7 @@ def generate_launch_description():
                 package="robo_ctrl",
                 executable="high_level_node",
                 name=f"{ROBOT_NAME}_high_level",
+                additional_env={"LD_PRELOAD": SYSTEM_LIBSTDCXX},
                 parameters=[
                     {
                         "robot_name": robot_name,

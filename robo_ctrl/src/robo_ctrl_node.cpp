@@ -6,6 +6,39 @@
 #include <Eigen/Dense>
 namespace robo_ctrl {
 
+namespace {
+
+const char* explain_robot_error(int error_code) {
+    switch (error_code) {
+        case ERR_SUCCESS:
+            return "success";
+        case ERR_PARAM_NUM:
+            return "参数数量不一致";
+        case ERR_PARAM_VALUE:
+            return "参数值超出合理范围";
+        case ERR_EXECUTION_FAILED:
+            return "命令执行失败";
+        case ERR_COMPUTE_FAILED:
+            return "计算失败";
+        case ERR_INVERSE_KINEMATICS_COMPUTE_FAILED:
+            return "逆运动学计算失败";
+        case ERR_SERVOJ_JOINT_OVERRUN:
+            return "关节超限";
+        case ERR_STRANGE_POSE:
+            return "奇异位姿";
+        case ERR_LINE_POINT:
+            return "直线目标点不正确";
+        case ERR_TARGET_POSE_CANNOT_REACHED:
+            return "目标位姿不可达";
+        case ERR_SOCKET_COM_FAILED:
+            return "网络通信异常";
+        default:
+            return "未分类错误";
+    }
+}
+
+}  // namespace
+
 // 修改构造函数，启动状态读取线程
 RoboCtrlNode::RoboCtrlNode(const rclcpp::NodeOptions& options):
     Node("robo_ctrl_node", options),
@@ -16,11 +49,13 @@ RoboCtrlNode::RoboCtrlNode(const rclcpp::NodeOptions& options):
     this->declare_parameter<int>("robot_port", 8080);
     this->declare_parameter<double>("state_query_interval", 0.01); // 状态查询间隔，默认10ms
     this->declare_parameter<std::string>("robot_name", "FRRobot");
+    this->declare_parameter<bool>("force_auto_mode_before_motion", false);
 
     robot_ip_             = this->get_parameter("robot_ip").as_string();
     robot_port_           = this->get_parameter("robot_port").as_int();
     state_query_interval_ = this->get_parameter("state_query_interval").as_double();
     robot_name_           = this->get_parameter("robot_name").as_string();
+    force_auto_mode_before_motion_ = this->get_parameter("force_auto_mode_before_motion").as_bool();
 
     // 初始化机器人连接
     if (!init_robot_connection()) {
@@ -122,13 +157,62 @@ bool RoboCtrlNode::init_robot_connection() {
     }
 }
 
+bool RoboCtrlNode::prepare_robot_for_motion(std::string& error_message) {
+    if (!robot_ || !is_connected_) {
+        error_message = "机器人未连接";
+        return false;
+    }
+
+    uint8_t drag_state = 0;
+    int ret = robot_->IsInDragTeach(&drag_state);
+    if (ret != 0) {
+        error_message = "查询拖动模式失败，错误码: " + std::to_string(ret) + "（" + explain_robot_error(ret) + "）";
+        return false;
+    }
+
+    if (drag_state == 1) {
+        RCLCPP_WARN(this->get_logger(), "检测到机器人处于 Drag 模式，尝试退出拖动模式");
+        ret = robot_->DragTeachSwitch(0);
+        if (ret != 0) {
+            error_message = "退出拖动模式失败，错误码: " + std::to_string(ret) + "（" + explain_robot_error(ret) + "）";
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+    if (force_auto_mode_before_motion_) {
+        ret = robot_->Mode(0);
+        if (ret != 0) {
+            error_message = "切换自动模式失败，错误码: " + std::to_string(ret) + "（" + explain_robot_error(ret) + "）";
+            return false;
+        }
+    }
+
+    ret = robot_->RobotEnable(1);
+    if (ret != 0) {
+        error_message = "机器人上使能失败，错误码: " + std::to_string(ret) + "（" + explain_robot_error(ret) + "）";
+        return false;
+    }
+
+    return true;
+}
+
 void RoboCtrlNode::handle_robot_move(
     const std::shared_ptr<robo_ctrl::srv::RobotMove::Request> request,
     std::shared_ptr<robo_ctrl::srv::RobotMove::Response> response
 ) {
+    std::lock_guard<std::mutex> lock(robot_mutex_);
+
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
+        return;
+    }
+
+    std::string prepare_error;
+    if (!prepare_robot_for_motion(prepare_error)) {
+        response->success = false;
+        response->message = prepare_error;
         return;
     }
 
@@ -242,9 +326,18 @@ void RoboCtrlNode::handle_robot_move_cart(
     const std::shared_ptr<robo_ctrl::srv::RobotMoveCart::Request> request,
     std::shared_ptr<robo_ctrl::srv::RobotMoveCart::Response> response
 ) {
+    std::lock_guard<std::mutex> lock(robot_mutex_);
+
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
+        return;
+    }
+
+    std::string prepare_error;
+    if (!prepare_robot_for_motion(prepare_error)) {
+        response->success = false;
+        response->message = prepare_error;
         return;
     }
 
@@ -344,7 +437,8 @@ void RoboCtrlNode::handle_robot_move_cart(
             //         return;
             //     } else {
             response->success = false;
-            response->message = "执行MoveCart命令失败，错误码: " + std::to_string(ret);
+            response->message = "执行MoveCart命令失败，错误码: " + std::to_string(ret) + "（"
+                + explain_robot_error(ret) + "）";
             return;
         }
         // }
@@ -366,8 +460,10 @@ void RoboCtrlNode::handle_robot_move_cart(
             // 检查超时
             auto current_time = std::chrono::steady_clock::now();
             if (current_time - start_time > timeout_duration) {
-                RCLCPP_WARN(this->get_logger(), "等待机器人运动完成超时，默认返回成功");
-                break; // 超时后跳出循环，默认认为运动完成
+                RCLCPP_WARN(this->get_logger(), "等待机器人运动完成超时，返回失败");
+                response->success = false;
+                response->message = "等待机器人运动完成超时";
+                return;
             }
 
             // 短暂休眠，避免CPU占用过高
@@ -388,6 +484,8 @@ void RoboCtrlNode::handle_robot_servo(
     const std::shared_ptr<robo_ctrl::srv::RobotServo::Request> request,
     std::shared_ptr<robo_ctrl::srv::RobotServo::Response> response
 ) {
+    std::lock_guard<std::mutex> lock(robot_mutex_);
+
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
@@ -1387,6 +1485,8 @@ void RoboCtrlNode::handle_robot_set_speed(
     const std::shared_ptr<robo_ctrl::srv::RobotSetSpeed::Request> request,
     std::shared_ptr<robo_ctrl::srv::RobotSetSpeed::Response> response
 ) {
+    std::lock_guard<std::mutex> lock(robot_mutex_);
+
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";

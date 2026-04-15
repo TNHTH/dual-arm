@@ -11,6 +11,12 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_options(-g)
 
+# 固定运行时库搜索路径，避免把 Miniconda 等外部路径写进安装后的 RUNPATH。
+set(CMAKE_SKIP_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+
 # 查找依赖包
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -62,6 +68,8 @@ add_library(robo_ctrl_components SHARED
 # 设置库的属性
 set_target_properties(robo_ctrl_components PROPERTIES
   POSITION_INDEPENDENT_CODE ON
+  BUILD_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/lib;/opt/ros/humble/lib"
+  INSTALL_RPATH "\$ORIGIN;/opt/ros/humble/lib"
 )
 
 # 链接库依赖 - 库文件位于lib目录下
@@ -119,6 +127,7 @@ target_link_libraries(test_circular_planner ${cpp_typesupport_target})
 
 add_executable(robot_move_client src/robot_move_client.cpp)
 add_executable(robot_move_cart_client src/robot_move_cart_client.cpp)
+add_executable(robot_mode_helper src/robot_mode_helper.cpp)
 
 # 链接依赖项
 ament_target_dependencies(robot_move_client
@@ -127,10 +136,14 @@ ament_target_dependencies(robot_move_client
 ament_target_dependencies(robot_move_cart_client
   rclcpp
 )
+ament_target_dependencies(robot_mode_helper
+  rclcpp
+)
 
 # 链接消息库
 target_link_libraries(robot_move_client ${cpp_typesupport_target})
 target_link_libraries(robot_move_cart_client ${cpp_typesupport_target})
+target_link_libraries(robot_mode_helper fairino)
 
 # 添加高层规划执行节点
 add_executable(high_level_node src/high_level.cpp)
@@ -145,6 +158,22 @@ ament_target_dependencies(high_level_node
 target_link_libraries(high_level_node
   ${cpp_typesupport_target}
 )
+
+set(_robo_ctrl_exec_build_rpath "${CMAKE_CURRENT_BINARY_DIR};${CMAKE_CURRENT_SOURCE_DIR}/lib;/opt/ros/humble/lib")
+set(_robo_ctrl_exec_install_rpath "\$ORIGIN/..;/opt/ros/humble/lib")
+
+foreach(_target
+    robo_ctrl_node
+    robot_move_client
+    robot_move_cart_client
+    robot_mode_helper
+    high_level_node
+    test_circular_planner)
+  set_target_properties(${_target} PROPERTIES
+    BUILD_RPATH "${_robo_ctrl_exec_build_rpath}"
+    INSTALL_RPATH "${_robo_ctrl_exec_install_rpath}"
+  )
+endforeach()
 
 # 安装高层规划执行节点
 install(
@@ -194,6 +223,7 @@ install(
     robo_ctrl_node
     robot_move_client
     robot_move_cart_client
+    robot_mode_helper
     high_level_node
     test_circular_planner
   DESTINATION lib/${PROJECT_NAME}
