@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import rclpy
@@ -17,8 +18,39 @@ from sensor_msgs.msg import JointState
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory
 from dualarm_interfaces.msg import SceneObjectArray
 from dualarm_interfaces.srv import AttachObject, DetachObject, SetGripper
+from primitive_contract import (
+    PRIMITIVE_CONTRACT_VERSION,
+    RESULT_CONTACT_FAILED,
+    RESULT_DETACH_FAILED,
+    RESULT_DRIVER_FAILURE,
+    RESULT_HOLD_FAILED,
+    RESULT_INVALID_REQUEST,
+    RESULT_SUCCESS,
+    RESULT_SYNC_VIOLATION,
+    RESULT_TIMEOUT,
+    PrimitiveContract,
+    primary_arm_group,
+    secondary_arm_group,
+    supported_primitive_ids,
+    validate_primitive_goal,
+)
 from robo_ctrl.msg import RobotState
 from robo_ctrl.srv import RobotMove, RobotMoveCart, RobotServoJoint
+
+
+@dataclass
+class PrimitiveExecutionOutcome:
+    success: bool = False
+    message: str = "未执行 primitive"
+    result_code: str = "cancelled"
+    sync_skew_ms: float = 0.0
+    contact_verified: bool = False
+    detach_verified: bool = False
+    spill_detected: bool = False
+    primary_started: bool = False
+    secondary_started: bool = False
+    primary_completed: bool = False
+    secondary_completed: bool = False
 
 
 class ExecutionAdapterNode(Node):
@@ -108,6 +140,9 @@ class ExecutionAdapterNode(Node):
         if goal_request.arm_group not in ("left_arm", "right_arm", "dual_arm"):
             self.get_logger().warn(f"拒绝未知 primitive arm_group: {goal_request.arm_group}")
             return GoalResponse.REJECT
+        if goal_request.primitive_id not in supported_primitive_ids():
+            self.get_logger().warn(f"拒绝未知 primitive_id: {goal_request.primitive_id}")
+            return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
     def _cancel_callback(self, _goal_handle) -> CancelResponse:
@@ -150,7 +185,7 @@ class ExecutionAdapterNode(Node):
             result_code = "cancelled"
 
         feedback.progress = 1.0
-        feedback.state = "finished" if success else "failed"
+        feedback.state = "finished" if outcome.success else "failed"
         goal_handle.publish_feedback(feedback)
 
         result = ExecuteTrajectory.Result()
@@ -167,7 +202,9 @@ class ExecutionAdapterNode(Node):
             self._left_robot_state if goal.arm_group != "right_arm" else self._right_robot_state,
             goal.arm_group if goal.arm_group != "dual_arm" else "left_arm",
         )
-        result.final_secondary_joint_state = self._robot_state_to_joint_state(self._right_robot_state, "right_arm")
+        secondary_arm = secondary_arm_group(goal.arm_group, goal.secondary_arm_group)
+        secondary_state = self._right_robot_state if secondary_arm != "left_arm" else self._left_robot_state
+        result.final_secondary_joint_state = self._robot_state_to_joint_state(secondary_state, secondary_arm or "right_arm")
         if success:
             goal_handle.succeed()
         else:
@@ -182,95 +219,196 @@ class ExecutionAdapterNode(Node):
         goal_handle.publish_feedback(feedback)
 
         started_at = time.monotonic()
-        success = False
-        message = "未执行 primitive"
-        result_code = "cancelled"
-        sync_skew_ms = 0.0
-        contact_verified = False
-        detach_verified = False
-        spill_detected = False
-
-        if goal.primitive_id == "cap_align_and_grasp":
-            success, message = self._execute_cartesian_sequence(goal.arm_group, goal.primary_cartesian_waypoints)
-            if success:
-                success = self._set_gripper_internal(goal.arm_group, command=2, position=200)
-                message = "cap 对准并夹持完成" if success else "cap 对准后夹持失败"
-                contact_verified = self._check_gripper_contact(goal.arm_group)
-                result_code = "success" if success else "contact_failed"
-        elif goal.primitive_id == "cap_twist_and_unthread":
-            success, message, sync_skew_ms = self._execute_dual_or_single_cartesian(goal)
-            contact_verified = self._check_gripper_contact(goal.arm_group) or self._check_gripper_contact(goal.secondary_arm_group)
-            result_code = "success" if success else "driver_failure"
-        elif goal.primitive_id == "cap_place_or_release":
-            success, message = self._execute_cartesian_sequence(goal.arm_group, goal.primary_cartesian_waypoints)
-            if success:
-                success = self._set_gripper_internal(goal.arm_group, command=2, position=0)
-                message = "cap 放置并释放完成" if success else "cap 放置后释放失败"
-            detach_verified = True
-            result_code = "success" if success else "driver_failure"
-        elif goal.primitive_id == "pour_tilt":
-            success, message, sync_skew_ms = self._execute_dual_or_single_cartesian(goal)
-            result_code = "success" if success else "driver_failure"
-        elif goal.primitive_id == "hold_verify":
-            success, contact_verified = self._hold_verify(goal.arm_group, goal.object_id, goal.hold_duration_s or 3.0)
-            message = "持物保持验证通过" if success else "持物保持验证失败"
-            result_code = "success" if success else "hold_failed"
-        elif goal.primitive_id == "release_guard":
-            success = self._set_gripper_internal(goal.arm_group, command=2, position=0)
-            if success and goal.secondary_arm_group:
-                success = self._set_gripper_internal(goal.secondary_arm_group, command=2, position=0)
-            if success and goal.object_id:
-                self._call_detach(goal.object_id)
-            detach_verified = self._verify_detached(goal.object_id)
-            success = success and detach_verified
-            message = "释放保护动作完成" if success else "释放保护动作失败"
-            result_code = "success" if success else "detach_failed"
+        valid, validation_code, validation_message, contract = validate_primitive_goal(goal)
+        if valid and contract is not None:
+            outcome = self._dispatch_primitive(goal, contract)
         else:
-            message = f"未知 primitive_id: {goal.primitive_id}"
-            result_code = "unknown_primitive"
+            outcome = PrimitiveExecutionOutcome(
+                success=False,
+                message=validation_message,
+                result_code=validation_code or RESULT_INVALID_REQUEST,
+            )
 
         feedback.progress = 1.0
-        feedback.state = "finished" if success else "failed"
+        feedback.state = "finished" if outcome.success else "failed"
         goal_handle.publish_feedback(feedback)
 
         result = ExecutePrimitive.Result()
-        result.success = success
-        result.message = message
-        result.result_code = result_code
+        result.success = outcome.success
+        result.message = outcome.message
+        result.result_code = outcome.result_code
+        result.primitive_family = contract.family if contract is not None else ""
+        result.contract_version = PRIMITIVE_CONTRACT_VERSION
         result.actual_duration_s = float(time.monotonic() - started_at)
-        result.sync_skew_ms = float(sync_skew_ms)
-        result.contact_verified = contact_verified
-        result.detach_verified = detach_verified
-        result.spill_detected = spill_detected
+        result.sync_skew_ms = float(outcome.sync_skew_ms)
+        result.primary_started = outcome.primary_started
+        result.secondary_started = outcome.secondary_started
+        result.primary_completed = outcome.primary_completed
+        result.secondary_completed = outcome.secondary_completed
+        result.contact_verified = outcome.contact_verified
+        result.detach_verified = outcome.detach_verified
+        result.spill_detected = outcome.spill_detected
         result.final_primary_joint_state = self._robot_state_to_joint_state(
             self._left_robot_state if goal.arm_group != "right_arm" else self._right_robot_state,
             goal.arm_group if goal.arm_group != "dual_arm" else "left_arm",
         )
         result.final_secondary_joint_state = self._robot_state_to_joint_state(self._right_robot_state, "right_arm")
-        if success:
+        if outcome.success:
             goal_handle.succeed()
         else:
             goal_handle.abort()
         return result
 
-    def _execute_dual_or_single_cartesian(self, goal: ExecutePrimitive.Goal) -> tuple[bool, str, float]:
-        if goal.synchronized or goal.arm_group == "dual_arm":
-            return self._execute_dual_cartesian(goal.primary_cartesian_waypoints, goal.secondary_cartesian_waypoints)
-        success, message = self._execute_cartesian_sequence(goal.arm_group, goal.primary_cartesian_waypoints)
-        return success, message, 0.0
+    def _dispatch_primitive(self, goal: ExecutePrimitive.Goal, contract: PrimitiveContract) -> PrimitiveExecutionOutcome:
+        outcome = PrimitiveExecutionOutcome()
+        if goal.primitive_id == "cap_align_and_grasp":
+            outcome.primary_started = True
+            outcome.success, outcome.message = self._execute_cartesian_sequence(
+                primary_arm_group(goal.arm_group),
+                goal.primary_cartesian_waypoints,
+            )
+            outcome.primary_completed = outcome.success
+            if outcome.success:
+                outcome.success = self._set_gripper_internal(primary_arm_group(goal.arm_group), command=2, position=200)
+                outcome.contact_verified = self._check_gripper_contact(primary_arm_group(goal.arm_group))
+                outcome.success = outcome.success and outcome.contact_verified
+                outcome.message = "cap 对准并夹持完成" if outcome.success else "cap 对准后接触验证失败"
+            outcome.result_code = RESULT_SUCCESS if outcome.success else (
+                RESULT_CONTACT_FAILED if outcome.primary_completed else RESULT_DRIVER_FAILURE
+            )
+        elif goal.primitive_id == "cap_twist_and_unthread":
+            outcome = self._execute_dual_or_single_cartesian(goal)
+            motion_success = outcome.success
+            outcome.contact_verified = self._check_gripper_contact(primary_arm_group(goal.arm_group)) or self._check_gripper_contact(
+                secondary_arm_group(goal.arm_group, goal.secondary_arm_group)
+            )
+            outcome.success = motion_success and outcome.contact_verified
+            outcome.result_code = (
+                RESULT_SUCCESS
+                if outcome.success
+                else RESULT_CONTACT_FAILED
+                if motion_success and not outcome.contact_verified
+                else self._primitive_motion_result_code(outcome)
+            )
+        elif goal.primitive_id == "cap_place_or_release":
+            outcome.primary_started = True
+            outcome.success, outcome.message = self._execute_cartesian_sequence(
+                primary_arm_group(goal.arm_group),
+                goal.primary_cartesian_waypoints,
+            )
+            outcome.primary_completed = outcome.success
+            if outcome.success:
+                outcome.success = self._set_gripper_internal(primary_arm_group(goal.arm_group), command=2, position=0)
+                if outcome.success:
+                    detached = self._call_detach(goal.object_id)
+                    outcome.detach_verified = detached and self._verify_detached(goal.object_id)
+                    outcome.success = outcome.detach_verified
+                outcome.message = "cap 放置并释放完成" if outcome.success else "cap 放置后释放验证失败"
+            outcome.result_code = RESULT_SUCCESS if outcome.success else (
+                RESULT_DETACH_FAILED if outcome.primary_completed else RESULT_DRIVER_FAILURE
+            )
+        elif goal.primitive_id == "pour_tilt":
+            outcome = self._execute_dual_or_single_cartesian(goal)
+            outcome.result_code = self._primitive_motion_result_code(outcome)
+        elif goal.primitive_id == "hold_verify":
+            outcome.success, outcome.contact_verified = self._hold_verify(
+                primary_arm_group(goal.arm_group),
+                goal.object_id,
+                goal.hold_duration_s or 3.0,
+            )
+            outcome.primary_started = True
+            outcome.primary_completed = outcome.success
+            outcome.message = "持物保持验证通过" if outcome.success else "持物保持验证失败"
+            outcome.result_code = RESULT_SUCCESS if outcome.success else RESULT_HOLD_FAILED
+        elif goal.primitive_id == "release_guard":
+            outcome.primary_started = True
+            outcome.success = self._set_gripper_internal(primary_arm_group(goal.arm_group), command=2, position=0)
+            outcome.primary_completed = outcome.success
+            secondary_arm = secondary_arm_group(goal.arm_group, goal.secondary_arm_group)
+            if outcome.success and secondary_arm:
+                outcome.secondary_started = True
+                secondary_success = self._set_gripper_internal(secondary_arm, command=2, position=0)
+                outcome.secondary_completed = secondary_success
+                outcome.success = secondary_success
+            if outcome.success:
+                outcome.detach_verified = self._call_detach(goal.object_id)
+            outcome.detach_verified = outcome.detach_verified and self._verify_detached(goal.object_id)
+            outcome.success = outcome.success and outcome.detach_verified
+            outcome.message = "释放保护动作完成" if outcome.success else "释放保护动作失败"
+            outcome.result_code = RESULT_SUCCESS if outcome.success else RESULT_DETACH_FAILED
+        else:
+            outcome.message = f"未知 primitive_id: {goal.primitive_id}"
+            outcome.result_code = "unknown_primitive"
 
-    def _execute_dual_cartesian(self, primary_waypoints, secondary_waypoints) -> tuple[bool, str, float]:
+        if contract.contact_required_for_success and not outcome.contact_verified:
+            outcome.success = False
+            if outcome.result_code == RESULT_SUCCESS:
+                outcome.result_code = RESULT_CONTACT_FAILED
+        if contract.detach_required_for_success and not outcome.detach_verified:
+            outcome.success = False
+            if outcome.result_code == RESULT_SUCCESS:
+                outcome.result_code = RESULT_DETACH_FAILED
+        return outcome
+
+    def _primitive_motion_result_code(self, outcome: PrimitiveExecutionOutcome) -> str:
+        if outcome.success:
+            return RESULT_SUCCESS
+        if outcome.sync_skew_ms > self._dual_arm_skew_limit_ms:
+            return RESULT_SYNC_VIOLATION
+        if "超时" in outcome.message:
+            return RESULT_TIMEOUT
+        if "偏差超限" in outcome.message:
+            return RESULT_SYNC_VIOLATION
+        return RESULT_DRIVER_FAILURE
+
+    def _execute_dual_or_single_cartesian(self, goal: ExecutePrimitive.Goal) -> PrimitiveExecutionOutcome:
+        outcome = PrimitiveExecutionOutcome(primary_started=True)
+        if goal.synchronized or goal.arm_group == "dual_arm":
+            primary_arm = primary_arm_group(goal.arm_group)
+            secondary_arm = secondary_arm_group(goal.arm_group, goal.secondary_arm_group)
+            (
+                outcome.success,
+                outcome.message,
+                outcome.sync_skew_ms,
+                outcome.primary_started,
+                outcome.secondary_started,
+                outcome.primary_completed,
+                outcome.secondary_completed,
+            ) = self._execute_dual_cartesian(
+                primary_arm,
+                secondary_arm,
+                goal.primary_cartesian_waypoints,
+                goal.secondary_cartesian_waypoints,
+            )
+            return outcome
+        outcome.success, outcome.message = self._execute_cartesian_sequence(
+            primary_arm_group(goal.arm_group),
+            goal.primary_cartesian_waypoints,
+        )
+        outcome.primary_completed = outcome.success
+        return outcome
+
+    def _execute_dual_cartesian(
+        self,
+        primary_arm: str,
+        secondary_arm: str,
+        primary_waypoints,
+        secondary_waypoints,
+    ) -> tuple[bool, str, float, bool, bool, bool, bool]:
         if not primary_waypoints or not secondary_waypoints:
-            return False, "双臂 cartesian primitive 缺少 waypoint", 0.0
+            return False, "双臂 cartesian primitive 缺少 waypoint", 0.0, False, False, False, False
+        if len(primary_waypoints) != len(secondary_waypoints):
+            return False, "双臂 cartesian primitive waypoint 数量不一致", 0.0, False, False, False, False
         max_skew_ms = 0.0
-        count = min(len(primary_waypoints), len(secondary_waypoints))
-        for index in range(count):
-            primary_client = self._robot_move_cart_clients.get("left_arm")
-            secondary_client = self._robot_move_cart_clients.get("right_arm")
+        primary_completed = False
+        secondary_completed = False
+        for index in range(len(primary_waypoints)):
+            primary_client = self._robot_move_cart_clients.get(primary_arm)
+            secondary_client = self._robot_move_cart_clients.get(secondary_arm)
             if primary_client is None or secondary_client is None:
-                return False, "双臂 robot_move_cart 客户端不存在", max_skew_ms
+                return False, "双臂 robot_move_cart 客户端不存在", max_skew_ms, False, False, primary_completed, secondary_completed
             if not primary_client.wait_for_service(timeout_sec=0.5) or not secondary_client.wait_for_service(timeout_sec=0.5):
-                return False, "双臂 robot_move_cart 服务不可用", max_skew_ms
+                return False, "双臂 robot_move_cart 服务不可用", max_skew_ms, False, False, primary_completed, secondary_completed
             left_request = self._build_robot_move_cart_request(primary_waypoints[index])
             right_request = self._build_robot_move_cart_request(secondary_waypoints[index])
             send_left = time.monotonic()
@@ -281,12 +419,14 @@ class ExecutionAdapterNode(Node):
             rclpy.spin_until_future_complete(self, left_future, timeout_sec=10.0)
             rclpy.spin_until_future_complete(self, right_future, timeout_sec=10.0)
             if left_future.result() is None or right_future.result() is None:
-                return False, f"双臂 cartesian step {index} 超时", max_skew_ms
+                return False, f"双臂 cartesian step {index} 超时", max_skew_ms, True, True, primary_completed, secondary_completed
             if max_skew_ms > self._dual_arm_skew_limit_ms:
-                return False, "双臂 cartesian primitive 启动偏差超限", max_skew_ms
-            if not bool(left_future.result().success) or not bool(right_future.result().success):
-                return False, f"双臂 cartesian step {index} 执行失败", max_skew_ms
-        return True, "双臂 cartesian primitive 执行成功", max_skew_ms
+                return False, "双臂 cartesian primitive 启动偏差超限", max_skew_ms, True, True, primary_completed, secondary_completed
+            primary_completed = bool(left_future.result().success)
+            secondary_completed = bool(right_future.result().success)
+            if not primary_completed or not secondary_completed:
+                return False, f"双臂 cartesian step {index} 执行失败", max_skew_ms, True, True, primary_completed, secondary_completed
+        return True, "双臂 cartesian primitive 执行成功", max_skew_ms, True, True, True, True
 
     def _execute_cartesian_sequence(self, arm_group: str, waypoints) -> tuple[bool, str]:
         if not waypoints:
@@ -439,29 +579,33 @@ class ExecutionAdapterNode(Node):
             return False
 
         if attach_on_success and object_id and link_name:
-            self._call_attach(object_id, link_name)
+            if not self._call_attach(object_id, link_name):
+                return False
         if detach_on_success and object_id:
-            self._call_detach(object_id)
+            if not self._call_detach(object_id):
+                return False
         return True
 
-    def _call_attach(self, object_id: str, link_name: str) -> None:
+    def _call_attach(self, object_id: str, link_name: str) -> bool:
         if not self._attach_client.wait_for_service(timeout_sec=0.5):
             self.get_logger().warn("attach_object 服务不可用，跳过 attach 同步")
-            return
+            return False
         request = AttachObject.Request()
         request.object_id = object_id
         request.link_name = link_name
         future = self._attach_client.call_async(request)
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        return future.result() is not None and bool(future.result().success)
 
-    def _call_detach(self, object_id: str) -> None:
+    def _call_detach(self, object_id: str) -> bool:
         if not self._detach_client.wait_for_service(timeout_sec=0.5):
             self.get_logger().warn("detach_object 服务不可用，跳过 detach 同步")
-            return
+            return False
         request = DetachObject.Request()
         request.object_id = object_id
         future = self._detach_client.call_async(request)
         rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        return future.result() is not None and bool(future.result().success)
 
     def _verify_detached(self, object_id: str) -> bool:
         if not object_id:
