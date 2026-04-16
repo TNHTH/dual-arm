@@ -89,6 +89,10 @@ void DepthProcessorNode::declareParameters() {
     declare_parameter("target_frame", "world");
     declare_parameter("enable_visualization", true);
     declare_parameter("enable_pointcloud", true);
+    declare_parameter("allow_source_frame_fallback", false);
+    declare_parameter("require_depth_aligned_detections", true);
+    declare_parameter("require_camera_info_depth_frame", true);
+    declare_parameter("expected_detection_frame", "");
     declare_parameter("min_points", 50);
     declare_parameter("fill_target_offset", 0.03);
     declare_parameter("roi_margin_ratio", 0.1);
@@ -106,6 +110,10 @@ void DepthProcessorNode::loadParameters() {
     target_frame_ = get_parameter("target_frame").as_string();
     enable_visualization_ = get_parameter("enable_visualization").as_bool();
     enable_pointcloud_ = get_parameter("enable_pointcloud").as_bool();
+    allow_source_frame_fallback_ = get_parameter("allow_source_frame_fallback").as_bool();
+    require_depth_aligned_detections_ = get_parameter("require_depth_aligned_detections").as_bool();
+    require_camera_info_depth_frame_ = get_parameter("require_camera_info_depth_frame").as_bool();
+    expected_detection_frame_ = get_parameter("expected_detection_frame").as_string();
     min_points_ = get_parameter("min_points").as_int();
     fill_target_offset_ = get_parameter("fill_target_offset").as_double();
     roi_margin_ratio_ = get_parameter("roi_margin_ratio").as_double();
@@ -132,16 +140,47 @@ void DepthProcessorNode::synchronizedCallback(
         return;
     }
 
-    const auto transform = lookupTransform(
-        target_frame_,
-        depth_image->header.frame_id.empty() ? camera_info_->header.frame_id : depth_image->header.frame_id,
-        depth_image->header.stamp);
+    const auto source_frame =
+        depth_image->header.frame_id.empty() ? camera_info_->header.frame_id : depth_image->header.frame_id;
+    if (require_camera_info_depth_frame_ && camera_info_->header.frame_id != source_frame) {
+        RCLCPP_WARN_THROTTLE(
+            get_logger(),
+            *get_clock(),
+            2000,
+            "camera_info frame 与 depth frame 不一致，拒绝继续做 3D");
+        return;
+    }
+    const auto expected_detection_frame =
+        expected_detection_frame_.empty() ? source_frame : expected_detection_frame_;
+    if (require_depth_aligned_detections_ && detections->header.frame_id != expected_detection_frame) {
+        RCLCPP_WARN_THROTTLE(
+            get_logger(),
+            *get_clock(),
+            2000,
+            "detections frame 未显式对齐到 depth frame，拒绝继续做 3D");
+        return;
+    }
+    const auto transform = lookupTransform(target_frame_, source_frame, depth_image->header.stamp);
 
     Eigen::Isometry3d transform_matrix = Eigen::Isometry3d::Identity();
-    std::string output_frame = depth_image->header.frame_id;
+    std::string output_frame = source_frame;
     if (transform) {
         transform_matrix = *transform;
-        output_frame = target_frame_;
+        output_frame = target_frame_.empty() ? source_frame : target_frame_;
+    } else if (!target_frame_.empty() && target_frame_ != source_frame) {
+        if (!allow_source_frame_fallback_) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(),
+                *get_clock(),
+                2000,
+                "TF 查询失败且已禁用 source frame fallback，丢弃本帧 scene_objects 发布");
+            return;
+        }
+        RCLCPP_WARN_THROTTLE(
+            get_logger(),
+            *get_clock(),
+            2000,
+            "TF 查询失败，按 allow_source_frame_fallback=true 回退到源坐标系发布");
     }
 
     std::vector<DetectionGeometry> geometries;

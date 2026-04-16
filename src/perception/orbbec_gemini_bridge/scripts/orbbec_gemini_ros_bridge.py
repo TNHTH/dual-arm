@@ -28,9 +28,13 @@ class OrbbecGeminiRosBridge(Node):
         self.declare_parameter("rotate_180", True)
         self.declare_parameter("color_topic", "/camera/color/image_raw")
         self.declare_parameter("depth_topic", "/camera/depth/image_raw")
+        self.declare_parameter("color_camera_info_topic", "/camera/color/camera_info")
         self.declare_parameter("depth_camera_info_topic", "/camera/depth/camera_info")
         self.declare_parameter("color_frame_id", "left_camera_color_frame")
         self.declare_parameter("depth_frame_id", "left_camera_depth_frame")
+        self.declare_parameter("publish_color_camera_info", True)
+        self.declare_parameter("depth_alignment_mode", "raw_unregistered")
+        self.declare_parameter("color_camera_info_source", "copy_depth_intrinsics")
 
         color_device = self.get_parameter("color_device").value
         depth_obsensor_index = int(self.get_parameter("depth_obsensor_index").value)
@@ -38,6 +42,9 @@ class OrbbecGeminiRosBridge(Node):
         self._color_frame_id = str(self.get_parameter("color_frame_id").value)
         self._depth_frame_id = str(self.get_parameter("depth_frame_id").value)
         self._rotate_180 = bool(self.get_parameter("rotate_180").value)
+        self._publish_color_camera_info = bool(self.get_parameter("publish_color_camera_info").value)
+        self._depth_alignment_mode = str(self.get_parameter("depth_alignment_mode").value)
+        self._color_camera_info_source = str(self.get_parameter("color_camera_info_source").value)
 
         color_cap = cv2.VideoCapture(color_device, cv2.CAP_V4L2)
         if not color_cap.isOpened():
@@ -51,6 +58,9 @@ class OrbbecGeminiRosBridge(Node):
         self._bridge = CvBridge()
         self._color_pub = self.create_publisher(Image, str(self.get_parameter("color_topic").value), 10)
         self._depth_pub = self.create_publisher(Image, str(self.get_parameter("depth_topic").value), 10)
+        self._color_info_pub = self.create_publisher(
+            CameraInfo, str(self.get_parameter("color_camera_info_topic").value), 10
+        )
         self._depth_info_pub = self.create_publisher(
             CameraInfo, str(self.get_parameter("depth_camera_info_topic").value), 10
         )
@@ -58,8 +68,15 @@ class OrbbecGeminiRosBridge(Node):
         self._timer = self.create_timer(1.0 / max(fps, 1.0), self._tick)
         self.get_logger().info(
             f"Orbbec Gemini ROS bridge 已启动，color={color_device}，"
-            f"depth_obsensor_index={depth_obsensor_index}，fps={fps:.1f}，rotate_180={self._rotate_180}"
+            f"depth_obsensor_index={depth_obsensor_index}，fps={fps:.1f}，rotate_180={self._rotate_180}，"
+            f"depth_alignment_mode={self._depth_alignment_mode}，"
+            f"color_camera_info_source={self._color_camera_info_source}"
         )
+        if self._publish_color_camera_info and self._color_camera_info_source == "copy_depth_intrinsics":
+            self.get_logger().warn(
+                "当前 color_camera_info 使用 depth intrinsics 显式复制；"
+                "这不代表真实彩色相机标定，也不代表 color/depth 已完成像素对齐。"
+            )
 
     def destroy_node(self) -> bool:
         try:
@@ -99,10 +116,14 @@ class OrbbecGeminiRosBridge(Node):
         depth_msg.header.frame_id = self._depth_frame_id
         self._depth_pub.publish(depth_msg)
 
-        camera_info = self._build_depth_camera_info(depth.shape[1], depth.shape[0], stamp)
-        self._depth_info_pub.publish(camera_info)
+        depth_info = self._build_camera_info(depth.shape[1], depth.shape[0], stamp, self._depth_frame_id)
+        self._depth_info_pub.publish(depth_info)
 
-    def _build_depth_camera_info(self, width: int, height: int, stamp) -> CameraInfo:
+        if self._publish_color_camera_info:
+            color_info = self._build_color_camera_info(color.shape[1], color.shape[0], stamp)
+            self._color_info_pub.publish(color_info)
+
+    def _build_camera_info(self, width: int, height: int, stamp, frame_id: str) -> CameraInfo:
         cap = self._streams.depth_cap
         fx = float(cap.get(cv2.CAP_PROP_OBSENSOR_INTRINSIC_FX))
         fy = float(cap.get(cv2.CAP_PROP_OBSENSOR_INTRINSIC_FY))
@@ -117,7 +138,7 @@ class OrbbecGeminiRosBridge(Node):
 
         msg = CameraInfo()
         msg.header.stamp = stamp
-        msg.header.frame_id = self._depth_frame_id
+        msg.header.frame_id = frame_id
         msg.width = width
         msg.height = height
         msg.distortion_model = "plumb_bob"
@@ -126,6 +147,13 @@ class OrbbecGeminiRosBridge(Node):
         msg.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
         msg.p = [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
         return msg
+
+    def _build_color_camera_info(self, width: int, height: int, stamp) -> CameraInfo:
+        if self._color_camera_info_source != "copy_depth_intrinsics":
+            raise RuntimeError(
+                f"当前不支持的 color_camera_info_source: {self._color_camera_info_source}"
+            )
+        return self._build_camera_info(width, height, stamp, self._color_frame_id)
 
 
 def main() -> None:

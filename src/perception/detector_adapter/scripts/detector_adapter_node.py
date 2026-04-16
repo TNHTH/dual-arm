@@ -33,7 +33,14 @@ class DetectorAdapterNode(Node):
         )
 
     def _load_class_map(self, mapping_file: str) -> Dict[int, str]:
-        default_map = {0: "water_bottle", 1: "cola_bottle", 2: "cup"}
+        default_map = {
+            0: "basket",
+            1: "basketball",
+            2: "cola_bottle",
+            3: "cup",
+            4: "soccer_ball",
+            5: "water_bottle",
+        }
         if not mapping_file:
             return default_map
 

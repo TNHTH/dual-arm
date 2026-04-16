@@ -8,7 +8,7 @@ import os
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("detector_adapter")
-    default_class_map = os.path.join(pkg_share, "config", "class_map.yaml")
+    default_class_map = os.path.join(pkg_share, "config", "class_map_best_pt.yaml")
 
     return LaunchDescription(
         [
