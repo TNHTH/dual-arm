@@ -2,6 +2,7 @@ ball_basket_pose_estimator:
   ros__parameters:
     world_frame: world
     output_topic: /perception/ball_basket_scene_objects
+    use_roi_fallback: false
     depth_topic: /camera/depth/image_raw
     camera_info_topic: /camera/depth/camera_info
     basketball_roi: [220, 120, 120, 120]

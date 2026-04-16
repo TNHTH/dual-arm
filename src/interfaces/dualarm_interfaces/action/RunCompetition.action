@@ -1,8 +1,13 @@
 bool start_immediately
 string requested_order
+bool resume_from_checkpoint
+string checkpoint_id
+bool allow_reconcile
 ---
 bool success
 string message
+string final_checkpoint_id
+string resume_hint
 ---
 string state
 string detail

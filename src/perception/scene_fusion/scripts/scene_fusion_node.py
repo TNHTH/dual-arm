@@ -165,6 +165,7 @@ class SceneFusionNode(Node):
         scene = SceneObjectArray()
         scene.header.frame_id = "world"
         scene.header.stamp = now.to_msg()
+        scene.scene_version = self._scene_version
 
         stale_ns = int(self._stale_timeout * 1e9)
         lost_ns = int(self._lost_timeout * 1e9)
@@ -201,9 +202,14 @@ def main() -> None:
     node = SceneFusionNode()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except Exception:  # pylint: disable=broad-except
+            pass
 
 
 if __name__ == "__main__":

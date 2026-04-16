@@ -30,7 +30,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/PlanPose.srv"
   "srv/PlanCartesian.srv"
   "srv/PlanJoint.srv"
+  "srv/PlanDualPose.srv"
+  "srv/PlanDualJoint.srv"
   "action/ExecuteTrajectory.action"
+  "action/ExecutePrimitive.action"
   "action/RunCompetition.action"
   DEPENDENCIES
     action_msgs

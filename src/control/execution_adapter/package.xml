@@ -17,6 +17,7 @@
   <depend>robo_ctrl</depend>
   <depend>sensor_msgs</depend>
   <depend>trajectory_msgs</depend>
+  <depend>std_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

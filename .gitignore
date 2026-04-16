@@ -41,6 +41,12 @@ install/
 log/
 
 .cache/
+.artifacts/firefox-test-profile/
+
+node_modules/
+dist/
+test-results/
+playwright-report/
 
 **/*.enging
 **/asserts/

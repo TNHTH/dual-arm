@@ -45,6 +45,9 @@ class CompetitionStartGateNode(Node):
         goal = RunCompetition.Goal()
         goal.start_immediately = False
         goal.requested_order = self._task_sequence
+        goal.resume_from_checkpoint = False
+        goal.checkpoint_id = ""
+        goal.allow_reconcile = True
         self._action_client.send_goal_async(goal)
         self._goal_sent = True
         self.get_logger().info("已发送 RunCompetition goal")
@@ -55,9 +58,14 @@ def main() -> None:
     node = CompetitionStartGateNode()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except Exception:  # pylint: disable=broad-except
+            pass
 
 
 if __name__ == "__main__":

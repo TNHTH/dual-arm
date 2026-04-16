@@ -60,13 +60,29 @@ class GraspPoseGeneratorNode(Node):
         target.execution_profile = self._execution_profile_for(scene_object.semantic_type)
 
         for subframe in scene_object.subframes:
+            if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_body_grasp":
+                target.grasp = deepcopy(subframe.pose)
+            if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_cap_pregrasp":
+                target.pregrasp = deepcopy(subframe.pose)
+                target.target_type = "cap_pregrasp"
+                target.strategy_id = "bottle_cap_grasp"
+            if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_cap_center":
+                target.operate = deepcopy(subframe.pose)
+                target.target_type = "cap_operate"
+                target.strategy_id = "bottle_cap_grasp"
+                target.guarded_motion = True
             if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_mouth":
                 target.operate = deepcopy(subframe.pose)
                 target.target_type = "operate"
                 target.guarded_motion = True
+            if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_pour_pivot":
+                target.place = deepcopy(subframe.pose)
             if scene_object.semantic_type.startswith("cup") and subframe.name == "cup_fill_target":
                 target.operate = deepcopy(subframe.pose)
                 target.target_type = "prepour"
+            if scene_object.semantic_type.startswith("cup") and subframe.name == "cup_side_grasp":
+                target.grasp = deepcopy(subframe.pose)
+                target.strategy_id = "cup_side_grasp"
             if scene_object.semantic_type == "basket" and subframe.name == "basket_release_center":
                 target.release = deepcopy(subframe.pose)
                 target.target_type = "release"
@@ -114,9 +130,14 @@ def main() -> None:
     node = GraspPoseGeneratorNode()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except Exception:  # pylint: disable=broad-except
+            pass
 
 
 if __name__ == "__main__":

@@ -1,0 +1,35 @@
+{
+  "updated_at": "2026-04-16",
+  "agents": [
+    {
+      "role": "perception",
+      "status": "resumable",
+      "summary": "已确认左臂相机正式拓扑应为 left_camera 基准 + 独立 depth/color sensor frame；球筐需要 detection-driven 3D，瓶杯继续走 depth_handler。"
+    },
+    {
+      "role": "planning_execution",
+      "status": "resumable",
+      "summary": "已确认 planning_scene_sync 需真接 ApplyPlanningScene；planner 继续负责接近/搬运，开盖和倒水下沉到 ExecutePrimitive。"
+    },
+    {
+      "role": "task_acceptance",
+      "status": "resumable",
+      "summary": "已确认 dualarm_task_manager 存在关键占位成功、PLACE 伪完成、VERIFY_BALL 伪闭环，需改成真实判定与恢复路径。"
+    },
+    {
+      "role": "references",
+      "status": "resumable",
+      "summary": "已收集 MoveIt 官方 PlanningScene 文档、RLBench、双臂开盖/倒水/handover 论文与项目页作为实现参考。"
+    },
+    {
+      "role": "web_console_worker",
+      "status": "errored_502_fallback_local",
+      "summary": "实现 worker 502，主线程已本地创建 competition_console_api 与 competition_console_web，并完成 build / API health / Playwright smoke。"
+    },
+    {
+      "role": "migration_docs_worker",
+      "status": "errored_502_fallback_local",
+      "summary": "文档 worker 502，主线程已本地创建 migration、control-plane、wave-gates 文档骨架。"
+    }
+  ]
+}

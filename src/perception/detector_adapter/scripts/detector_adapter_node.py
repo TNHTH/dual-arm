@@ -75,9 +75,14 @@ def main() -> None:
     node = DetectorAdapterNode()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except Exception:  # pylint: disable=broad-except
+            pass
 
 
 if __name__ == "__main__":
