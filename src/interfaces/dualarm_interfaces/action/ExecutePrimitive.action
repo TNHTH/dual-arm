@@ -1,3 +1,16 @@
+# Contract version: execution_primitive.v1
+#
+# Supported primitive_id:
+# - cap_align_and_grasp
+# - cap_twist_and_unthread
+# - cap_place_or_release
+# - pour_tilt
+# - hold_verify
+# - release_guard
+#
+# Result code set:
+# success, invalid_request, unknown_primitive, driver_failure, timeout,
+# sync_violation, contact_failed, detach_failed, hold_failed, cancelled.
 string primitive_id
 string arm_group
 string secondary_arm_group
@@ -13,8 +26,14 @@ bool synchronized
 bool success
 string message
 string result_code
+string primitive_family
+string contract_version
 float32 actual_duration_s
 float32 sync_skew_ms
+bool primary_started
+bool secondary_started
+bool primary_completed
+bool secondary_completed
 bool contact_verified
 bool detach_verified
 bool spill_detected
