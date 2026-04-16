@@ -336,3 +336,25 @@
 - `perception-camera`、`execution-control`、`task-orchestration` 仍在修改或仍持有运行中的 subagent，本轮不做第二个业务槽位调整。
 - `ops-acceptance` 目前是 `admit-after-sync`，不是立即进场；其进场前必须先同步到 `coord_rev=7` 并开启新的 task subagent。
 - 所有窗口下一轮任务前必须先同步到 `coord_rev=7`。
+
+## 2026-04-16 test 分支整合完成
+
+### 新完成
+- 已将以下 4 个业务分支的实际 payload 合入 `test`：
+  - `task/scene-freshness`
+  - `task/perception-camera`
+  - `task/execution-control`
+  - `task/task-orchestration`
+- 已将长期有效的协调资产、任务卡、runbook 与脚本整理提交到 `test`。
+- 已清理 `test` 根工作树中的临时产物：
+  - `.artifacts/`
+  - `.tmp/`
+  - `.codex/tmp/coordination/`
+- 已在干净 ROS shell 下重新执行 `./build_workspace.sh`，结果：
+  - `Summary: 26 packages finished [19.3s]`
+  - `detector`、`tools` 只有 warning，无构建失败
+
+### 当前结论
+- 当前 `test` 分支已经是完成的、干净的、整合过的软件基线。
+- 可以直接以当前 `test` 作为下一步硬件连接与真机测试分支。
+- 剩余辅助 worktree 只需要做删除收尾，不再承载未整合 payload。

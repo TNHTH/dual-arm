@@ -346,3 +346,30 @@
 - `scene-freshness` 现在已经满足协调窗口正式发出退场指令的条件。
 - `ops-acceptance` 还不能写成“只差 active slot 释放即可进场”；它是第一安全候补，但还差一次 `coord_rev=7` 重读同步和新 task subagent。
 - 其他 3 个活跃业务窗口保持原位最稳妥；此时若再尝试第二个槽位轮换，会让活跃修改和父级写集判断一起变脏。
+
+### Session: 2026-04-16 Test Integration
+
+### Actions Taken
+- 将 4 个有实际 payload 的 worktree 改动分别提交到对应分支：
+  - `task/scene-freshness` -> `cf9a3f6`
+  - `task/perception-camera` -> `c7db39f`
+  - `task/execution-control` -> `c645669`
+  - `task/task-orchestration` -> `ea6e8b9`
+- 清理了 `test` 根工作树中的临时产物：
+  - `.artifacts/`
+  - `.tmp/`
+  - `.codex/tmp/coordination/`
+- 将长期有效的协调资产、任务卡、runbook 与脚本整理提交到 `test`：
+  - `524ec6a chore: record coordination and runtime task assets`
+- 按顺序将 4 个业务分支并入 `test`：
+  - `5a956b8 merge: integrate scene freshness smoke`
+  - `b1f69e1 merge: integrate perception frame contract hardening`
+  - `f8ca810 merge: integrate execution primitive boundary`
+  - `effc3cd merge: integrate orchestration behavior boundary`
+- 使用干净 ROS shell 重新执行 `./build_workspace.sh`，规避了 Conda PATH guard 的预期拦截。
+
+### Key Intermediate Conclusions
+- `test` 现在已经包含本轮需要整合的 scene/perception/execution/tasking 业务改动。
+- `test` 根工作树当前是干净的，适合作为下一步硬件联调基线。
+- 全量构建已通过；`detector` 与 `tools` 仅保留 warning，没有阻塞构建。
+- 旧辅助 worktree 现在只剩清理动作；删除它们不会再影响 `test` 基线。

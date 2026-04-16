@@ -7,7 +7,7 @@
 在 `/home/gwh/dashgo_rl_project/workspaces/dual-arm` 内完成严格项目制的一轮完整实现，覆盖单工作区统一、断点接续、PlanningScene 真同步、primitive 执行层、纯软件开盖/倒水/人机协作、统一控制网页与正式验收资产。
 
 ## Current Phase
-Software Parallel Batch A - in_progress
+Integrated On `test` - ready_for_hardware_validation
 
 ## Parallel Coordination
 

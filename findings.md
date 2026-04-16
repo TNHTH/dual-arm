@@ -90,6 +90,9 @@
 - 2026-04-16 `coord_rev=7` 新增判断：`perception-camera` 与 `task-orchestration` 都处于“业务改动 + 运行中 subagent”双活状态，本轮只适合保持原位，不适合并发再做第二个槽位调整。
 - 2026-04-16 `coord_rev=7` 新增判断：第一轮轮换应严格限制为 `scene-freshness -> ops-acceptance` 单槽位交换；行为窗口继续等待后续父级写集释放。
 - 2026-04-16 `coord_rev=7` 新增判断：`ops-acceptance` 更准确的状态是 `admit-after-sync`，不是 `ready-to-admit`；因为其共享窗口文件仍停在旧同步版本，进场前必须先重读 11 个文件并新开 task subagent。
+- 2026-04-16 最终整合判断：真正需要并入 `test` 的只有 `scene-freshness`、`perception-camera`、`execution-control`、`task-orchestration` 四个 worktree；其余业务分支相对 `test` 没有 payload。
+- 2026-04-16 最终整合判断：`test` 根工作树在合并前的最大风险不是 git 冲突，而是本地临时产物污染；清理 `.artifacts/`、`.tmp/`、`.codex/tmp/coordination/` 后即可得到干净集成基线。
+- 2026-04-16 最终整合判断：全量构建在干净 ROS shell 下通过，说明 merged `test` 已至少满足软件侧 Build Gate，可进入下一步硬件联调。
 
 ## 2026-04-15 硬件连通性补充
 - `robo_ctrl/include/libfairino/robot.h` 明确显示法奥 SDK 通过 `RPC(const char *ip)` 与控制器通信，本体控制链路是基于控制器 IP，而不是串口。

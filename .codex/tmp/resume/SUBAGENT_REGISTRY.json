@@ -40,6 +40,11 @@
       "role": "coordination_live_rotation_audit",
       "status": "completed_read_only",
       "summary": "2026-04-16 动态轮换审计 reviewer subagent 已完成只读审计：无协调层 P0/P1，scene-freshness 现为 ready-to-exit，ops-acceptance 为 admit-after-sync，其他活跃窗口继续原位推进。"
+    },
+    {
+      "role": "coordination_test_merge_review",
+      "status": "completed_read_only",
+      "summary": "2026-04-16 test 合并审查 reviewer subagent 已完成只读审计：在 commit 前识别出所有 task/* 分支与 test 同头、真正 payload 仍在各 worktree 未提交修改；随后主线程完成提交、合并与最终 build 审查。"
     }
   ]
 }

@@ -137,3 +137,21 @@
   2. 进入：`ops-acceptance`
   3. 保持原位：`perception-camera`、`execution-control`、`task-orchestration`
 - `ops-acceptance` 当前不是 `ready-to-admit`，而是 `admit-after-sync`。
+
+## 2026-04-16 Final Integration To test
+- 已提交并合入 `test` 的业务分支：
+  - `task/scene-freshness` (`cf9a3f6`)
+  - `task/perception-camera` (`c7db39f`)
+  - `task/execution-control` (`c645669`)
+  - `task/task-orchestration` (`ea6e8b9`)
+- `test` 上的整理与 merge 提交：
+  - `524ec6a chore: record coordination and runtime task assets`
+  - `5a956b8 merge: integrate scene freshness smoke`
+  - `b1f69e1 merge: integrate perception frame contract hardening`
+  - `f8ca810 merge: integrate execution primitive boundary`
+  - `effc3cd merge: integrate orchestration behavior boundary`
+- 最终 Build Gate：
+  - 在 clean ROS shell 下 `./build_workspace.sh` 通过
+- 当前状态：
+  - `test` 可直接进入硬件联调
+  - 仅剩辅助 worktree 删除收尾
