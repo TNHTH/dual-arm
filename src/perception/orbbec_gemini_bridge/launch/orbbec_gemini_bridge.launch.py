@@ -12,6 +12,8 @@ def generate_launch_description():
             DeclareLaunchArgument("depth_obsensor_index", default_value="0"),
             DeclareLaunchArgument("rotate_180", default_value="true"),
             DeclareLaunchArgument("use_mock_stream", default_value="false"),
+            DeclareLaunchArgument("publish_color_camera_info", default_value="true"),
+            DeclareLaunchArgument("depth_alignment_mode", default_value="raw_unregistered"),
             Node(
                 package="orbbec_gemini_bridge",
                 executable="orbbec_gemini_ros_bridge.py",
@@ -23,6 +25,8 @@ def generate_launch_description():
                         "color_device": LaunchConfiguration("color_device"),
                         "depth_obsensor_index": LaunchConfiguration("depth_obsensor_index"),
                         "rotate_180": LaunchConfiguration("rotate_180"),
+                        "publish_color_camera_info": LaunchConfiguration("publish_color_camera_info"),
+                        "depth_alignment_mode": LaunchConfiguration("depth_alignment_mode"),
                     }
                 ],
             ),
@@ -32,6 +36,11 @@ def generate_launch_description():
                 name="mock_camera_stream",
                 condition=IfCondition(LaunchConfiguration("use_mock_stream")),
                 output="screen",
+                parameters=[
+                    {
+                        "publish_color_camera_info": LaunchConfiguration("publish_color_camera_info"),
+                    }
+                ],
             ),
         ]
     )

@@ -19,6 +19,9 @@ def generate_launch_description():
             DeclareLaunchArgument("target_frame", default_value="world"),
             DeclareLaunchArgument("enable_visualization", default_value="true"),
             DeclareLaunchArgument("enable_pointcloud", default_value="true"),
+            DeclareLaunchArgument("require_depth_aligned_detections", default_value="true"),
+            DeclareLaunchArgument("require_camera_info_depth_frame", default_value="true"),
+            DeclareLaunchArgument("expected_detection_frame", default_value=""),
             Node(
                 package="depth_handler",
                 executable="depth_processor_node",
@@ -36,6 +39,9 @@ def generate_launch_description():
                         "target_frame": LaunchConfiguration("target_frame"),
                         "enable_visualization": LaunchConfiguration("enable_visualization"),
                         "enable_pointcloud": LaunchConfiguration("enable_pointcloud"),
+                        "require_depth_aligned_detections": LaunchConfiguration("require_depth_aligned_detections"),
+                        "require_camera_info_depth_frame": LaunchConfiguration("require_camera_info_depth_frame"),
+                        "expected_detection_frame": LaunchConfiguration("expected_detection_frame"),
                     }
                 ],
             ),

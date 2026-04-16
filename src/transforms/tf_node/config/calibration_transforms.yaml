@@ -3,11 +3,21 @@ transforms:
     child: left_camera
     translation: [-0.01, -0.09, 0.056]
     rotation_rpy: [0.0, 0.0, 0.0]
+    requires_calibration: true
+    calibration_status: unverified
+    calibration_source: legacy_static_transform_candidate
+    verified_at: ""
+    max_translation_error_m: -1.0
+    max_rotation_error_rad: -1.0
   - parent: left_camera
     child: left_camera_color_frame
     translation: [0.0, 0.0, 0.0]
     rotation_rpy: [0.0, 0.0, 0.0]
+    requires_calibration: false
+    calibration_status: structural
   - parent: left_camera
     child: left_camera_depth_frame
     translation: [0.0, 0.0, 0.0]
     rotation_rpy: [0.0, 0.0, 0.0]
+    requires_calibration: false
+    calibration_status: structural

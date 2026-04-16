@@ -102,9 +102,13 @@ private:
     std::string target_frame_;
     bool enable_visualization_ {true};
     bool enable_pointcloud_ {true};
+    bool allow_source_frame_fallback_ {false};
+    bool require_depth_aligned_detections_ {true};
+    bool require_camera_info_depth_frame_ {true};
     int min_points_ {50};
     double fill_target_offset_ {0.03};
     double roi_margin_ratio_ {0.1};
+    std::string expected_detection_frame_;
     std::vector<std::string> allowed_semantic_types_;
 
     sensor_msgs::msg::CameraInfo::SharedPtr camera_info_;
