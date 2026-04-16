@@ -3,8 +3,8 @@
 更新时间：2026-04-16
 
 ## Current Wave
-- Wave: 0-1 基座已落地，Wave 2+ 待继续深化
-- 目标：单工作区统一 + 断点接续 + 控制台骨架 + scene/primitive 接口基座
+- Wave: Wave 4 / Wave 6 主推进，Wave 2/3/7/8/9/10/11 软件窗口已并行初始化
+- 目标：以多窗口并行方式继续推进 scene freshness、execution primitive、行为模块和软件验收入口
 - 状态：进行中
 
 ## 已完成
@@ -281,3 +281,58 @@
 - 下一波直接转入：
   - Wave 4：`scene_version` / `header.stamp` / freshness 回归
   - Wave 6：primitive 执行、夹爪闭环、同步 skew 与动作后置条件
+
+## 2026-04-16 并行软件窗口初始化
+
+### 新完成
+- 已按“全软件立即并行”方案初始化 worktree 与分支：
+  - `coord/plan-sync` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-coord`
+  - `task/scene-freshness` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-scene`
+  - `task/perception-camera` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-perception`
+  - `task/execution-control` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-execution`
+  - `task/task-orchestration` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-tasking`
+  - `task/behavior-cap-pour` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-cap-pour`
+  - `task/behavior-handover` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-handover`
+  - `task/ops-acceptance` -> `/home/gwh/dashgo_rl_project/workspaces/dual-arm-ops`
+- 当前并发上限已压缩为 5，且包含协调窗口。
+- 当前 5 个活跃窗口：
+  - `coord`
+  - `scene-freshness`
+  - `perception-camera`
+  - `execution-control`
+  - `task-orchestration`
+- 当前 3 个待命窗口：
+  - `behavior-cap-pour`
+  - `behavior-handover`
+  - `ops-acceptance`
+- 已落地只读任务卡：
+  - `W2-3-perception-camera.md`
+  - `W4-scene-version-freshness.md`
+  - `W6-execution-control.md`
+  - `W7-8-cap-pour.md`
+  - `W9-handover.md`
+  - `W10-task-orchestration.md`
+  - `W11-ops-acceptance.md`
+- 已建立实时共享状态目录：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/coordination`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/windows`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/prompts`
+- 已建立窗口提示词文档：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/docs/runbooks/software-parallel-window-prompts.md`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/prompts/software-parallel-window-prompts.md`
+- 已建立行为并行占位目录：
+  - `src/tasks/dualarm_task_manager/scripts/behaviors/`
+  - `src/control/execution_adapter/scripts/primitives/`
+
+### 当前结论
+- 当前已经从“单窗口推进”切换到“全软件多窗口立即并行”。
+- 实时共享状态不再依赖各自 worktree 中的 tracked 文件，而是统一读取外部共享目录，避免不同分支看到不同版本的状态文件。
+- 硬件联调不在当前并行体系内，完全交给队友；当前所有窗口都只做软件层修改。
+- `scene-freshness` 已具备 maintenance-ready 证据，是当前第一退出候选。
+- 若协调窗口执行单槽位交换，首个释放的活跃槽位优先给 `ops-acceptance`。
+- `behavior-cap-pour` / `behavior-handover` 继续 dormant，直到 `execution-control` / `task-orchestration` 收窄父级 owned_paths 或转入 maintenance/dormant。
+- 所有窗口下一轮任务前必须先同步到 `coord_rev=7`。
+- 根据共享窗口文件的最新证据，`scene-freshness` 已经满足正式退场条件；当前可以直接执行 `scene-freshness -> ops-acceptance` 的单槽位交换。
+- `perception-camera`、`execution-control`、`task-orchestration` 仍在修改或仍持有运行中的 subagent，本轮不做第二个业务槽位调整。
+- `ops-acceptance` 目前是 `admit-after-sync`，不是立即进场；其进场前必须先同步到 `coord_rev=7` 并开启新的 task subagent。
+- 所有窗口下一轮任务前必须先同步到 `coord_rev=7`。

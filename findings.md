@@ -68,6 +68,29 @@
 - `third_party/fairino_sdk/software/README_CTL.txt` 记录版本为 `v3.7.5.1`，日期为 `2025-09-05`。
 - `tests/` 目前只有目录，没有测试文件。
 
+## 2026-04-16 并行窗口协作新增发现
+- Git worktree 之间共享对象库，但 repo 内被跟踪的文件并不是“实时共享文件”；如果把窗口状态和共享协调文件继续放在各自 worktree 里的 repo 路径，会出现“每个窗口只看到自己分支上的版本”。
+- 因此，并行窗口的实时共享状态必须放到工作区外部的共享目录，而不是放在各自 branch 的 repo checkout 中。
+- 继续保留在 repo 内的文件应只承担：
+  - 只读规范
+  - 只读任务卡
+  - 最终沉淀记录
+- 行为开发如果立即并行，必须从第一天就把代码写到独立行为模块目录，不能等 orchestration/execution 主文件先拆完，否则会形成串行依赖。
+- 2026-04-16 `coord_rev=3` 新增判断：共享窗口文件中尚无活跃业务窗口声明 `maintenance-ready`，因此当前不满足轮换门槛；待命窗口继续 dormant 更安全。
+- 2026-04-16 `coord_rev=3` 新增判断：Wave 5 已有运行态 smoke 证据，但原任务卡缺独立 W5 卡片，容易让后续 Wave 4 修改时误伤回归基线；已补建独立 `W5-planning-scene-sync.md` 作为固定基线。
+- 2026-04-16 `coord_rev=4` 新增判断：行为窗口的子目录写集与 `execution-control` / `task-orchestration` 的父级写集存在潜在轮换冲突；当前 dormant 不冲突，但进场前必须释放或收窄父级写集。
+- 2026-04-16 `coord_rev=4` 新增判断：业务窗口的 `last_shared_sync_rev` 仍停留在 2，协调窗口不能替它们声明已读；应通过 `coord_required_sync_rev=4` 强制它们在新任务或新 subagent 前自行重读并更新状态。
+- 2026-04-16 `coord_rev=6` 新增判断：任务卡与共享状态存在版本漂移，多个任务卡仍写着 `coord_rev=4`；协调窗口必须在发起下一轮任务前统一刷新到当前版本，避免业务窗口拿旧卡开工。
+- 2026-04-16 `coord_rev=6` 新增判断：`scene-freshness` 已经具备最清晰的 maintenance-ready 证据，是第一退出候选；其退出不会破坏 W5 基线，因为 `W5-planning-scene-sync.md` 已独立冻结。
+- 2026-04-16 `coord_rev=6` 新增判断：首个空出的活跃槽位不应分配给行为窗口；`behavior-cap-pour` 与 `behavior-handover` 仍分别被 `execution-control` / `task-orchestration` 的父级写集阻塞。
+- 2026-04-16 `coord_rev=6` 新增判断：若 `scene-freshness` 释放槽位，`ops-acceptance` 是第一安全候补，因为它当前不存在同级父子写集冲突，且软件 smoke 基线已足够支撑验收入口收口。
+- 2026-04-16 subagent 平台补充：本轮协调审计 subagent 出现 `not_found / pending_init` 异常，已按项目规则本地降级；这不构成业务阻塞，但必须留痕到注册表，避免后续误判为“未使用 subagent”。
+- 2026-04-16 `coord_rev=7` 新增判断：共享窗口文件已经满足 `scene-freshness` 的退场前置条件，不必再等待额外口头确认；协调窗口现在可以直接发出单槽位交换指令。
+- 2026-04-16 `coord_rev=7` 新增判断：`execution-control` 虽然 worktree 仍是干净的，但其 `agents.json` 里仍有运行中的 subagent，因此不能被误判为“可优先退场”。
+- 2026-04-16 `coord_rev=7` 新增判断：`perception-camera` 与 `task-orchestration` 都处于“业务改动 + 运行中 subagent”双活状态，本轮只适合保持原位，不适合并发再做第二个槽位调整。
+- 2026-04-16 `coord_rev=7` 新增判断：第一轮轮换应严格限制为 `scene-freshness -> ops-acceptance` 单槽位交换；行为窗口继续等待后续父级写集释放。
+- 2026-04-16 `coord_rev=7` 新增判断：`ops-acceptance` 更准确的状态是 `admit-after-sync`，不是 `ready-to-admit`；因为其共享窗口文件仍停在旧同步版本，进场前必须先重读 11 个文件并新开 task subagent。
+
 ## 2026-04-15 硬件连通性补充
 - `robo_ctrl/include/libfairino/robot.h` 明确显示法奥 SDK 通过 `RPC(const char *ip)` 与控制器通信，本体控制链路是基于控制器 IP，而不是串口。
 - `robo_ctrl/launch/robo_ctrl_L.launch.py` 默认左臂 IP 为 `10.2.20.201:8080`，`robo_ctrl_R.launch.py` 默认右臂 IP 为 `10.2.20.202:8080`。

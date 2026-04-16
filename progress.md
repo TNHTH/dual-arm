@@ -173,6 +173,23 @@
 - `tools`、`detector` 等历史包仍含旧路径与旧工作区假设，使用时要按当前工作区重新核对。
 - 当前本机不具备稳定的机械臂控制条件：机械臂本体控制实际走 IP/RPC，夹爪串口未枚举，左臂 IP 虽可短暂握手但会话随即被控制器重置。
 
+### Session: 2026-04-16 Five-Window Parallel Limit
+
+### Actions Taken
+- 将原先 8 窗口立即并行方案压缩为“5 个并发窗口，含协调窗口”。
+- 保留全部 worktree，但只将以下 5 个标记为活跃：
+  - `coord`
+  - `scene-freshness`
+  - `perception-camera`
+  - `execution-control`
+  - `task-orchestration`
+- 将以下 3 个窗口标记为待命：
+  - `behavior-cap-pour`
+  - `behavior-handover`
+  - `ops-acceptance`
+- 更新了共享状态、轮换规则和窗口状态文件。
+- 开始为每个窗口拆分独立提示词文件与 Ubuntu 辅助脚本。
+
 ### Hardware Check Summary
 - `robo_ctrl_node --ros-args -p robot_ip:=10.2.20.201 -p robot_name:=L`：
   初始握手成功，但状态线程连续出现 `-2`、`Connection reset by peer`、`Broken pipe`，无法形成稳定控制会话。
@@ -193,6 +210,30 @@
 - 后续若进入实现或调试，应优先从 `dualarm_bringup -> fairino_dualarm_planner -> execution_adapter -> dualarm_task_manager` 这一主链继续。
 - 若要收口 production，优先处理 `planning_scene_sync` 真同步、双臂 primitive 落地与真实硬件联调。
 - 若要恢复硬件控制，优先确认机械臂本体的网络直连/同网段配置，以及夹爪串口设备是否真正枚举到 `/dev/ttyACM0` 或其他端口。
+
+### Session: 2026-04-16 Parallel Software Windows
+
+### Actions Taken
+- 将“全软件立即并行”正式落为仓库内任务卡、窗口 owned_paths、提示词和协作规则。
+- 明确将实时共享状态从 repo 内 tracked 文件切换为外部共享目录 `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared`。
+- 为 Wave 4、Wave 2/3、Wave 6、Wave 7/8、Wave 9、Wave 10、Wave 11 新增模块任务卡。
+- 为行为并行提前建立独立模块目录：
+  - `src/tasks/dualarm_task_manager/scripts/behaviors/`
+  - `src/control/execution_adapter/scripts/primitives/`
+- 新增窗口提示词文档，供用户直接在不同窗口打开并复制使用。
+- 准备创建并行 worktree：
+  - `coord`
+  - `scene-freshness`
+  - `perception-camera`
+  - `execution-control`
+  - `task-orchestration`
+  - `behavior-cap-pour`
+  - `behavior-handover`
+  - `ops-acceptance`
+
+### Key Intermediate Conclusions
+- 要让不同窗口“真的会反复读取正确进度”，实时共享状态必须脱离各自 branch 的 tracked 文件。
+- 当前阶段不设置硬件测试窗口；所有并行窗口都只做软件层修改。
 
 ### Session: 2026-04-16 Wave 5 Runtime Closure
 
@@ -229,3 +270,79 @@
   - 同一 diff 中混入同 id world REMOVE 会冲突
   - 必须以本仓实际行为为准做实现约束
 - 下一主阻塞已切换到 Wave 4 freshness 与 Wave 6 execution primitive。
+
+### Session: 2026-04-16 Coordination Rev 3
+
+### Actions Taken
+- 按协调窗口规则重新读取 11 个必读共享文件后，更新外部共享状态到 `coord_rev=3`。
+- 在 `SHARED_STATE.json` 中集中补齐 8 个窗口的 `branch`、`worktree`、`task_card`、`owned_paths`、`current_task` 与 `next_action`。
+- 在 `DECISIONS.md` 中新增：
+  - `D-008`：`coord_rev=3` 起由共享状态集中维护窗口 owned_paths 台账
+  - `D-009`：本轮不轮换，继续维持 5 窗口纪律
+  - `D-010`：补齐 Wave 5 独立任务卡作为回归基线
+- 更新 `task_plan.md`，加入 `coord_rev=3`、当前轮换决策和 owned_paths ledger。
+- 补建 `W5-planning-scene-sync.md`，将 PlanningScene smoke 通过证据固化为后续回归基线。
+
+### Key Intermediate Conclusions
+- 当前活跃窗口数仍为 5，符合并发上限。
+- 目前没有业务窗口在共享窗口文件中声明 `maintenance-ready`，因此不应让待命窗口进场。
+- 所有窗口的 `*.agents.json` 当前为空，未发现需要先关闭的遗留 subagent。
+
+### Session: 2026-04-16 Coordination Rev 4
+
+### Actions Taken
+- 使用只读协调审查 subagent 核对 `coord_rev=3`，结论为无 P0/P1 阻塞。
+- 已关闭本任务 subagent，避免留下跨任务常驻代理。
+- 按审查发现将共享状态推进到 `coord_rev=4`：
+  - 为 `scene-freshness` 增加 `baseline_task_cards`，显式绑定 `W5-planning-scene-sync.md`
+  - 增加行为窗口轮换前必须释放或收窄父级 owned_paths 的门槛
+  - 向所有业务窗口广播 `coord_required_sync_rev=4`
+  - 将 W0 / W1 历史 bootstrap 任务卡标为 `[x]`
+  - 将 `task_plan.md` 中 Wave 0 / Wave 1 / Wave 5 状态同步为已完成
+
+### Key Intermediate Conclusions
+- 当前仍不轮换窗口，5 窗口纪律保持不变。
+- 业务窗口不能直接开新 subagent；必须先重读 11 个必读文件并同步到 `coord_rev=4`。
+- 行为窗口仍然 dormant，后续进场前必须先处理与父级 owned_paths 的重叠。
+
+### Session: 2026-04-16 Coordination Rev 5-6
+
+### Actions Taken
+- 按协议重读 11 个必读文件后，将共享状态先推进到 `coord_rev=5`，冻结本轮协调审计期间的进退场动作。
+- 启动了只读协调审计 subagent；其状态出现 `not_found / pending_init` 异常后，按项目规则降级为本地只读审计，不让协调链路阻塞。
+- 本地核对了全部 active/dormant 任务卡，重点审查：
+  - 任务卡与共享状态的版本漂移
+  - active/dormant 窗口的真实退出/进场门槛
+  - 回归基线卡是否已经和主推进卡解耦
+- 审计后将共享状态推进到 `coord_rev=6`，并明确：
+  - `scene-freshness` 为第一退出候选
+  - `ops-acceptance` 为第一安全候补
+  - `behavior-cap-pour` / `behavior-handover` 继续被父级写集阻挡
+- 同步更新了相关任务卡的 Coordination 段，统一到 `coord_rev=6`，并写明退出/候补顺序。
+- 将本轮 subagent 平台异常与本地回退结果记录到 `SUBAGENT_REGISTRY.json`。
+
+### Key Intermediate Conclusions
+- 当前没有新增 P0/P1 协调阻塞，5 窗口纪律仍然成立。
+- 真正可以释放的第一个活跃窗口是 `scene-freshness`，不是 `perception-camera`、`execution-control` 或 `task-orchestration`。
+- 第一个安全待命进场窗口是 `ops-acceptance`；行为窗口虽然排在 phase B，但仍被父级 owned_paths 冲突阻塞，不能抢先进入。
+- 本轮不直接执行轮换；必须先等 `scene-freshness` 交出 merge-ready 与 subagent-close 证据，再由协调窗口正式切槽。
+
+### Session: 2026-04-16 Coordination Rev 7
+
+### Actions Taken
+- 在其他窗口继续修改期间，重新读取 11 个必读文件，并补读了共享窗口文件、agents 台账和各业务 worktree 的 `git status --short`。
+- 现场确认：
+  - `scene-freshness` 已写明 `maintenance-ready`
+  - `scene-freshness.agents.json` 为空
+  - `scene-freshness` worktree 只剩一个新增 smoke 脚本
+  - `perception-camera` 与 `task-orchestration` 仍有真实代码改动且各自持有运行中的 subagent
+  - `execution-control` 仍持有运行中的 subagent，虽然 worktree 目前无改动显示
+- 新开了一轮只读协调 subagent 做动态轮换审计，并收到正式回包：无协调层 P0/P1。
+- 根据该审计结果，将共享语义从 `queue-rotation` 收窄为：
+  - `scene-freshness = ready-to-exit`
+  - `ops-acceptance = admit-after-sync`
+
+### Key Intermediate Conclusions
+- `scene-freshness` 现在已经满足协调窗口正式发出退场指令的条件。
+- `ops-acceptance` 还不能写成“只差 active slot 释放即可进场”；它是第一安全候补，但还差一次 `coord_rev=7` 重读同步和新 task subagent。
+- 其他 3 个活跃业务窗口保持原位最稳妥；此时若再尝试第二个槽位轮换，会让活跃修改和父级写集判断一起变脏。

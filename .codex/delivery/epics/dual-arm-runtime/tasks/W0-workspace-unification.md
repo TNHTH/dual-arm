@@ -1,7 +1,8 @@
 # W0 Workspace Unification
 
-状态: [~]
+状态: [x]
 创建时间: 2026-04-16
+更新时间: 2026-04-16
 
 ## Scope
 
@@ -24,3 +25,8 @@
   - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/docs/migration/2026-04-16-workspace-unification.md`
 - 正式构建入口：
   - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/build_workspace.sh`
+
+## Coordination
+
+- 归档状态：bootstrap complete
+- 当前共享状态版本：`coord_rev=4`

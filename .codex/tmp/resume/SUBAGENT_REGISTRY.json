@@ -30,6 +30,16 @@
       "role": "migration_docs_worker",
       "status": "errored_502_fallback_local",
       "summary": "文档 worker 502，主线程已本地创建 migration、control-plane、wave-gates 文档骨架。"
+    },
+    {
+      "role": "coordination_audit",
+      "status": "errored_platform_fallback_local",
+      "summary": "2026-04-16 协调审计 reviewer subagent 出现 not_found / pending_init 异常；主线程已本地完成只读审计，结论为 scene-freshness 是第一退出候选，ops-acceptance 是第一安全候补，行为窗口继续 blocked。"
+    },
+    {
+      "role": "coordination_live_rotation_audit",
+      "status": "completed_read_only",
+      "summary": "2026-04-16 动态轮换审计 reviewer subagent 已完成只读审计：无协调层 P0/P1，scene-freshness 现为 ready-to-exit，ops-acceptance 为 admit-after-sync，其他活跃窗口继续原位推进。"
     }
   ]
 }

@@ -3,11 +3,11 @@
 更新时间: 2026-04-16
 
 ## 当前波次
-- Wave: 0-5
+- Wave: 4-11 software parallel
 - 状态: in_progress
 
 ## 当前目标
-- 收口 Wave 5：PlanningScene 真同步运行态 smoke
+- 维持 Wave 5 回归基线，同时并行推进 Wave 4 / 6 / 7-11 的软件窗口
 
 ## 当前断点
 - 单工作区迁移已完成，正式包根为 `src/`
@@ -74,3 +74,66 @@
   - 起 core：`ros2 launch dualarm_bringup competition_core.launch.py start_hardware:=false start_detector:=false start_camera_bridge:=false use_mock_camera_stream:=false publish_fake_joint_states:=true`
   - 回归 Wave 5：`/usr/bin/python3 src/tools/tools/scripts/smoke_planning_scene_sync.py`
   - 然后开始 Wave 4 freshness 专项检查
+
+## 2026-04-16 并行软件窗口初始化
+- 当前阶段不做硬件测试窗口，所有并行窗口都只做软件层修改。
+- 实时共享状态目录固定为：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared`
+- 已创建的 worktree：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-coord`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-scene`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-perception`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-execution`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-tasking`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-cap-pour`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-handover`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-ops`
+- 已创建的分支：
+  - `coord/plan-sync`
+  - `task/scene-freshness`
+  - `task/perception-camera`
+  - `task/execution-control`
+  - `task/task-orchestration`
+  - `task/behavior-cap-pour`
+  - `task/behavior-handover`
+  - `task/ops-acceptance`
+- 当前活跃窗口仅 5 个：
+  - `coord`
+  - `scene-freshness`
+  - `perception-camera`
+  - `execution-control`
+  - `task-orchestration`
+- 当前待命窗口：
+  - `behavior-cap-pour`
+  - `behavior-handover`
+  - `ops-acceptance`
+- 新的必读入口：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/docs/runbooks/software-parallel-window-prompts.md`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/prompts/software-parallel-window-prompts.md`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/coordination/SHARED_STATE.json`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/coordination/DECISIONS.md`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared/windows/*.md`
+
+## 2026-04-16 Coordination Rev 6
+- 本轮协调审计已闭环：
+  - 共享状态已推进到 `coord_rev=6`
+  - 任务卡与共享状态版本漂移已识别并回写
+  - 审计 subagent 出现平台态异常，已本地降级并留痕到注册表
+- 当前轮换判断：
+  1. 第一退出候选：`scene-freshness`
+  2. 第一安全候补：`ops-acceptance`
+  3. `behavior-cap-pour` / `behavior-handover` 继续 blocked，原因是父级 owned_paths 仍被 active 窗口占用
+- 下一步唯一协调入口：
+  - 等 `scene-freshness` 交出 merge-ready 与 subagent-close 证据
+  - 然后由协调窗口正式执行一次 5 窗口切槽
+
+## 2026-04-16 Coordination Rev 7
+- 共享窗口文件动态核对后，`scene-freshness` 的退场前置条件已被证据满足：
+  - `status: maintenance-ready`
+  - `scene-freshness.agents.json` 为空
+  - worktree 仅有最小新增 smoke 脚本
+- 当前最稳妥轮换动作已从“排队”提升为“可执行”：
+  1. 退出：`scene-freshness`
+  2. 进入：`ops-acceptance`
+  3. 保持原位：`perception-camera`、`execution-control`、`task-orchestration`
+- `ops-acceptance` 当前不是 `ready-to-admit`，而是 `admit-after-sync`。

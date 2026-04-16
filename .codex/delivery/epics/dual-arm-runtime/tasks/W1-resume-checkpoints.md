@@ -1,7 +1,8 @@
 # W1 Resume Checkpoints
 
-状态: [ ]
+状态: [x]
 创建时间: 2026-04-16
+更新时间: 2026-04-16
 
 ## Scope
 
@@ -24,3 +25,8 @@
   - `resume checkpoint smoke passed`
   - `比赛状态机已完成一轮执行`
   - `resume-smoke:DONE`
+
+## Coordination
+
+- 归档状态：bootstrap complete
+- 当前共享状态版本：`coord_rev=4`
