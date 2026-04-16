@@ -7,6 +7,6 @@
 
 ## Current Wave
 
-- Wave: 1
-- Scope: 真双臂 URDF/SRDF/MoveIt config + C++ planner
-- Status: in_progress
+- Wave: repo-reorg
+- Scope: `packages/` 主根、README 体系、路径治理与兼容入口补齐
+- Status: verified_locally

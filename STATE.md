@@ -3,11 +3,33 @@
 更新时间：2026-04-16
 
 ## Current Wave
-- Wave: 0-1 基座已落地，Wave 2+ 待继续深化
-- 目标：单工作区统一 + 断点接续 + 控制台骨架 + scene/primitive 接口基座
-- 状态：进行中
+- Wave: repo-reorg / README / path-governance
+- 目标：在隔离 worktree 中把正式源码根升级为 `packages/`，补齐 README 体系，收口路径治理与兼容入口，并完成验证、提交和推送
+- 状态：reviewer / verifier 已完成，待单提交推送到远程 `test`，并执行阶段二部署到 `/home/gwh/dual-arm`
 
 ## 已完成
+- 2026-04-16 仓库重构与文档体系化：
+  - 已在隔离 worktree `codex/dual-arm-reorg` 中完成结构重构，不直接改当前脏的 `test` 工作树
+  - 正式源码主根已升级为 `packages/`
+  - `src -> packages` 兼容入口已保留
+  - `third_party -> vendor` 兼容入口已保留，当前运行期厂商资产收口到 `vendor/fairino_sdk`
+  - 根 `arm_planner` 已迁入 `archive/legacy/arm_planner` 并保留兼容入口
+  - `docs/runbooks -> docs/operations/runbooks`、`docs/migration -> docs/archive/migration` 已完成目录收口和兼容映射
+  - 根历史会话文档已迁到 `docs/archive/sessions/`，根目录保留兼容符号链接
+  - 已新增 `scripts/lib/paths.sh`、`packages/tools/tools/scripts/dual_arm_paths.py` 统一路径解析层
+  - 已新增 `config/system/build_groups.yaml`、`scripts/lib/build_groups.py`
+  - `build_workspace.sh` 已支持 `--group` 和 `--list-groups`
+  - `use_workspace.sh` 已导出 `DUAL_ARM_REPO_ROOT`、`DUAL_ARM_SHARED_ROOT`、`DUAL_ARM_ARCHIVE_ROOT`
+  - `competition_console_api` 已改为基于 repo root 解析路径，workspace acceptance 已切到 `packages/`
+  - `detector` 和工具配置中的历史绝对路径已改为参数/环境变量/相对资产解析
+  - 已新增 `single_arm_debug.launch.py` 兼容 alias，转发到现有 `debug.launch.py`
+  - 已完成根目录、一级目录、领域目录、关键子目录和缺失 ROS 包 README 补齐
+  - 已新增：
+    - `docs/reference/repo-map.md`
+    - `docs/reference/path-migration-map.md`
+    - `docs/development/readme-style-guide.md`
+    - `archive/legacy-import-manifest.md`
+    - `archive/vendor-archive-manifest.md`
 - 2026-04-16 一轮完整实现启动与基座落地：
   - 已建立 `.codex/delivery/prds/dual-arm-competition-runtime.md`
   - 已建立 `.codex/delivery/epics/dual-arm-runtime/*`
@@ -17,12 +39,12 @@
   - 已建立 `.codex/tmp/resume/RUN_STATE_SCHEMA.md`
   - 已将本轮复盘规范写入 `AGENTS.md`
   - 已新增 `docs/runbooks/engineering-process-standards.md` 作为项目级强制流程规范
-- 2026-04-16 单工作区迁移：
-  - 正式包根已统一为 `src/`
-  - 根目录包已迁入 `src/perception`、`src/control`、`src/compat`、`src/tools`
-  - `arm_planner/src/*` 已迁入 `src/planning/*`
-  - `fairino3_v6_planner` 已迁入 `src/planning/legacy/fairino3_v6_planner` 并加 `COLCON_IGNORE`
-  - `build_workspace.sh` 已改为 `colcon build --base-paths src`
+- 2026-04-16 单工作区迁移（历史阶段，现已由 `packages/` 主根接替）：
+  - 阶段性统一包根曾为 `src/`
+  - 当前正式包根为 `packages/`，`src` 仅保留兼容入口
+  - 感知、规划、控制、接口、bringup、ops、compat、tools 等源码已按领域落位到 `packages/*`
+  - `fairino3_v6_planner` 已落位到 `packages/planning/legacy/fairino3_v6_planner` 并加 `COLCON_IGNORE`
+  - `build_workspace.sh` 当前正式入口为 `colcon build --base-paths packages`
 - 2026-04-16 接口与主链基座：
   - `SceneObjectArray.msg` 已新增数组级 `scene_version`
   - `RunCompetition.action` 已新增恢复字段与结果 checkpoint 字段
@@ -78,11 +100,8 @@
 - `PlanPose(dual_arm)` 已从硬拒绝升级为真实双末端目标规划尝试；`PlanJoint(dual_arm)` 已能返回分拆后的左右两条轨迹。
 
 ## 当前阻塞
-- `planning_scene_sync` 已具备 `ApplyPlanningScene` 写入骨架，但还缺真实运行态 service smoke 与 MoveIt world/attached 可视化证据。
-- 2026-04-16 运行态 smoke 新阻塞：
-  - 在 `competition.launch.py + publish_fake_joint_states:=true` 下，`smoke_planning_scene_sync.py` 仍卡在 `reserve failed`
-  - 当前 `planning_scene_sync` 已修复 `lost_but_reserved` 与同步 diff 高频重发问题，也已改成异步 `ApplyPlanningScene`
-  - 但 `ApplyPlanningScene` 在运行态仍持续返回失败，Wave 4 需要继续定位请求内容与 MoveIt service 语义
+- 当前这轮仓库重构没有代码级阻塞；reviewer / verifier 已完成，剩余动作是单提交整理、推送到远程 `test`，以及阶段二部署到 `/home/gwh/dual-arm`。
+- `planning_scene_sync` 的运行态 smoke 已在本轮后续 wave 中通过；当前与仓库重构直接相关的残余风险是 launch teardown 噪声，不影响本轮 `packages/` 重构、README 体系和路径治理验收。
 - `scene_version` 接口和 scene_fusion 已收口第一步，但仍需让所有上游/下游严格使用数组级版本并完成 freshness 回归。
 - `PlanDualPose/PlanDualJoint` 已建立接口和服务骨架，但还未完成真实双臂任务样例验收。
 - `ExecutePrimitive` 已建立 action server 骨架，但 `cap_twist/pour_tilt/hold_verify/release_guard` 仍需继续从骨架升级到比赛级可靠动作。
@@ -90,7 +109,7 @@
 - 统一控制网页已能 build 和 smoke，但按钮尚未全部接真实 ROS action/service。
 - production 路径虽已接入 `joint_state_aggregator`，但还没有完成与真实 `/L/joint_states`、`/R/joint_states` 的联调验证。
 - MoveIt bringup 仍有 `No 3D sensor plugin(s) defined for octomap updates` 告警；当前不阻塞 P0 只规划验证。
-- 当前仓库外的 `.codex/tmp` 追踪文件尚未提交；新窗口继续前必须先读 `STATE.md`、`AGENTS.md` 和 `.codex/tmp/*` 记录，不能只看 git log。
+- `.codex/tmp` 过程资产需随本轮单提交一并入库；新窗口继续前仍必须先读 `STATE.md`、`AGENTS.md` 和 `.codex/tmp/*` 记录，不能只看 git log。
 - 右臂灯色/模式解释已由现场修正：蓝色表示机器人处于自动模式，且自动模式下默认不可拖动；绿色表示手动模式且不可拖动；青色表示手动模式且可拖动。
 - 后续不能再把“蓝灯”当作异常或非自动状态证据；判断是否可运动应同时看机器人模式、拖动状态、`robot_mode_helper` 输出和 `/R/robot_state`。
 - 已实现一键“退出 Drag + 切自动 + 上使能”工具；其目标正常结果是自动模式、不可拖动，现场灯色可表现为蓝色。
@@ -110,12 +129,24 @@
 
 ## 已验证证据
 - 2026-04-16 全量构建：
-  - `./build_workspace.sh` 通过，`25 packages finished`
-  - 构建入口为 `colcon build --base-paths src`
+  - `./build_workspace.sh --group full` 通过，`26 packages finished`
+  - 当前正式构建入口为 `colcon build --base-paths packages`
 - 2026-04-16 接口验证：
   - `ros2 interface show dualarm_interfaces/action/ExecutePrimitive` 通过
   - `ros2 interface show dualarm_interfaces/srv/PlanDualPose` 通过
   - `ros2 interface show dualarm_interfaces/action/RunCompetition` 显示恢复字段
+- 2026-04-16 仓库重构最终验证：
+  - `python3 scripts/check_readme_coverage.py` 通过，输出 `README 覆盖检查通过，共检查 57 个目录。`
+  - `python3 scripts/check_path_hardcodes.py` 通过，输出 `路径硬编码检查通过。`
+  - `./build_workspace.sh --list-groups` 可列出 `interfaces/perception/planning/control/tasks/bringup/ops/full`
+  - `colcon list --base-paths packages --names-only | sort` 与 `colcon list --base-paths src --names-only | sort` 一致，均发现 26 个包
+  - 分组构建 `interfaces/perception/planning/control/tasks/bringup/ops/full` 均已通过
+  - `SHELL=/bin/bash ./use_workspace.sh -lc 'printf ...'` 已确认 `DUAL_ARM_REPO_ROOT`、`DUAL_ARM_SHARED_ROOT`、`DUAL_ARM_ARCHIVE_ROOT` 正常导出
+  - `ros2 launch dualarm_bringup competition_integrated.launch.py --show-args` 通过
+  - `ros2 launch dualarm_bringup single_arm_debug.launch.py --show-args` 通过
+  - `competition_console_api` 的 `POST /api/acceptance/run/workspace` 返回 `passes=true`，且输出路径已切到 `packages/...`
+  - `docs_researcher` 与 `repo_explorer` sidecar 已完成结构与资料支持；`reviewer` 结论为 `no P0/P1 findings`
+  - `verifier` 已确认 README 覆盖、路径治理、build groups、包发现、launch smoke 与 workspace acceptance 基本完成；唯一轻微文档缺口已补到 `competition_console_api` README
 - 2026-04-16 控制台验证：
   - `competition_console_api` 运行后 `curl http://127.0.0.1:18080/api/health` 返回 `{"status":"ok","profile":"test","node":"competition_console_api"}`
   - `POST /api/acceptance/run/workspace` 返回真实验收结果，`passes=true`
@@ -130,9 +161,9 @@
     - `left_camera_color_frame`
     - `left_camera_depth_frame`
     - depth `camera_info.header.frame_id = left_camera_depth_frame`
-- 2026-04-16 PlanningScene smoke：
+- 2026-04-16 PlanningScene smoke（阶段中间态，已被后文 Wave 5 收口更新覆盖）：
   - `competition.launch.py start_hardware:=false start_detector:=false start_camera_bridge:=false publish_fake_joint_states:=true` 可正常起 core
-  - 当前已推进到更细粒度阻塞：
+  - 当时的中间结论：
     - 不再长期卡在 `reserve failed`
     - 当前失败点为 `managed scene did not enter reserved`
     - `world -> attached` 冲突 REMOVE 已修复

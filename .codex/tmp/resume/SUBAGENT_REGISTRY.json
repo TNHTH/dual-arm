@@ -1,5 +1,6 @@
 {
   "updated_at": "2026-04-16",
+  "task": "dual-arm repo reorg / README / path governance",
   "agents": [
     {
       "role": "perception",
@@ -30,6 +31,32 @@
       "role": "migration_docs_worker",
       "status": "errored_502_fallback_local",
       "summary": "文档 worker 502，主线程已本地创建 migration、control-plane、wave-gates 文档骨架。"
+    },
+    {
+      "role": "repo_reorg_docs_researcher",
+      "agent_type": "docs_researcher",
+      "status": "completed_closed",
+      "summary": "已核对 GitHub README、ROS 2、colcon 等资料约定，为根 README、repo map、path migration map 和 README 分层规则提供参考依据。"
+    },
+    {
+      "role": "repo_reorg_repo_explorer",
+      "agent_type": "repo_explorer",
+      "status": "completed_closed",
+      "summary": "已完成 README 缺口矩阵、目录迁移清单、旧路径热点和旧仓库抽取矩阵的只读审计，支撑 packages/vendor/archive/docs 目录收口。"
+    },
+    {
+      "id": "019d970b-e8ec-7392-a635-66234093e43f",
+      "role": "repo_reorg_reviewer",
+      "agent_type": "reviewer",
+      "status": "completed_closed",
+      "summary": "静态 review 结论为 no P0/P1 findings；残余风险仅剩 STATE.md 中旧 src 叙述，已在主线程收口时修正。"
+    },
+    {
+      "id": "019d970b-e939-7cf0-9148-536c6d653ca5",
+      "role": "repo_reorg_verifier",
+      "agent_type": "verifier",
+      "status": "completed_closed",
+      "summary": "已验证 README 覆盖、路径治理、build groups、packages/src 包发现一致性、launch smoke 和 workspace acceptance；仅发现 competition_console_api README 轻微缺口，主线程已补齐。"
     }
   ]
 }

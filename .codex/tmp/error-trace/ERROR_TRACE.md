@@ -67,7 +67,7 @@
   3. 回归验证 `ros2 launch robo_ctrl ...` 成功，不再报 `GLIBCXX_3.4.30`。
 - Prevention: 现场 ROS 2 真机验证优先使用系统 Python 和干净的系统 C++ 运行时；对受 Miniconda 污染的 C++ launch 节点，在 launch 层优先显式固定系统 `libstdc++.so.6`，并把二进制 `RUNPATH` 彻底清理列为后续环境治理项。
 
-## Incident 9
+## Incident 9A
 - Time: 2026-04-15
 - Scope: YOLOv8 `.pt` GPU 接入
 - Symptom: 初始系统 Python 里 `torch=2.6.0+cpu`，`torch.cuda.is_available()` 为 `False`，无法让 `best.pt` 走 GPU。
@@ -75,7 +75,7 @@
 - Handling: 使用 PyTorch cu124 wheel 将系统 Python 用户环境切换为 `torch=2.6.0+cu124`、`torchvision=0.21.0+cu124`，并验证 RTX 4060 GPU 可见。
 - Prevention: 后续 `.pt` 现场推理前先检查 `torch.__version__` 和 `torch.cuda.is_available()`，不要只看 `nvidia-smi`。
 
-## Incident 10
+## Incident 10A
 - Time: 2026-04-15
 - Scope: ROS Python ABI
 - Symptom: 安装 CUDA 版 PyTorch 依赖后，`cv_bridge` 导入时报 `_ARRAY_API not found`，提示 NumPy 1.x/2.x ABI 不兼容。
@@ -246,13 +246,13 @@
   2. attach diff 只发送 `AttachedCollisionObject` 的 `link_name + object.id + ADD`，未携带几何、header、touch_links，也未按 MoveIt 官方教程显式发送同 id world REMOVE。
 - Handling:
   1. 计划给 scene services 和 apply client 使用 `ReentrantCallbackGroup`；
-  2. 计划将 attach diff 改为完整 `AttachedCollisionObject ADD`，并在 world->attached 转换时同步发送 world `CollisionObject REMOVE`；
+  2. 当时计划将 attach diff 改为完整 `AttachedCollisionObject ADD`，并尝试在 world->attached 转换时同步发送 world `CollisionObject REMOVE`；该路径后续已在 Incident 26 中被确认不应作为当前仓库的正式做法；
   3. 计划为 detach 保留 `AttachedCollisionObject REMOVE + world CollisionObject ADD` 的反向迁移语义；
   4. 补充 diff 摘要日志，避免后续只看到笼统超时。
 - Evidence:
   - `smoke_planning_scene_sync.py` 输出：`attach failed`
   - `planning_scene_sync` 日志：`同步等待 apply_planning_scene 结果超时`
-- Prevention: PlanningScene service 路径不得依赖默认互斥 callback group 内的同步等待；MoveIt attached/world 迁移必须按官方 diff 语义显式构造。
+- Prevention: PlanningScene service 路径不得依赖默认互斥 callback group 内的同步等待；当前仓库的 MoveIt attached/world 迁移以 Incident 26 的最终结论为准，不在同一 diff 中混发同 id world REMOVE 与 attached ADD。
 
 ## Incident 23
 - Time: 2026-04-16
@@ -338,3 +338,18 @@
   - `ball_basket_pose_estimator_node.py` traceback：`Unable to convert call argument to Python object`
   - `move_group` 退出码 `-11`
 - Prevention: 总装停栈阶段若出现节点析构异常，应记录为独立 teardown incident，避免反向污染功能烟测结论。
+
+## Incident 29
+- Time: 2026-04-16
+- Scope: repo reorg closeout / subagent registry hygiene
+- Symptom: 仓库重构已完成本地验证后，reviewer / verifier 的结果已返回，但对应只读 sidecar 仍保持开启状态，`STATE.md` 与 `SUBAGENT_REGISTRY.json` 一度仍显示“待复核”，容易让后续窗口误判为仍需继续等待。
+- Root cause: 长链路任务在 closeout 阶段先完成了代码与验证，没有同步完成 subagent 关闭和过程资产回填，导致状态记录滞后于真实进展。
+- Handling:
+  1. 关闭 reviewer / verifier sidecar，确认最终结果已收集；
+  2. 将 reviewer 结论 `no P0/P1 findings` 与 verifier 验证摘要回填到 `STATE.md`；
+  3. 更新 `SUBAGENT_REGISTRY.json`、`RETRO.md` 和 `FINAL_SUMMARY.md`，使 closeout 状态与真实任务进展一致。
+- Evidence:
+  - reviewer 最终结论：`no P0/P1 findings`
+  - verifier 最终结论：README 覆盖、路径治理、build groups、包发现、launch smoke、workspace acceptance 均通过，包 README 轻微缺口已补
+  - 已执行 closeout：`close_agent(019d970b-e8ec-7392-a635-66234093e43f)`、`close_agent(019d970b-e939-7cf0-9148-536c6d653ca5)`
+- Prevention: 长链路多 subagent 任务在进入最终提交前，必须先做一次“sidecar 关闭 + registry 回填 + state 回填”的收口动作，避免完成态仍显示为进行中。

@@ -1,6 +1,6 @@
 # dual-arm 任务复盘
 
-更新时间：2026-04-15
+更新时间：2026-04-16
 
 ## 结论
 本次对话把 `dual-arm` 从“架构骨架式重构”推进到了“Wave 1 真 MoveIt 双臂规划基线”，方向是对的，但过程里暴露出多类可规避问题：subagent 不稳定、旧 ROS 进程污染验证、安装树残留、Conda 抢 Python、以及验证步骤顺序不严格。不能保证以后绝对不再犯，但这些问题已经被转成仓库规则和执行检查点。
@@ -150,8 +150,10 @@
 
 ## 2026-04-16 追加复盘
 
+注：本节记录的是包根阶段性统一到 `src/` 时的窗口快照；当前正式主根已升级为 `packages/`，以本文后面的“2026-04-16 仓库重构与 README 体系化收口复盘”为当前事实。
+
 ### Worked
-- 先统一包根再继续实现是正确顺序；迁移后 `colcon build --base-paths src` 已成为正式入口。
+- 先统一包根再继续实现是正确顺序；该阶段迁移后 `colcon build --base-paths src` 曾作为阶段性入口，后续已升级为 `colcon build --base-paths packages` 正式入口。
 - 对 subagent 502 立即降级到主线程实现，避免网页和文档写集被阻塞。
 - 清理 `build/install/log` 后全量重建，快速消除了路径迁移导致的旧 CMake cache 污染。
 - 网页控制台不只写源码，还跑了 `npm run build` 与 Playwright smoke，符合“网页也要验收”的要求。
@@ -168,17 +170,19 @@
 
 ## 2026-04-16 窗口收口复盘与流程优化
 
+注：本节保留当时窗口的阶段性判断；其中“单工作区迁移到 `src/`”和“Wave 5 没有完全收口”都已被后续实现覆盖，当前事实分别见下文 “2026-04-16 Wave 5 Runtime 收口复盘” 与 “2026-04-16 仓库重构与 README 体系化收口复盘”。
+
 ### Facts
 - 用户要求按完整计划推进到 Wave 5 收口，并要求严格大型项目流程、每个 Wave 有验收、包含代码审查、统一控制网页、断点接续、subagent 滚动使用。
 - 本窗口完成了大量基座工作：
-  - 单工作区迁移到 `src/`
+  - 单工作区阶段性迁移到 `src/`，后续已再次升级为 `packages/` 正式主根
   - 新增 `ExecutePrimitive`、`PlanDualPose`、`PlanDualJoint`
   - 新增 `competition_console_api`、`competition_console_web`
   - 新增 `competition_integrated.launch.py` / `competition_core.launch.py`
   - 新增 `smoke_resume_checkpoint.py`、`smoke_camera_frames.py`、`smoke_planning_scene_sync.py`
   - Wave 1 恢复 smoke 通过
   - Wave 2 mock 相机 frame smoke 通过
-- Wave 5 没有完全收口：
+- 当时 Wave 5 还没有完全收口：
   - `smoke_planning_scene_sync.py` 仍未稳定通过
   - 当前阻塞集中在 authoritative scene / `ApplyPlanningScene` / managed scene reserved 状态传播
 - reviewer subagent 明确指出多项严重问题：
@@ -301,3 +305,29 @@
   3. `docs/runbooks/engineering-process-standards.md`
   4. `.codex/tmp/resume/IMPLEMENTATION_BREAKPOINTS.md`
   5. `.codex/tmp/resume/SUBAGENT_REGISTRY.json`
+
+## 2026-04-16 仓库重构与 README 体系化收口复盘
+
+### Facts
+- 本轮 `dual-arm` 仓库主根已从历史 `src/` 叙事升级为 `packages/`，并保留 `src -> packages` 兼容入口。
+- README 体系和目录骨架已完成重构，`python3 scripts/check_readme_coverage.py` 输出 `README 覆盖检查通过，共检查 57 个目录。`
+- 路径治理已收口，`python3 scripts/check_path_hardcodes.py` 输出 `路径硬编码检查通过。`
+- 模块化构建已落地：`build_workspace.sh --list-groups` 正常列出 `interfaces/perception/planning/control/tasks/bringup/ops/full`，`--group full` 与各分组构建均通过。
+- 包发现兼容层已验证：`colcon list --base-paths packages` 与 `colcon list --base-paths src` 均发现 26 个包。
+- launch smoke 与控制台 workspace acceptance 已通过，且 reviewer / verifier 两个只读 sidecar 已完成最终收口。
+
+### Worked
+- 先在隔离 worktree 中完成 repo 级重构，再回头处理 `/home/gwh/dual-arm` 阶段二部署，避免污染当前脏的 `test` 工作树，这个顺序是正确的。
+- `packages/` 主根 + `src` 兼容 alias 的组合兼顾了结构清晰与历史脚本兼容，是这次仓库治理的关键稳定器。
+- 路径统一抽到 `scripts/lib/paths.sh` 和 `dual_arm_paths.py` 后，路径硬编码审计终于可以脚本化，而不是靠人工扫 README 与脚本。
+- `docs_researcher` / `repo_explorer` / `reviewer` / `verifier` 这种“研究、盘点、审查、验收”分工有效，既没有让 sidecar 改主代码，又提高了 closeout 质量。
+
+### Waste / Risk
+- `STATE.md` 曾长期保留“正式包根是 src”这类阶段性叙述，哪怕兼容层仍在，也会给后续协作者造成误导；结构升级完成后，状态文档必须当天同步改口。
+- reviewer / verifier 结果已经返回后，如果不及时关闭 sidecar 并回填 `SUBAGENT_REGISTRY.json`，会造成“任务其实已完成，但状态文件还写着待复核”的虚假阻塞。
+- 阶段二部署到 `/home/gwh/dual-arm` 后，如果不在新位置重新 `rm -rf build install log && ./build_workspace.sh --group full`，install 树里的默认路径仍会指向隔离 worktree，这是部署阶段最值得警惕的风险。
+
+### New Rules
+- 发生 repo 级目录重构后，`STATE.md` 中所有“正式主根/正式构建入口”叙述必须在同一天更新到最终术语，历史阶段只能标注为历史，不得继续冒充当前事实。
+- 长链路多 subagent 任务进入提交前，必须执行一次 `close_agent -> registry 回填 -> state 回填 -> final summary` 的固定收口序列。
+- 任何“从隔离 worktree 部署到最终落点目录”的任务，最终目录必须重建 install 树后再做 launch smoke，不能直接相信源 worktree 的构建产物。

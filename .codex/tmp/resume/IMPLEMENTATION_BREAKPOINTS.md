@@ -74,3 +74,29 @@
   - 起 core：`ros2 launch dualarm_bringup competition_core.launch.py start_hardware:=false start_detector:=false start_camera_bridge:=false use_mock_camera_stream:=false publish_fake_joint_states:=true`
   - 回归 Wave 5：`/usr/bin/python3 src/tools/tools/scripts/smoke_planning_scene_sync.py`
   - 然后开始 Wave 4 freshness 专项检查
+
+## 2026-04-16 Repo Reorg 断点
+- 当前结构重构已经落到隔离 worktree：
+  - 正式源码主根：`packages/`
+  - 兼容别名：`src -> packages`
+  - vendor 收口：`third_party -> vendor`
+  - legacy 收口：`arm_planner -> archive/legacy/arm_planner`
+- 已新增路径层：
+  - Shell：`scripts/lib/paths.sh`
+  - Python：`packages/tools/tools/scripts/dual_arm_paths.py`
+- 已新增结构治理脚本：
+  - `scripts/check_readme_coverage.py`
+  - `scripts/check_path_hardcodes.py`
+- 已完成验证：
+  - README 覆盖通过
+  - 路径硬编码检查通过
+  - `build_workspace.sh --group full` 通过
+  - `competition_integrated.launch.py --show-args` 通过
+  - `single_arm_debug.launch.py --show-args` 通过
+  - `competition_console_api` 的 workspace acceptance 已切到 `packages/...`
+- 如果下次从这里恢复：
+  1. 先读 `STATE.md`
+  2. 再读 `docs/reference/path-migration-map.md`
+  3. 复核 reviewer / verifier 结果
+  4. 推送到远程 `test`
+  5. 执行阶段二部署到 `/home/gwh/dual-arm`

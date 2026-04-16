@@ -1,16 +1,16 @@
 # AGENTS.md
 
 ## Scope
-- This file applies to `/home/gwh/dashgo_rl_project/workspaces/dual-arm`.
+- This file applies to the current `dual-arm` repository root.
 - It overrides broader project guidance when there is a conflict.
 
 ## Continuation Rules
 - Default to Chinese for responses and code comments.
-- Before continuing any `dual-arm` implementation task, read `[STATE.md](/home/gwh/dashgo_rl_project/workspaces/dual-arm/STATE.md)` first.
-- Before continuing any multi-wave implementation, also read `[engineering-process-standards.md](/home/gwh/dashgo_rl_project/workspaces/dual-arm/docs/runbooks/engineering-process-standards.md)` and `[IMPLEMENTATION_BREAKPOINTS.md](/home/gwh/dashgo_rl_project/workspaces/dual-arm/.codex/tmp/resume/IMPLEMENTATION_BREAKPOINTS.md)`.
+- Before continuing any `dual-arm` implementation task, read `STATE.md` first.
+- Before continuing any multi-wave implementation, also read `docs/operations/runbooks/engineering-process-standards.md` and `.codex/tmp/resume/IMPLEMENTATION_BREAKPOINTS.md`.
 - After finishing each implementation wave, update `STATE.md` in the repo root.
-- For this `dual-arm` project, new generated project documents, explanations, notes, runbooks, and long-term records must default to `/home/gwh/文档/Obsidian Vault/03_项目记录/FairinoDualArm/` unless the user explicitly chooses a different destination.
-- Do not place newly generated `dual-arm` project files under unrelated project folders such as `DashGo`.
+- New generated project documents, runbooks, mappings, and long-term records must live inside this repository unless the user explicitly asks for an external export.
+- Prefer `docs/`, `archive/`, `.codex/`, and `config/` over external note folders for project truth.
 - `STATE.md` must record:
   - current wave and date
   - completed work
@@ -21,7 +21,7 @@
 - When resuming Wave-based work, use `.codex/tmp/resume/SUBAGENT_REGISTRY.json` to preserve the subagent role model; do not restart broad read-through work unless the registry or checkpoint is missing.
 
 ## Project Process Standards
-- Treat `[engineering-process-standards.md](/home/gwh/dashgo_rl_project/workspaces/dual-arm/docs/runbooks/engineering-process-standards.md)` as the mandatory process contract for this project.
+- Treat `docs/operations/runbooks/engineering-process-standards.md` as the mandatory process contract for this project.
 - Every wave must pass these gates before it can be considered complete:
   1. `Spec Gate`
   2. `Design Gate`

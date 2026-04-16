@@ -4,13 +4,26 @@ generated: 2026-04-16
 ## Stories
 
 ### S-001
-description: 单工作区统一，正式包根只保留 `src`
+description: 仓库主根重构为 `packages/`，并保留 `src` 兼容入口
 acceptanceCriteria:
-  - `colcon list --base-paths src` 可枚举所有正式包
-  - 正式 launch 与脚本不再依赖根目录包路径或 `arm_planner/src/*`
+  - `colcon list --base-paths packages` 可枚举所有正式包
+  - `colcon list --base-paths packages` 与兼容模式 `src` 结果一致
+  - 正式 launch 与脚本不再依赖旧工作区绝对路径或旧单层源码布局
 passes: true
-evidence: "build_workspace.sh 全量通过；W0-workspace-unification.md 已回填证据；迁移文档已建立"
+evidence: "`colcon list --base-paths packages --names-only` 与 `src` 结果一致；`build_workspace.sh --group full` 通过；路径硬编码检查通过"
 incidentRefs: []
+
+### S-008
+description: README 体系化、路径治理和兼容入口补齐
+acceptanceCriteria:
+  - 根目录、一级目录、领域目录、缺失 ROS 包和关键非包目录均有 README
+  - `scripts/check_readme_coverage.py` 通过
+  - `scripts/check_path_hardcodes.py` 通过
+  - `build_workspace.sh`、`use_workspace.sh`、`competition_console_api` 已切到 repo-root/path-layer 解析
+passes: true
+evidence: "README 覆盖检查通过；路径硬编码检查通过；workspace acceptance API 输出包路径均为 packages/...；single_arm_debug launch alias 已补齐"
+incidentRefs:
+  - 21
 
 ### S-002
 description: 建立断点记录与端点接续能力
