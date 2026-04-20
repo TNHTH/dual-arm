@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-04-16",
+  "updated_at": "2026-04-20",
   "agents": [
     {
       "role": "perception",
@@ -45,6 +45,16 @@
       "role": "coordination_test_merge_review",
       "status": "completed_read_only",
       "summary": "2026-04-16 test 合并审查 reviewer subagent 已完成只读审计：在 commit 前识别出所有 task/* 分支与 test 同头、真正 payload 仍在各 worktree 未提交修改；随后主线程完成提交、合并与最终 build 审查。"
+    },
+    {
+      "role": "camera_calibration_review_2026_04_20",
+      "status": "completed_read_only",
+      "summary": "2026-04-20 只读审查确认：`tf_node` 的 verified gate 已就位，但缺少“图像+TCP采样 -> hand-eye 结果 -> 回写 calibration_transforms.yaml -> verified 发布”的正式晋级链；主线程随后补了 `promote_calibration_transform.py`、桌面采样脚本、评估脚本和 `tcp_only_mode` 暴露。"
+    },
+    {
+      "role": "auto_grasp_gate_review_2026_04_20",
+      "status": "completed_read_only",
+      "summary": "2026-04-20 只读审查确认：右臂 world pose、唯一 `/execution/execute_trajectory` server、`dual_arm_assist` 非伪成功等门禁在全链路缺失；主线程随后把 world-frame 约束前推到 `grasp_pose_generator` / `execution_adapter`，并给 `single_arm_pick_debug`、`pick_assist_auto_grasp.py`、`dualarm_task_manager` 加上比赛级前置门禁。"
     }
   ]
 }

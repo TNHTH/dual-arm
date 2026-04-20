@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include <geometry_msgs/msg/quaternion.hpp>
+#include <tf2/LinearMath/Matrix3x3.h>
 #include <sensor_msgs/msg/point_field.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 
@@ -16,23 +17,56 @@ namespace depth_handler {
 
 namespace {
 
-constexpr std::array<float, 3> kBottleSize {0.07f, 0.07f, 0.24f};
-constexpr std::array<float, 3> kCupSize {0.09f, 0.09f, 0.12f};
+struct SemanticPrior {
+    std::array<float, 3> size;
+    float cap_clearance;
+    float cap_pregrasp_offset;
+    float pour_pivot_offset;
+    float cup_side_grasp_inset;
+    float cup_fill_offset;
+};
 
-std::array<float, 3> guessSize(const std::string& semantic_type, const Eigen::Vector3f& observed_size) {
-    if (semantic_type.find("bottle") != std::string::npos) {
-        return {
-            std::max(observed_size.x(), kBottleSize[0]),
-            std::max(observed_size.y(), kBottleSize[1]),
-            std::max(observed_size.z(), kBottleSize[2]),
-        };
+constexpr SemanticPrior kYibao350Prior {
+    {0.055f, 0.055f, 0.180f},
+    0.012f,
+    0.040f,
+    0.015f,
+    0.0f,
+    0.0f,
+};
+constexpr SemanticPrior kCocaCola300Prior {
+    {0.061f, 0.061f, 0.210f},
+    0.015f,
+    0.040f,
+    0.020f,
+    0.0f,
+    0.0f,
+};
+constexpr SemanticPrior kCupPrior {
+    {0.075f, 0.075f, 0.115f},
+    0.0f,
+    0.0f,
+    0.0f,
+    0.0125f,
+    0.020f,
+};
+
+const SemanticPrior* priorForSemantic(const std::string& semantic_type) {
+    if (semantic_type == "water_bottle") {
+        return &kYibao350Prior;
+    }
+    if (semantic_type == "cola_bottle") {
+        return &kCocaCola300Prior;
     }
     if (semantic_type.find("cup") != std::string::npos) {
-        return {
-            std::max(observed_size.x(), kCupSize[0]),
-            std::max(observed_size.y(), kCupSize[1]),
-            std::max(observed_size.z(), kCupSize[2]),
-        };
+        return &kCupPrior;
+    }
+    return nullptr;
+}
+
+std::array<float, 3> guessSize(const std::string& semantic_type, const Eigen::Vector3f& observed_size) {
+    if (const auto* prior = priorForSemantic(semantic_type)) {
+        return prior->size;
     }
     return {observed_size.x(), observed_size.y(), observed_size.z()};
 }
@@ -58,6 +92,10 @@ DepthProcessorNode::DepthProcessorNode(const rclcpp::NodeOptions& options)
         camera_info_topic_,
         rclcpp::QoS(rclcpp::KeepLast(10)),
         std::bind(&DepthProcessorNode::cameraInfoCallback, this, std::placeholders::_1));
+    table_scene_sub_ = create_subscription<dualarm_interfaces::msg::SceneObjectArray>(
+        table_scene_topic_,
+        rclcpp::QoS(rclcpp::KeepLast(10)),
+        std::bind(&DepthProcessorNode::tableSceneCallback, this, std::placeholders::_1));
 
     auto qos_profile = rclcpp::QoS(rclcpp::KeepLast(10)).get_rmw_qos_profile();
     detection_sub_.subscribe(this, detection_topic_, qos_profile);
@@ -86,6 +124,7 @@ void DepthProcessorNode::declareParameters() {
     declare_parameter("scene_objects_topic", "/perception/scene_objects");
     declare_parameter("pointcloud_topic", "/depth_handler/pointcloud");
     declare_parameter("visualization_topic", "/depth_handler/visualization");
+    declare_parameter("table_scene_topic", "/perception/table_scene_objects");
     declare_parameter("target_frame", "world");
     declare_parameter("enable_visualization", true);
     declare_parameter("enable_pointcloud", true);
@@ -96,7 +135,15 @@ void DepthProcessorNode::declareParameters() {
     declare_parameter("min_points", 50);
     declare_parameter("fill_target_offset", 0.03);
     declare_parameter("roi_margin_ratio", 0.1);
-    declare_parameter("allowed_semantic_types", std::vector<std::string> {"water_bottle", "cola_bottle", "cup"});
+    declare_parameter("table_reject_distance", 0.018);
+    declare_parameter("use_table_plane", true);
+    declare_parameter(
+        "allowed_semantic_types",
+        std::vector<std::string> {
+            "cola_bottle",
+            "cup",
+            "water_bottle",
+        });
 }
 
 void DepthProcessorNode::loadParameters() {
@@ -107,6 +154,7 @@ void DepthProcessorNode::loadParameters() {
     scene_objects_topic_ = get_parameter("scene_objects_topic").as_string();
     pointcloud_topic_ = get_parameter("pointcloud_topic").as_string();
     visualization_topic_ = get_parameter("visualization_topic").as_string();
+    table_scene_topic_ = get_parameter("table_scene_topic").as_string();
     target_frame_ = get_parameter("target_frame").as_string();
     enable_visualization_ = get_parameter("enable_visualization").as_bool();
     enable_pointcloud_ = get_parameter("enable_pointcloud").as_bool();
@@ -117,6 +165,8 @@ void DepthProcessorNode::loadParameters() {
     min_points_ = get_parameter("min_points").as_int();
     fill_target_offset_ = get_parameter("fill_target_offset").as_double();
     roi_margin_ratio_ = get_parameter("roi_margin_ratio").as_double();
+    table_reject_distance_ = get_parameter("table_reject_distance").as_double();
+    use_table_plane_ = get_parameter("use_table_plane").as_bool();
     allowed_semantic_types_ = get_parameter("allowed_semantic_types").as_string_array();
 }
 
@@ -130,6 +180,10 @@ rcl_interfaces::msg::SetParametersResult DepthProcessorNode::onParametersChanged
 
 void DepthProcessorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr message) {
     camera_info_ = message;
+}
+
+void DepthProcessorNode::tableSceneCallback(const dualarm_interfaces::msg::SceneObjectArray::SharedPtr message) {
+    table_scene_ = message;
 }
 
 void DepthProcessorNode::synchronizedCallback(
@@ -199,7 +253,7 @@ void DepthProcessorNode::synchronizedCallback(
                 allowed_semantic_types_.end()) {
             continue;
         }
-        const auto geometry = buildGeometry(detection, depth_image, transform_matrix);
+        const auto geometry = buildGeometry(detection, depth_image, transform_matrix, output_frame);
         if (!geometry) {
             continue;
         }
@@ -225,7 +279,8 @@ void DepthProcessorNode::synchronizedCallback(
 std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGeometry(
     const dualarm_interfaces::msg::Detection2D& detection,
     const DepthImage::ConstSharedPtr& depth_image,
-    const Eigen::Isometry3d& transform) const {
+    const Eigen::Isometry3d& transform,
+    const std::string& output_frame) const {
     if (!camera_info_) {
         return std::nullopt;
     }
@@ -249,17 +304,43 @@ std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGe
         return std::nullopt;
     }
 
+    const auto table_object = latestTableObject(output_frame);
+    std::vector<Eigen::Vector3f> transformed_points;
+    transformed_points.reserve(points.size());
+    int table_rejected = 0;
+    for (const auto& point : points) {
+        const Eigen::Vector3f transformed = (transform * point.cast<double>()).cast<float>();
+        if (table_object) {
+            const float distance = signedDistanceToTable(transformed, *table_object);
+            if (std::abs(distance) <= static_cast<float>(table_reject_distance_)) {
+                ++table_rejected;
+                continue;
+            }
+        }
+        transformed_points.push_back(transformed);
+    }
+
+    if (static_cast<int>(transformed_points.size()) < min_points_) {
+        RCLCPP_WARN(
+            get_logger(),
+            "%s ROI 点经桌面平面剔除后不足，raw=%zu filtered=%zu rejected=%d",
+            detection.semantic_type.c_str(),
+            points.size(),
+            transformed_points.size(),
+            table_rejected);
+        return std::nullopt;
+    }
+
     DetectionGeometry geometry;
     geometry.semantic_type = detection.semantic_type;
     geometry.confidence = detection.score;
 
-    geometry.min_point = (transform * points.front().cast<double>()).cast<float>();
+    geometry.min_point = transformed_points.front();
     geometry.max_point = geometry.min_point;
 
-    for (const auto& point : points) {
-        const Eigen::Vector3f transformed = (transform * point.cast<double>()).cast<float>();
-        geometry.min_point = geometry.min_point.cwiseMin(transformed);
-        geometry.max_point = geometry.max_point.cwiseMax(transformed);
+    for (const auto& point : transformed_points) {
+        geometry.min_point = geometry.min_point.cwiseMin(point);
+        geometry.max_point = geometry.max_point.cwiseMax(point);
     }
 
     geometry.center = (geometry.min_point + geometry.max_point) / 2.0f;
@@ -320,6 +401,65 @@ std::optional<float> DepthProcessorNode::readDepthMeters(
         return depth_m;
     }
     return std::nullopt;
+}
+
+std::optional<dualarm_interfaces::msg::SceneObject> DepthProcessorNode::latestTableObject(
+    const std::string& output_frame) const {
+    if (!use_table_plane_ || !table_scene_) {
+        return std::nullopt;
+    }
+    for (const auto& object : table_scene_->objects) {
+        if (object.semantic_type != "table_surface") {
+            continue;
+        }
+        const auto frame_id = object.pose.header.frame_id.empty()
+            ? table_scene_->header.frame_id
+            : object.pose.header.frame_id;
+        if (!output_frame.empty() && frame_id != output_frame) {
+            RCLCPP_WARN(
+                get_logger(),
+                "桌面 frame=%s 与 depth_handler 输出 frame=%s 不一致，本帧不做桌面剔除",
+                frame_id.c_str(),
+                output_frame.c_str());
+            continue;
+        }
+        if (object.confidence <= 0.0f) {
+            continue;
+        }
+        return object;
+    }
+    return std::nullopt;
+}
+
+float DepthProcessorNode::signedDistanceToTable(
+    const Eigen::Vector3f& point,
+    const dualarm_interfaces::msg::SceneObject& table_object) const {
+    const auto& position = table_object.pose.pose.position;
+    const Eigen::Vector3f table_point(
+        static_cast<float>(position.x),
+        static_cast<float>(position.y),
+        static_cast<float>(position.z));
+    return tableNormal(table_object).dot(point - table_point);
+}
+
+Eigen::Vector3f DepthProcessorNode::tableNormal(
+    const dualarm_interfaces::msg::SceneObject& table_object) const {
+    const auto& orientation = table_object.pose.pose.orientation;
+    tf2::Quaternion quaternion(orientation.x, orientation.y, orientation.z, orientation.w);
+    if (quaternion.length2() < 1e-9) {
+        return Eigen::Vector3f::UnitZ();
+    }
+    quaternion.normalize();
+    const tf2::Vector3 z_axis = tf2::Matrix3x3(quaternion) * tf2::Vector3(0.0, 0.0, 1.0);
+    Eigen::Vector3f normal(
+        static_cast<float>(z_axis.x()),
+        static_cast<float>(z_axis.y()),
+        static_cast<float>(z_axis.z()));
+    const float norm = normal.norm();
+    if (norm < 1e-6f) {
+        return Eigen::Vector3f::UnitZ();
+    }
+    return normal / norm;
 }
 
 std::optional<Eigen::Isometry3d> DepthProcessorNode::lookupTransform(
@@ -396,34 +536,38 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
     };
 
     add_subframe("object_center", geometry.center);
-    if (geometry.semantic_type.find("bottle") != std::string::npos) {
+    const auto* prior = priorForSemantic(geometry.semantic_type);
+    if (geometry.semantic_type.find("bottle") != std::string::npos && prior != nullptr) {
+        const float half_height = size[2] * 0.5f;
+        const float cap_center_z = geometry.center.z() + half_height - prior->cap_clearance;
         add_subframe(
             "bottle_body_grasp",
             Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.center.z()));
         add_subframe(
             "bottle_cap_center",
-            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.max_point.z()));
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z));
         add_subframe(
             "bottle_cap_pregrasp",
-            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.max_point.z() + 0.05f));
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z + prior->cap_pregrasp_offset));
         add_subframe(
             "bottle_mouth",
-            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.max_point.z()));
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z));
         add_subframe(
             "bottle_pour_pivot",
-            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.center.z() + observed_size.z() * 0.25f));
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.center.z() + prior->pour_pivot_offset));
     }
-    if (geometry.semantic_type.find("cup") != std::string::npos) {
+    if (geometry.semantic_type.find("cup") != std::string::npos && prior != nullptr) {
+        const float half_height = size[2] * 0.5f;
         add_subframe(
             "cup_side_grasp",
-            Eigen::Vector3f(geometry.max_point.x(), geometry.center.y(), geometry.center.z()));
+            Eigen::Vector3f(geometry.center.x() + size[0] * 0.5f - prior->cup_side_grasp_inset, geometry.center.y(), geometry.center.z()));
         add_subframe(
             "cup_rim_center",
-            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.max_point.z()));
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), geometry.center.z() + half_height));
         add_subframe(
             "cup_fill_target",
             Eigen::Vector3f(
-                geometry.center.x(), geometry.center.y(), geometry.max_point.z() - fill_target_offset_));
+                geometry.center.x(), geometry.center.y(), geometry.center.z() + half_height - prior->cup_fill_offset));
     }
 
     return object;

@@ -235,8 +235,16 @@ class PlanningSceneSyncNode(Node):
         if not self._wait_for_pending_apply(timeout=5.0):
             return False
 
-        desired_world = {obj.id: obj for obj in managed.objects if not obj.attached_link}
-        desired_attached = {obj.id: obj for obj in managed.objects if obj.attached_link}
+        desired_world = {
+            obj.id: obj
+            for obj in managed.objects
+            if not obj.attached_link and self._is_collision_managed_object(obj)
+        }
+        desired_attached = {
+            obj.id: obj
+            for obj in managed.objects
+            if obj.attached_link
+        }
 
         request = ApplyPlanningScene.Request()
         request.scene = PlanningScene()
@@ -453,6 +461,9 @@ class PlanningSceneSyncNode(Node):
         collision_object.operation = CollisionObject.REMOVE
         return collision_object
 
+    def _is_collision_managed_object(self, scene_object: SceneObject) -> bool:
+        return scene_object.semantic_type == "table_surface"
+
     def _log_diff_summary(self, scene: PlanningScene) -> None:
         world_add = [obj.id for obj in scene.world.collision_objects if obj.operation == CollisionObject.ADD]
         world_remove = [obj.id for obj in scene.world.collision_objects if obj.operation == CollisionObject.REMOVE]
@@ -483,7 +494,10 @@ class PlanningSceneSyncNode(Node):
         size_z = max(float(scene_object.size.z), 0.01)
         radius = max(size_x, size_y) / 2.0
 
-        if scene_object.semantic_type in ("basketball", "soccer_ball"):
+        if scene_object.semantic_type == "table_surface":
+            primitive.type = SolidPrimitive.BOX
+            primitive.dimensions = [size_x, size_y, size_z]
+        elif scene_object.semantic_type in ("basketball", "soccer_ball"):
             primitive.type = SolidPrimitive.SPHERE
             primitive.dimensions = [max(size_x, size_y, size_z) / 2.0]
         elif scene_object.semantic_type == "basket":

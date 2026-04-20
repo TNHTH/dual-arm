@@ -11,6 +11,7 @@ import rclpy
 from epg50_gripper_ros.msg import GripperStatus
 from epg50_gripper_ros.srv import GripperCommand, GripperStatus as GripperStatusSrv
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -58,39 +59,89 @@ class ExecutionAdapterNode(Node):
         super().__init__("execution_adapter")
         self.declare_parameter("left_gripper_slave_id", 9)
         self.declare_parameter("right_gripper_slave_id", 10)
+        self.declare_parameter("left_gripper_command_service", "/gripper0/epg50_gripper/command")
+        self.declare_parameter("right_gripper_command_service", "/gripper1/epg50_gripper/command")
+        self.declare_parameter("left_gripper_status_service", "/gripper0/epg50_gripper/status")
+        self.declare_parameter("right_gripper_status_service", "/gripper1/epg50_gripper/status")
+        self.declare_parameter("left_gripper_status_topic", "/gripper0/epg50_gripper/status_stream")
+        self.declare_parameter("right_gripper_status_topic", "/gripper1/epg50_gripper/status_stream")
+        self.declare_parameter("gripper_command_timeout_s", 8.0)
         self.declare_parameter("dual_arm_skew_limit_ms", 30.0)
+        self.declare_parameter("world_frame", "world")
         self._left_gripper_slave_id = int(self.get_parameter("left_gripper_slave_id").value)
         self._right_gripper_slave_id = int(self.get_parameter("right_gripper_slave_id").value)
+        self._left_gripper_command_service = str(self.get_parameter("left_gripper_command_service").value)
+        self._right_gripper_command_service = str(self.get_parameter("right_gripper_command_service").value)
+        self._left_gripper_status_service = str(self.get_parameter("left_gripper_status_service").value)
+        self._right_gripper_status_service = str(self.get_parameter("right_gripper_status_service").value)
+        self._left_gripper_status_topic = str(self.get_parameter("left_gripper_status_topic").value)
+        self._right_gripper_status_topic = str(self.get_parameter("right_gripper_status_topic").value)
+        self._gripper_command_timeout_s = float(self.get_parameter("gripper_command_timeout_s").value)
         self._dual_arm_skew_limit_ms = float(self.get_parameter("dual_arm_skew_limit_ms").value)
+        self._world_frame = str(self.get_parameter("world_frame").value)
+        self._reentrant_group = ReentrantCallbackGroup()
 
         self._robot_move_clients: Dict[str, any] = {
-            "left_arm": self.create_client(RobotMove, "/L/robot_move"),
-            "right_arm": self.create_client(RobotMove, "/R/robot_move"),
+            "left_arm": self.create_client(RobotMove, "/L/robot_move", callback_group=self._reentrant_group),
+            "right_arm": self.create_client(RobotMove, "/R/robot_move", callback_group=self._reentrant_group),
         }
         self._robot_servo_joint_clients: Dict[str, any] = {
-            "left_arm": self.create_client(RobotServoJoint, "/L/robot_servo_joint"),
-            "right_arm": self.create_client(RobotServoJoint, "/R/robot_servo_joint"),
+            "left_arm": self.create_client(RobotServoJoint, "/L/robot_servo_joint", callback_group=self._reentrant_group),
+            "right_arm": self.create_client(RobotServoJoint, "/R/robot_servo_joint", callback_group=self._reentrant_group),
         }
         self._robot_move_cart_clients: Dict[str, any] = {
-            "left_arm": self.create_client(RobotMoveCart, "/L/robot_move_cart"),
-            "right_arm": self.create_client(RobotMoveCart, "/R/robot_move_cart"),
+            "left_arm": self.create_client(RobotMoveCart, "/L/robot_move_cart", callback_group=self._reentrant_group),
+            "right_arm": self.create_client(RobotMoveCart, "/R/robot_move_cart", callback_group=self._reentrant_group),
         }
-        self._gripper_client = self.create_client(GripperCommand, "/epg50_gripper/command")
-        self._gripper_status_client = self.create_client(GripperStatusSrv, "/epg50_gripper/status")
-        self._attach_client = self.create_client(AttachObject, "/scene/attach_object")
-        self._detach_client = self.create_client(DetachObject, "/scene/detach_object")
+        self._gripper_command_clients: Dict[str, any] = {
+            "left_arm": self.create_client(
+                GripperCommand, self._left_gripper_command_service, callback_group=self._reentrant_group
+            ),
+            "right_arm": self.create_client(
+                GripperCommand, self._right_gripper_command_service, callback_group=self._reentrant_group
+            ),
+        }
+        self._gripper_status_clients: Dict[str, any] = {
+            "left_arm": self.create_client(
+                GripperStatusSrv, self._left_gripper_status_service, callback_group=self._reentrant_group
+            ),
+            "right_arm": self.create_client(
+                GripperStatusSrv, self._right_gripper_status_service, callback_group=self._reentrant_group
+            ),
+        }
+        self._attach_client = self.create_client(
+            AttachObject, "/scene/attach_object", callback_group=self._reentrant_group
+        )
+        self._detach_client = self.create_client(
+            DetachObject, "/scene/detach_object", callback_group=self._reentrant_group
+        )
 
         self._left_robot_state: Optional[RobotState] = None
         self._right_robot_state: Optional[RobotState] = None
         self._scene_cache = SceneObjectArray()
         self._gripper_status_cache: Dict[int, GripperStatus] = {}
 
-        self.create_subscription(RobotState, "/L/robot_state", self._handle_left_state, 10)
-        self.create_subscription(RobotState, "/R/robot_state", self._handle_right_state, 10)
-        self.create_subscription(SceneObjectArray, "/scene_fusion/scene_objects", self._handle_scene, 10)
-        self.create_subscription(GripperStatus, "/epg50_gripper/status_stream", self._handle_gripper_status, 10)
+        self.create_subscription(RobotState, "/L/robot_state", self._handle_left_state, 10, callback_group=self._reentrant_group)
+        self.create_subscription(RobotState, "/R/robot_state", self._handle_right_state, 10, callback_group=self._reentrant_group)
+        self.create_subscription(
+            SceneObjectArray, "/scene_fusion/scene_objects", self._handle_scene, 10, callback_group=self._reentrant_group
+        )
+        self.create_subscription(
+            GripperStatus,
+            self._left_gripper_status_topic,
+            self._handle_gripper_status,
+            10,
+            callback_group=self._reentrant_group,
+        )
+        self.create_subscription(
+            GripperStatus,
+            self._right_gripper_status_topic,
+            self._handle_gripper_status,
+            10,
+            callback_group=self._reentrant_group,
+        )
 
-        self.create_service(SetGripper, "/execution/set_gripper", self._handle_set_gripper)
+        self.create_service(SetGripper, "/execution/set_gripper", self._handle_set_gripper, callback_group=self._reentrant_group)
         self._trajectory_action_server = ActionServer(
             self,
             ExecuteTrajectory,
@@ -98,6 +149,7 @@ class ExecutionAdapterNode(Node):
             execute_callback=self._execute_trajectory,
             goal_callback=self._goal_callback,
             cancel_callback=self._cancel_callback,
+            callback_group=self._reentrant_group,
         )
         self._primitive_action_server = ActionServer(
             self,
@@ -106,8 +158,20 @@ class ExecutionAdapterNode(Node):
             execute_callback=self._execute_primitive,
             goal_callback=self._primitive_goal_callback,
             cancel_callback=self._cancel_callback,
+            callback_group=self._reentrant_group,
         )
         self.get_logger().info("execution_adapter 已启动")
+
+    def _wait_future(self, future, timeout_sec: float):
+        deadline = time.monotonic() + max(timeout_sec, 0.0)
+        while time.monotonic() < deadline:
+            if future.done():
+                try:
+                    return future.result()
+                except Exception:  # pylint: disable=broad-except
+                    return None
+            time.sleep(0.01)
+        return None
 
     def _resolve_gripper_slave_id(self, arm_name: str, requested_slave_id: int) -> int:
         if requested_slave_id > 0:
@@ -117,6 +181,15 @@ class ExecutionAdapterNode(Node):
         if arm_name == "right_arm":
             return self._right_gripper_slave_id
         return self._left_gripper_slave_id
+
+    def _resolve_gripper_arm(self, arm_name: str, resolved_slave_id: int) -> str:
+        if resolved_slave_id == self._right_gripper_slave_id:
+            return "right_arm"
+        if resolved_slave_id == self._left_gripper_slave_id:
+            return "left_arm"
+        if arm_name == "right_arm":
+            return "right_arm"
+        return "left_arm"
 
     def _handle_left_state(self, message: RobotState) -> None:
         self._left_robot_state = message
@@ -185,7 +258,7 @@ class ExecutionAdapterNode(Node):
             result_code = "cancelled"
 
         feedback.progress = 1.0
-        feedback.state = "finished" if outcome.success else "failed"
+        feedback.state = "finished" if success else "failed"
         goal_handle.publish_feedback(feedback)
 
         result = ExecuteTrajectory.Result()
@@ -399,6 +472,9 @@ class ExecutionAdapterNode(Node):
             return False, "双臂 cartesian primitive 缺少 waypoint", 0.0, False, False, False, False
         if len(primary_waypoints) != len(secondary_waypoints):
             return False, "双臂 cartesian primitive waypoint 数量不一致", 0.0, False, False, False, False
+        for pose_stamped in list(primary_waypoints) + list(secondary_waypoints):
+            if not self._cartesian_waypoint_frame_valid(pose_stamped):
+                return False, f"双臂 cartesian primitive waypoint 必须是 {self._world_frame} frame", 0.0, False, False, False, False
         max_skew_ms = 0.0
         primary_completed = False
         secondary_completed = False
@@ -416,14 +492,14 @@ class ExecutionAdapterNode(Node):
             send_right = time.monotonic()
             right_future = secondary_client.call_async(right_request)
             max_skew_ms = max(max_skew_ms, abs(send_right - send_left) * 1000.0)
-            rclpy.spin_until_future_complete(self, left_future, timeout_sec=10.0)
-            rclpy.spin_until_future_complete(self, right_future, timeout_sec=10.0)
-            if left_future.result() is None or right_future.result() is None:
+            left_response = self._wait_future(left_future, 10.0)
+            right_response = self._wait_future(right_future, 10.0)
+            if left_response is None or right_response is None:
                 return False, f"双臂 cartesian step {index} 超时", max_skew_ms, True, True, primary_completed, secondary_completed
             if max_skew_ms > self._dual_arm_skew_limit_ms:
                 return False, "双臂 cartesian primitive 启动偏差超限", max_skew_ms, True, True, primary_completed, secondary_completed
-            primary_completed = bool(left_future.result().success)
-            secondary_completed = bool(right_future.result().success)
+            primary_completed = bool(left_response.success)
+            secondary_completed = bool(right_response.success)
             if not primary_completed or not secondary_completed:
                 return False, f"双臂 cartesian step {index} 执行失败", max_skew_ms, True, True, primary_completed, secondary_completed
         return True, "双臂 cartesian primitive 执行成功", max_skew_ms, True, True, True, True
@@ -432,10 +508,16 @@ class ExecutionAdapterNode(Node):
         if not waypoints:
             return False, "cartesian waypoints 为空"
         for index, pose_stamped in enumerate(waypoints):
+            if not self._cartesian_waypoint_frame_valid(pose_stamped):
+                return False, f"step={index}: cartesian waypoint 必须是 {self._world_frame} frame"
             success, message = self._execute_cartesian(arm_group, pose_stamped)
             if not success:
                 return False, f"step={index}: {message}"
         return True, "cartesian sequence 执行成功"
+
+    def _cartesian_waypoint_frame_valid(self, pose_stamped) -> bool:
+        frame_id = pose_stamped.header.frame_id.strip()
+        return bool(frame_id) and frame_id == self._world_frame
 
     def _execute_cartesian(self, arm_group: str, pose_stamped) -> tuple[bool, str]:
         client = self._robot_move_cart_clients.get(arm_group)
@@ -444,10 +526,10 @@ class ExecutionAdapterNode(Node):
 
         request = self._build_robot_move_cart_request(pose_stamped)
         future = client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=10.0)
-        if future.result() is None:
+        response = self._wait_future(future, 10.0)
+        if response is None:
             return False, f"{arm_group} 的笛卡尔执行超时"
-        return bool(future.result().success), future.result().message
+        return bool(response.success), response.message
 
     def _build_robot_move_cart_request(self, pose_stamped) -> RobotMoveCart.Request:
         request = RobotMoveCart.Request()
@@ -479,10 +561,10 @@ class ExecutionAdapterNode(Node):
 
         request = self._build_servo_joint_request(joint_trajectory)
         future = client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=10.0)
-        if future.result() is None:
+        response = self._wait_future(future, 10.0)
+        if response is None:
             return False, f"{arm_group} 的关节执行超时"
-        return bool(future.result().success), future.result().message
+        return bool(response.success), response.message
 
     def _execute_dual_arm(self, primary_joint_trajectory, secondary_joint_trajectory) -> tuple[bool, str, str, bool, bool, bool, bool, float]:
         primary_client = self._robot_servo_joint_clients.get("left_arm")
@@ -501,20 +583,20 @@ class ExecutionAdapterNode(Node):
         send_right = time.monotonic()
         right_future = secondary_client.call_async(right_request)
         sync_skew_ms = abs(send_right - send_left) * 1000.0
-        rclpy.spin_until_future_complete(self, left_future, timeout_sec=10.0)
-        rclpy.spin_until_future_complete(self, right_future, timeout_sec=10.0)
-        if left_future.result() is None or right_future.result() is None:
+        left_response = self._wait_future(left_future, 10.0)
+        right_response = self._wait_future(right_future, 10.0)
+        if left_response is None or right_response is None:
             return False, "双臂执行超时", "timeout", True, True, False, False, sync_skew_ms
-        left_success = bool(left_future.result().success)
-        right_success = bool(right_future.result().success)
+        left_success = bool(left_response.success)
+        right_success = bool(right_response.success)
         if sync_skew_ms > self._dual_arm_skew_limit_ms:
             return False, "双臂启动偏差超限", "sync_violation", True, True, left_success, right_success, sync_skew_ms
         if not left_success and not right_success:
             return False, "双臂都执行失败", "driver_failure", True, True, False, False, sync_skew_ms
         if not left_success:
-            return False, left_future.result().message, "primary_abort", True, True, False, right_success, sync_skew_ms
+            return False, left_response.message, "primary_abort", True, True, False, right_success, sync_skew_ms
         if not right_success:
-            return False, right_future.result().message, "secondary_abort", True, True, left_success, False, sync_skew_ms
+            return False, right_response.message, "secondary_abort", True, True, left_success, False, sync_skew_ms
         return True, "双臂执行成功", "success", True, True, True, True, sync_skew_ms
 
     def _build_servo_joint_request(self, joint_trajectory) -> RobotServoJoint.Request:
@@ -563,19 +645,21 @@ class ExecutionAdapterNode(Node):
         attach_on_success: bool = False,
         detach_on_success: bool = False,
     ) -> bool:
-        if not self._gripper_client.wait_for_service(timeout_sec=0.5):
+        resolved_slave_id = self._resolve_gripper_slave_id(arm_name, slave_id)
+        gripper_arm = self._resolve_gripper_arm(arm_name, resolved_slave_id)
+        gripper_client = self._gripper_command_clients.get(gripper_arm)
+        if gripper_client is None or not gripper_client.wait_for_service(timeout_sec=0.5):
             return False
 
-        resolved_slave_id = self._resolve_gripper_slave_id(arm_name, slave_id)
         gripper_request = GripperCommand.Request()
         gripper_request.slave_id = resolved_slave_id
         gripper_request.command = int(command)
         gripper_request.position = int(position)
         gripper_request.speed = int(speed)
         gripper_request.torque = int(torque)
-        future = self._gripper_client.call_async(gripper_request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
-        if future.result() is None or not bool(future.result().success):
+        future = gripper_client.call_async(gripper_request)
+        response = self._wait_future(future, self._gripper_command_timeout_s)
+        if response is None or not bool(response.success):
             return False
 
         if attach_on_success and object_id and link_name:
@@ -594,8 +678,8 @@ class ExecutionAdapterNode(Node):
         request.object_id = object_id
         request.link_name = link_name
         future = self._attach_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        return future.result() is not None and bool(future.result().success)
+        response = self._wait_future(future, 2.0)
+        return response is not None and bool(response.success)
 
     def _call_detach(self, object_id: str) -> bool:
         if not self._detach_client.wait_for_service(timeout_sec=0.5):
@@ -604,8 +688,8 @@ class ExecutionAdapterNode(Node):
         request = DetachObject.Request()
         request.object_id = object_id
         future = self._detach_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        return future.result() is not None and bool(future.result().success)
+        response = self._wait_future(future, 2.0)
+        return response is not None and bool(response.success)
 
     def _verify_detached(self, object_id: str) -> bool:
         if not object_id:
@@ -641,23 +725,25 @@ class ExecutionAdapterNode(Node):
 
     def _get_gripper_status(self, arm_name: str) -> Optional[GripperStatus]:
         resolved_slave_id = self._resolve_gripper_slave_id(arm_name, 0)
+        gripper_arm = self._resolve_gripper_arm(arm_name, resolved_slave_id)
         cached = self._gripper_status_cache.get(resolved_slave_id)
         if cached is not None:
             return cached
-        if not self._gripper_status_client.wait_for_service(timeout_sec=0.2):
+        gripper_status_client = self._gripper_status_clients.get(gripper_arm)
+        if gripper_status_client is None or not gripper_status_client.wait_for_service(timeout_sec=0.2):
             return None
         request = GripperStatusSrv.Request()
         request.slave_id = resolved_slave_id
-        future = self._gripper_status_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=1.0)
-        if future.result() is None or not bool(future.result().success):
+        future = gripper_status_client.call_async(request)
+        response = self._wait_future(future, 1.0)
+        if response is None or not bool(response.success):
             return None
         status = GripperStatus()
         status.slave_id = resolved_slave_id
-        status.gact = future.result().gact
-        status.gsta = future.result().gsta
-        status.gobj = future.result().gobj
-        status.object_status = future.result().object_status
+        status.gact = response.gact
+        status.gsta = response.gsta
+        status.gobj = response.gobj
+        status.object_status = response.object_status
         self._gripper_status_cache[resolved_slave_id] = status
         return status
 

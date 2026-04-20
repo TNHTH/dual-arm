@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 
 from copy import deepcopy
+from typing import Dict
 
+from geometry_msgs.msg import PoseStamped
 import rclpy
 from rclpy.node import Node
 
@@ -13,15 +15,78 @@ class GraspPoseGeneratorNode(Node):
         super().__init__("grasp_pose_generator")
         self.declare_parameter("input_topic", "/scene_fusion/scene_objects")
         self.declare_parameter("output_topic", "/planning/grasp_targets")
+        self.declare_parameter("world_frame", "world")
+        self.declare_parameter("require_world_objects", True)
         self.declare_parameter("pregrasp_offset", 0.10)
         self.declare_parameter("retreat_offset", 0.15)
         self.declare_parameter("release_offset", 0.04)
+        self.declare_parameter("water_bottle_body_strategy_id", "yibao_350ml_body_grasp")
+        self.declare_parameter("water_bottle_cap_strategy_id", "yibao_350ml_cap_grasp")
+        self.declare_parameter("water_bottle_gripper_profile", "yibao_350ml_hold")
+        self.declare_parameter("water_bottle_execution_profile", "yibao_350ml_transport")
+        self.declare_parameter("cola_bottle_body_strategy_id", "cocacola_300ml_body_grasp")
+        self.declare_parameter("cola_bottle_cap_strategy_id", "cocacola_300ml_cap_grasp")
+        self.declare_parameter("cola_bottle_gripper_profile", "cocacola_300ml_hold")
+        self.declare_parameter("cola_bottle_execution_profile", "cocacola_300ml_transport")
+        self.declare_parameter("cup_strategy_id", "dark_cup_side_grasp")
+        self.declare_parameter("cup_gripper_profile", "dark_cup_hold")
+        self.declare_parameter("cup_execution_profile", "dark_cup_transport")
+        self.declare_parameter("water_bottle_body_grasp_z_offset", 0.0)
+        self.declare_parameter("water_bottle_cap_center_z_offset", 0.0)
+        self.declare_parameter("water_bottle_cap_pregrasp_z_offset", 0.0)
+        self.declare_parameter("water_bottle_pour_pivot_z_offset", 0.0)
+        self.declare_parameter("cola_bottle_body_grasp_z_offset", 0.0)
+        self.declare_parameter("cola_bottle_cap_center_z_offset", 0.0)
+        self.declare_parameter("cola_bottle_cap_pregrasp_z_offset", 0.0)
+        self.declare_parameter("cola_bottle_pour_pivot_z_offset", 0.0)
+        self.declare_parameter("cup_side_grasp_z_offset", 0.0)
+        self.declare_parameter("cup_fill_target_z_offset", 0.0)
 
         input_topic = self.get_parameter("input_topic").value
         output_topic = self.get_parameter("output_topic").value
         self._pregrasp_offset = float(self.get_parameter("pregrasp_offset").value)
         self._retreat_offset = float(self.get_parameter("retreat_offset").value)
         self._release_offset = float(self.get_parameter("release_offset").value)
+        self._world_frame = str(self.get_parameter("world_frame").value)
+        self._require_world_objects = bool(self.get_parameter("require_world_objects").value)
+        self._strategy_defaults = {
+            "water_bottle": {
+                "body_strategy_id": str(self.get_parameter("water_bottle_body_strategy_id").value),
+                "cap_strategy_id": str(self.get_parameter("water_bottle_cap_strategy_id").value),
+                "gripper_profile": str(self.get_parameter("water_bottle_gripper_profile").value),
+                "execution_profile": str(self.get_parameter("water_bottle_execution_profile").value),
+            },
+            "cola_bottle": {
+                "body_strategy_id": str(self.get_parameter("cola_bottle_body_strategy_id").value),
+                "cap_strategy_id": str(self.get_parameter("cola_bottle_cap_strategy_id").value),
+                "gripper_profile": str(self.get_parameter("cola_bottle_gripper_profile").value),
+                "execution_profile": str(self.get_parameter("cola_bottle_execution_profile").value),
+            },
+            "cup": {
+                "body_strategy_id": str(self.get_parameter("cup_strategy_id").value),
+                "cap_strategy_id": "",
+                "gripper_profile": str(self.get_parameter("cup_gripper_profile").value),
+                "execution_profile": str(self.get_parameter("cup_execution_profile").value),
+            },
+        }
+        self._subframe_z_offsets: Dict[str, Dict[str, float]] = {
+            "water_bottle": {
+                "bottle_body_grasp": float(self.get_parameter("water_bottle_body_grasp_z_offset").value),
+                "bottle_cap_center": float(self.get_parameter("water_bottle_cap_center_z_offset").value),
+                "bottle_cap_pregrasp": float(self.get_parameter("water_bottle_cap_pregrasp_z_offset").value),
+                "bottle_pour_pivot": float(self.get_parameter("water_bottle_pour_pivot_z_offset").value),
+            },
+            "cola_bottle": {
+                "bottle_body_grasp": float(self.get_parameter("cola_bottle_body_grasp_z_offset").value),
+                "bottle_cap_center": float(self.get_parameter("cola_bottle_cap_center_z_offset").value),
+                "bottle_cap_pregrasp": float(self.get_parameter("cola_bottle_cap_pregrasp_z_offset").value),
+                "bottle_pour_pivot": float(self.get_parameter("cola_bottle_pour_pivot_z_offset").value),
+            },
+            "cup": {
+                "cup_side_grasp": float(self.get_parameter("cup_side_grasp_z_offset").value),
+                "cup_fill_target": float(self.get_parameter("cup_fill_target_z_offset").value),
+            },
+        }
 
         self._publisher = self.create_publisher(GraspTarget, output_topic, 10)
         self.create_subscription(SceneObjectArray, input_topic, self._handle_scene, 10)
@@ -29,6 +94,12 @@ class GraspPoseGeneratorNode(Node):
 
     def _handle_scene(self, message: SceneObjectArray) -> None:
         for scene_object in message.objects:
+            if self._require_world_objects and scene_object.pose.header.frame_id != self._world_frame:
+                self.get_logger().warn(
+                    f"{scene_object.id} 不是 {self._world_frame} pose，跳过 grasp target 生成",
+                    throttle_duration_sec=2.0,
+                )
+                continue
             self._publisher.publish(self._build_target(scene_object))
 
     def _build_target(self, scene_object) -> GraspTarget:
@@ -61,28 +132,28 @@ class GraspPoseGeneratorNode(Node):
 
         for subframe in scene_object.subframes:
             if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_body_grasp":
-                target.grasp = deepcopy(subframe.pose)
+                target.grasp = self._pose_with_semantic_offset(scene_object.semantic_type, subframe.name, subframe.pose)
             if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_cap_pregrasp":
-                target.pregrasp = deepcopy(subframe.pose)
+                target.pregrasp = self._pose_with_semantic_offset(scene_object.semantic_type, subframe.name, subframe.pose)
                 target.target_type = "cap_pregrasp"
-                target.strategy_id = "bottle_cap_grasp"
+                target.strategy_id = self._cap_strategy_id_for(scene_object.semantic_type)
             if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_cap_center":
-                target.operate = deepcopy(subframe.pose)
+                target.operate = self._pose_with_semantic_offset(scene_object.semantic_type, subframe.name, subframe.pose)
                 target.target_type = "cap_operate"
-                target.strategy_id = "bottle_cap_grasp"
+                target.strategy_id = self._cap_strategy_id_for(scene_object.semantic_type)
                 target.guarded_motion = True
             if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_mouth":
-                target.operate = deepcopy(subframe.pose)
+                target.operate = self._pose_with_semantic_offset(scene_object.semantic_type, "bottle_cap_center", subframe.pose)
                 target.target_type = "operate"
                 target.guarded_motion = True
             if scene_object.semantic_type.endswith("bottle") and subframe.name == "bottle_pour_pivot":
-                target.place = deepcopy(subframe.pose)
+                target.place = self._pose_with_semantic_offset(scene_object.semantic_type, subframe.name, subframe.pose)
             if scene_object.semantic_type.startswith("cup") and subframe.name == "cup_fill_target":
-                target.operate = deepcopy(subframe.pose)
+                target.operate = self._pose_with_semantic_offset("cup", subframe.name, subframe.pose)
                 target.target_type = "prepour"
             if scene_object.semantic_type.startswith("cup") and subframe.name == "cup_side_grasp":
-                target.grasp = deepcopy(subframe.pose)
-                target.strategy_id = "cup_side_grasp"
+                target.grasp = self._pose_with_semantic_offset("cup", subframe.name, subframe.pose)
+                target.strategy_id = self._strategy_defaults["cup"]["body_strategy_id"]
             if scene_object.semantic_type == "basket" and subframe.name == "basket_release_center":
                 target.release = deepcopy(subframe.pose)
                 target.target_type = "release"
@@ -102,27 +173,53 @@ class GraspPoseGeneratorNode(Node):
             return "ball_bimanual_handover"
         if semantic_type == "basket":
             return "basket_release"
-        if semantic_type.endswith("bottle"):
-            return "bottle_body_grasp"
-        return "cup_side_grasp"
+        if semantic_type == "water_bottle":
+            return self._strategy_defaults["water_bottle"]["body_strategy_id"]
+        if semantic_type == "cola_bottle":
+            return self._strategy_defaults["cola_bottle"]["body_strategy_id"]
+        if semantic_type.startswith("cup"):
+            return self._strategy_defaults["cup"]["body_strategy_id"]
+        return "default_grasp"
 
     def _gripper_profile_for(self, semantic_type: str) -> str:
         if semantic_type in ("basketball", "soccer_ball"):
             return "ball_dual_hold"
-        if semantic_type.endswith("bottle"):
-            return "bottle_hold"
+        if semantic_type == "water_bottle":
+            return self._strategy_defaults["water_bottle"]["gripper_profile"]
+        if semantic_type == "cola_bottle":
+            return self._strategy_defaults["cola_bottle"]["gripper_profile"]
         if semantic_type.startswith("cup"):
-            return "cup_hold"
+            return self._strategy_defaults["cup"]["gripper_profile"]
         return "default_hold"
+
+    def _cap_strategy_id_for(self, semantic_type: str) -> str:
+        if semantic_type == "water_bottle":
+            return self._strategy_defaults["water_bottle"]["cap_strategy_id"]
+        if semantic_type == "cola_bottle":
+            return self._strategy_defaults["cola_bottle"]["cap_strategy_id"]
+        return "bottle_cap_grasp"
 
     def _execution_profile_for(self, semantic_type: str) -> str:
         if semantic_type in ("basketball", "soccer_ball"):
             return "dual_arm_transport"
         if semantic_type == "basket":
             return "basket_release_lift_and_open"
-        if semantic_type.endswith("bottle"):
-            return "bottle_transport"
-        return "cup_transport"
+        if semantic_type == "water_bottle":
+            return self._strategy_defaults["water_bottle"]["execution_profile"]
+        if semantic_type == "cola_bottle":
+            return self._strategy_defaults["cola_bottle"]["execution_profile"]
+        if semantic_type.startswith("cup"):
+            return self._strategy_defaults["cup"]["execution_profile"]
+        return "default_transport"
+
+    def _pose_with_semantic_offset(self, semantic_type: str, subframe_name: str, pose: PoseStamped) -> PoseStamped:
+        adjusted = deepcopy(pose)
+        if semantic_type.startswith("cup"):
+            offsets = self._subframe_z_offsets["cup"]
+        else:
+            offsets = self._subframe_z_offsets.get(semantic_type, {})
+        adjusted.pose.position.z += offsets.get(subframe_name, 0.0)
+        return adjusted
 
 
 def main() -> None:

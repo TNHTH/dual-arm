@@ -258,6 +258,166 @@
 - `planning_scene_sync` 本轮关键修复：
   - service/client/subscription 已切到 `ReentrantCallbackGroup`
   - authoritative scene 更新已改成持锁同步 apply，不再依赖异步 done-callback 回写
+
+## 2026-04-20 相机与桌面建模续接
+
+### 新完成
+- Orbbec 设备枚举已恢复为 `2bc5:0800 Orbbec Gemini 335`，当前系统存在 `/dev/video2..9` 的 Orbbec 视频节点。
+- 已单独启动 `orbbec_gemini_ros_bridge.py`，当前运行态解析为：
+  - color=`/dev/video8`
+  - depth_backend=`v4l2_z16`
+  - depth_device=`/dev/video2`
+- 当前相机话题已真实发布：
+  - `/camera/color/image_raw`
+  - `/camera/depth/image_raw`
+  - `/camera/depth/camera_info`
+- 已启动实时 RGB 可视化窗口：
+  - `ros_image_viewer.py --ros-args -p image_topic:=/camera/color/image_raw -p window_name:=orbbec_color_view`
+- 已完成两轮桌面建模分析：
+  - 第一轮纯深度 RANSAC 会把中后部背景平面误吃进桌面，不符合肉眼木桌区域
+  - 第二轮改为“彩色木桌区域先验 + 深度平面拟合”后，overlay 已与肉眼桌面基本一致
+- 已新增但尚未完成全链验证的脚本：
+  - `src/tools/tools/scripts/table_surface_detector.py`
+  - 目标：持续输出 `table_surface`、RGB overlay、深度确认 overlay、mask 和调试 JSON
+
+### 已验证证据
+- `lsusb` 可见：`Bus 004 Device 003: ID 2bc5:0800 Orbbec Gemini 335`
+- `ros2 topic info` 证据：
+  - `/camera/color/image_raw` publisher count = 1
+  - `/camera/depth/image_raw` publisher count = 1
+  - `/camera/depth/camera_info` publisher count = 1
+- 话题频率证据：
+  - 彩色约 `7-8 Hz`
+  - 深度约 `8 Hz`
+- 已保存调试产物目录：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/camera_debug/`
+- 当前桌面分析结论文件：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/camera_debug/table_depth_analysis_adjusted.json`
+  - 关键字段：
+    - `can_detect_table_plane=true`
+    - `method=color_guided_depth_plane_fit`
+    - `plane_inlier_ratio_in_color_table_candidates=0.9992`
+    - `median_residual_mm=2.8903`
+    - `depth_confirmed_area_ratio_vs_color_table=0.5124`
+- 当前桌面对比图：
+  - `color_latest_adjusted.png`
+  - `table_depth_confirmed_overlay.png`
+  - `table_color_guided_overlay.png`
+
+### 当前阻塞
+- `table_surface_detector.py` 已写入但未完成 build / install / 运行态验证，当前不在 ROS graph 中。
+- `depth_handler` 已开始接桌面平面接口改造，但本轮在中途被打断，尚未重新 build；不能宣称已把桌面约束真正接进瓶杯 3D 建模。
+- `competition.launch.py` / `competition_core.launch.py` 还未完成：
+  - 默认 detector 模型切换到 `/home/gwh/下载/best.3.pt`
+  - 自动拉起 `table_surface_detector`
+  - RGB 检测效果 overlay 统一输出
+- 当前仍存在重复控制台进程痕迹：
+  - `ros2 run competition_console_api ...` wrapper 进程
+  - 安装后的 `competition_console_api_node.py` / `competition_console_static_server.py` 进程
+  - 下一窗口应先清理，避免误判 live 状态
+
+### 当前结论
+- 相机链路已经重新打通，且可以实时可视化 RGB。
+- 深度信息可以识别桌面平面，但完整桌面区域需要“彩色先验 + 深度确认”的联合建模，不能只靠纯深度。
+- 目前距离“可用于辅助机械臂自动夹取”只差把桌面平面正式写入 ROS 运行链，并把物体 3D 建模改成桌面约束版。
+
+### 下一步
+- 下一窗口继续时，不要重复做设备恢复；从当前 live 相机桥和现有调试产物继续。
+- 优先顺序：
+  1. 完成 `table_surface_detector.py` 的 world 输出、RGB overlay 发布与 `tools` 包 build
+  2. 完成 `depth_handler` 的桌面约束和底部落桌修正
+  3. 把 `best.3.pt` 设为 detector 默认模型并接入 launch
+  4. 再开始自动夹取入口 `pick_assist_auto_grasp.py`
+
+## 2026-04-16 单臂调试接口补充
+
+### 新完成
+- 已新增单臂调试总装入口：`src/bringup/dualarm_bringup/launch/single_arm_debug.launch.py`
+  - 目标：保留双臂主链不动，额外挂出 `debug_arm=left|right` 的单臂调试接口
+  - 默认调试策略：
+    - 左臂：可直接接入当前左相机 + 左夹爪 + 左臂驱动
+    - 右臂：先保留驱动 / MoveIt / 执行链单臂入口，视觉抓取后续再补
+- `joint_state_aggregator` 已新增 `active_arms=dual|left|right`
+  - 在 `left` 或 `right` 模式下，会给未接入侧补默认 joint state，避免单臂现场时 `/joint_states` 断流
+- 已新增单臂抓取最小闭环工具：`src/tools/tools/scripts/single_arm_pick_debug.py`
+  - 当前流程：目标锁定 -> 张爪 -> `pregrasp` -> `grasp` -> 合爪并 attach -> `hold_verify` -> `retreat`
+  - 该工具不依赖 `RunCompetition` 总状态机，避免把单臂调试与比赛流程强耦合
+- 已新增 runbook：`docs/runbooks/2026-04-16-single-arm-debug-runbook.md`
+
+### 已验证证据
+- `python3 -m py_compile` 已通过：
+  - `single_arm_debug.launch.py`
+  - `joint_state_aggregator_node.py`
+  - `joint_state_aggregator.launch.py`
+  - `single_arm_pick_debug.py`
+- `colcon build --symlink-install --packages-select joint_state_aggregator dualarm_bringup tools` 已通过
+- `ros2 launch dualarm_bringup single_arm_debug.launch.py --show-args` 已通过
+- `ros2 launch joint_state_aggregator joint_state_aggregator.launch.py --show-args` 已通过
+- `ros2 pkg executables tools` 已出现 `single_arm_pick_debug.py`
+
+### 当前限制
+- 当前相机 TF 配置仍只有 `left_tcp -> left_camera`，且状态仍是 `unverified`
+- 因此当前“视觉抓取完整闭环”是左臂优先路径；右臂单臂入口已预留，但若右臂也要挂相机，还需补：
+  - `right_tcp -> right_camera` 外参
+  - 对应 color/depth frame 合同
+  - 右臂视觉抓取验收
+
+## 2026-04-16 单臂硬件链路回归
+
+### 新完成
+- `orbbec_gemini_bridge` 已从不稳定的 `CAP_OBSENSOR index=0` 读取路径切换为：
+  - 彩色：自动选择 `YUYV/MJPG` 设备，当前实机落到 `/dev/video8`
+  - 深度：自动选择 `Z16` 设备，当前实机落到 `/dev/video0`
+- `orbbec_gemini_bridge` 已支持 `camera_matrix_file`，当前可稳定发布：
+  - `/camera/color/image_raw`
+  - `/camera/depth/image_raw`
+  - `/camera/color/camera_info`
+  - `/camera/depth/camera_info`
+- 针对当前 Orbbec `Z16` 节点的实测缩放，已在桥接层加入 `v4l2_depth_unit_to_mm_scale=0.125`，避免下游把原始深度直接当毫米使用。
+- `single_arm_debug.launch.py` 已去掉对 `robo_ctrl_L.launch.py` 的嵌套依赖，改为直接拉 `robo_ctrl_node`，避免旧 launch 隐式起第二个夹爪节点。
+- `single_arm_debug.launch.py` 现已能在同一入口内稳定拉起：
+  - 左臂控制器节点
+  - 单左夹爪节点
+  - detector
+  - detector_adapter
+  - depth_handler
+  - scene_fusion
+  - grasp_pose_generator
+  - MoveIt / planner / execution_adapter
+- 已将 Fairino 软件包迁移到项目第三方目录：
+  - 新目录：`third_party/fairino_sdk/software`
+  - 旧目录备份：`third_party/fairino_sdk/software.backup_2026-04-16_204536`
+- `single_arm_pick_debug.py` 已改为在规划前优先使用当前机械臂 TCP 姿态，避免调试脚本直接使用单位四元数导致抓取前 `ik_failed`。
+
+### 已验证证据
+- 设备枚举验证：
+  - `/dev/video0` 支持 `Z16 16-bit Depth`
+  - `/dev/video8` 支持 `YUYV/MJPG`
+- 原始设备读流验证：
+  - `/dev/video0` 可直接读出 `uint16 (480x640)` 深度帧
+  - `/dev/video8` 可直接读出 `uint8 (480x640x3)` 彩色帧
+- `ros2 run orbbec_gemini_bridge orbbec_gemini_ros_bridge.py` 运行态验证：
+  - `depth_backend=v4l2_z16`
+  - `depth_device=/dev/video0`
+  - `color=/dev/video8`
+- 单臂总装运行态验证：
+  - `/camera/color/image_raw` 约 `15Hz`
+  - `/camera/depth/image_raw` 约 `15Hz`
+  - `/camera/depth/camera_info` 已发布真实加载的 `camera_matrix.json`
+  - `/detector/detections` 已输出 `class_id=5`
+  - `/perception/detection_2d` 已输出 `semantic_type=water_bottle`
+  - `/scene_fusion/raw_scene_objects` 已输出稳定 `water_bottle_*`
+  - `/planning/grasp_targets` 已输出左臂 `water_bottle` 抓取目标
+- 左臂控制器通讯验证：
+  - `/L/robot_state` 回读成功，`motion_done=true`，`error_code=0`
+- 夹爪通讯验证：
+  - `/epg50_gripper/command` 对 `slave_id=9 command=1` 返回 `夹爪已使能`
+  - `/epg50_gripper/status` 回读 `success=true, gact=true, gsta=3, error=0`
+
+### 当前限制
+- `planning_scene_sync` 仍会因 detector 每帧生成新 `water_bottle_*` id 而产生高频 world add/remove；这不阻塞单臂调试入口的感知与抓取目标验证，但会污染 MoveIt scene 日志。
+- `ball_basket_pose_estimator` 仍会因 `detections frame=left_camera_color_frame` 与其默认期望不一致而打印 warning；当前不影响瓶子链路。
+- `move_group` 在 `Ctrl+C` / launch teardown 阶段仍可能 segmentation fault；当前属于退出阶段噪声，不影响已验证的 happy path。
   - attach 前会用 `GetPlanningScene` 确认 world object 已进入 MoveIt
   - attach diff 保留完整 geometry/header/touch_links，但不再同包发送同 id world REMOVE
   - 已引入事务回滚、live object 校验、`object_retention_timeout`、`lost_but_reserved`、`lost_but_attached`
@@ -358,3 +518,206 @@
 - 当前 `test` 分支已经是完成的、干净的、整合过的软件基线。
 - 可以直接以当前 `test` 作为下一步硬件连接与真机测试分支。
 - 剩余辅助 worktree 只需要做删除收尾，不再承载未整合 payload。
+
+## 2026-04-19 真机控制台与双臂通信接续
+
+### 新完成
+- 控制台网页已可通过 `http://127.0.0.1:18081` 访问，静态服务会同源代理 `/api/*` 到 `competition_console_api` 的 `18080`。
+- `competition_console_api` 已扩展：
+  - `/api/bringup/start|restart|stop`
+  - `/api/control/state`
+  - `/api/control/arm/jog`
+  - `/api/control/arm/mode`
+  - `/api/control/gripper`
+  - `/api/presets`
+  - `/api/presets/current`
+  - `/api/presets/move`
+  - `/api/presets/{arm}/{preset_id}` 删除
+- 网页已扩展为真机控制台：
+  - Bringup 模式切换
+  - 左右臂点动控制
+  - 左右臂 `j1..j6` 与 TCP 位姿显示
+  - 左右夹爪控制
+  - 左右臂模式按钮：`切手动`、`退出拖动`
+  - 自定义姿态保存与切换
+- 自定义姿态保存位置：
+  - `.artifacts/console_pose_presets.json`
+  - 当前已有左臂 `抓住`、`拧开`，右臂 `抓瓶子`
+- 姿态切换链路已从直接调用 `/L|R/robot_move` 改为：
+  1. `/planning/plan_joint`
+  2. `/execution/execute_trajectory`
+  3. `execution_adapter`
+  4. `/L|R/robot_servo_joint`
+- 修复 `PlanJoint` 姿态单位错误：
+  - 姿态库保存的是控制器角度 `deg`
+  - `PlanJoint` 目标需要 `rad`
+  - `competition_console_api` 已在 `_build_joint_state_target()` 中转换为 `math.radians(...)`
+- 修复 `fairino_dualarm_planner` service callback 长时等待问题：
+  - `Plan*` services 放入 `ReentrantCallbackGroup`
+- 修复 `fairino_dualarm_planner` 与 `robo_ctrl` 在总装入口下的 Miniconda `libstdc++` 污染：
+  - `fairino_dualarm_planner.launch.py` 注入系统 `LD_PRELOAD`
+  - `dualarm_bringup/competition.launch.py` 对左右 `robo_ctrl_node` 注入系统 `LD_PRELOAD`
+- `robo_ctrl` `ServoJ` 路径已加互斥与异常兜底，避免 `XmlRpc::XmlRpcException` 直接 abort 进程。
+- `competition_console_api` 启动 core 前已加入 `_cleanup_stale_core_processes()`，用于清理旧 `competition_core` / `move_group` / planner / execution / gripper / `robo_ctrl_node` 残留。
+- 右臂通信已在干净单栈下打通：
+  - `/R/robot_state` 可读，`error_code=0`
+  - `/R/robot_move_cart` `z=-5mm` 增量返回成功
+  - 右臂姿态 `抓瓶子` 通过 `/api/presets/move` 返回 `success=true`
+  - 切换后右臂 `j2/j3/j4/j6` 明显移动到目标附近
+
+### 当前 live 状态快照
+- 记录时间：2026-04-19 17:50:47 +0800
+- 当前 `competition_console_api` 与静态网页服务仍在运行。
+- `core_running=true`
+- `core_pid=130977`
+- 当前 `execution` action server 数量已恢复为 1：
+  - `/execution_adapter`
+- 当前关键节点：
+  - `/execution_adapter`
+  - `/fairino_dualarm_planner`
+  - `/gripper0/gripper_node_left`
+  - `/gripper1/gripper_node_right`
+  - `/left_robo_ctrl`
+  - `/right_robo_ctrl`
+  - `/move_group`
+  - `/planning_scene_sync`
+  - `/dualarm_task_manager`
+- 当前机器人状态：
+  - 左臂：`error_code=0`，但当时 `motion_done=false`，继续前必须重新读 `/L/robot_state`
+  - 右臂：`error_code=0`，`motion_done=true`，接近姿态库 `抓瓶子`
+
+### 当前阻塞与风险
+- 不要再同时启动多套 `competition_core`；旧栈残留会导致多个 `/execution_adapter` action server、串口被旧 gripper 节点占用、姿态切换和夹爪动作不稳定。
+- 右夹爪曾出现“反复合上/展开”现象，根因怀疑是多套旧 `execution_adapter` / gripper 节点和网页连续触发混在一起；当前已通过强制清栈和单 action server 验证降低风险。
+- 右臂控制器自带网页 `http://192.168.58.3`：
+  - `/` 和 `/index.html` 能返回 `302`
+  - `/login.html` `curl` 可取回 HTML
+  - 但 Chromium 仍可能显示 `ERR_EMPTY_RESPONSE`
+  - 该问题属于控制器 Web 服务/浏览器链路异常，不等同于 ROS 控制链不可用
+- 相机仍未恢复到 Orbbec 正常枚举：
+  - 当前看到 `349c:0418` Mass Storage / recovery-like 模式
+  - `usb_modeswitch -K -R` 后未恢复到 `2bc5:0800`
+  - 下一步应直连 USB3 或走 Orbbec 官方 firmware/recovery 流程
+- 左臂姿态切换仍需继续收口：
+  - 规划链路已改为 `PlanJoint -> ExecuteTrajectory`
+  - 单位错误已修复
+  - 但左臂执行链仍需在干净单栈下验证
+
+### 已验证证据
+- `python3 -m py_compile` 通过：
+  - `competition_console_api_node.py`
+  - `competition_console_static_server.py`
+  - `dualarm_bringup` 相关 launch 文件
+- `colcon build --packages-select competition_console_api` 通过
+- `colcon build --packages-select execution_adapter` 通过
+- `colcon build --packages-select fairino_dualarm_planner` 通过
+- `colcon build --packages-select fairino_dualarm_moveit_config` 通过
+- `colcon build --packages-select robo_ctrl` 通过
+- `competition_console_web` `npm run build` 通过
+- Playwright smoke 通过：`1 passed`
+- `/api/health`、`/api/status`、`/api/control/state`、`/api/presets` 可通过 `18081` 同源代理访问
+- 右臂 `/R/robot_move_cart z=-5mm` 返回成功并有 TCP Z 变化
+- 右臂 `/api/presets/move` 到 `抓瓶子` 返回 `success=true`
+
+### 下一步建议
+- 新窗口第一步不要写代码；先执行 live 清点：
+  1. `pgrep -af 'competition_core.launch.py|execution_adapter_node.py|robo_ctrl_node|epg50_gripper_node|move_group'`
+  2. `ros2 action info /execution/execute_trajectory`
+  3. `curl -s http://127.0.0.1:18080/api/status`
+  4. `curl -s http://127.0.0.1:18080/api/control/state`
+- 若 action server 超过 1 个，先清旧栈，禁止测试姿态/夹爪。
+- 若只剩单栈，优先继续验证：
+  1. 左臂姿态 `抓住 -> 拧开`
+  2. 按住 jog 的持续控制语义
+  3. 姿态库保存夹爪状态
+  4. 动作组按左右臂姿态顺序回放
+
+## 2026-04-20 比赛级自动夹取 / 桌面标定收口更新
+
+### 新完成
+- `competition.launch.py` / `competition_core.launch.py` / `competition_integrated.launch.py` 已补比赛级 perception 调参入口：
+  - `allow_unverified_camera_extrinsics`
+  - `camera_v4l2_depth_unit_to_mm_scale`
+  - `depth_require_depth_aligned_detections`
+  - `ball_require_depth_aligned_detections`
+  - `table_*` 桌面阈值参数
+  - detector 默认模型固定为 `/home/gwh/下载/best.3.pt`
+- `table_surface_detector.py` 已收口到：
+  - 安装树可执行
+  - TF 失败时发布空 `SceneObjectArray` heartbeat
+  - `world` 可查时发布 `table_surface`
+  - 当前已实际拿到 `world` 桌面对象和 RGB/depth overlay 证据
+- `planning_scene_sync` 已收口为：
+  - 外部 world collision 只保留 `table_surface`
+  - `table_surface` 使用 `BOX`
+  - 非桌面对象仍允许 attach/detach，不再被 world-only 过滤误伤
+- `depth_handler` 已收口为：
+  - 重新只处理 `water_bottle/cola_bottle/cup`
+  - 使用 `/perception/table_scene_objects` 里的桌面平面剔除 ROI 近桌面点
+  - 编译通过
+- world-frame 门禁已前推：
+  - `grasp_pose_generator` 默认只对 `world` pose 对象发布 `GraspTarget`
+  - `execution_adapter` 拒绝执行非 `world` 的 cartesian waypoint
+  - `single_arm_pick_debug` / `pick_assist_auto_grasp.py` 已检查：
+    - 目标 object/target 必须是 `world`
+    - 右臂不允许 `require_world_tf=false`
+    - `/execution/execute_trajectory` action server 数量必须为 1
+    - 桌面对象必须存在且有效
+  - `dualarm_task_manager` `SELF_CHECK` 已增加 `/execution/execute_trajectory` 唯一 server 门禁
+- 已新增桌面标定闭环工具：
+  - `src/tools/tools/scripts/capture_table_calibration_sample.py`
+  - `src/tools/tools/scripts/evaluate_table_calibration_run.py`
+  - `src/transforms/tf_node/scripts/promote_calibration_transform.py`
+  - `eye_hand_calibration_data_collector.launch.py` 已暴露 `tcp_only_mode`
+- `wave23_perception_acceptance.py` 已改为支持通过参数检查 `expected-calibration-status`
+
+### 当前 live 调试状态
+- 保留中的 live / debug 进程：
+  - `competition_core.launch.py`
+  - `orbbec_gemini_ros_bridge.py`
+  - `ros_image_viewer.py`
+  - `detector_pt_node.py`
+  - `table_surface_detector.py`
+  - 调试静态 TF：`left_tcp -> left_camera`
+- 已退掉：
+  - `depth_processor_debug`
+
+### 本轮关键证据
+- `pick_assist_auto_grasp.py` 安装树可执行：
+  - `ros2 pkg executables tools | rg 'pick_assist_auto_grasp'`
+- `tf_node` 晋级脚本 dry-run 已通过：
+  - `promote_calibration_transform.py --dry-run`
+- 桌面标定采样脚本已实际落盘 3 份样本：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/calibration/left_camera/live_smoke_v2/pose_static_01`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/calibration/left_camera/live_smoke_v2/pose_static_02`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/calibration/left_camera/live_smoke_v2/pose_static_03`
+- 多样本评估脚本输出：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/calibration/left_camera/live_smoke_v2/summary.json`
+  - 当前结果：
+    - `sample_count=3`
+    - `world_height_range_m=0.000682`
+    - `normal_drift_deg_max=2.5226`
+    - `median_residual_mm_max=4.7870`
+    - `color_depth_overlap_ratio_min=0.9487`
+    - `passes=true`
+- 自动夹取入口负例 smoke：
+  - `pick_assist_auto_grasp.py` 在 `right_arm + require_world_tf=false` 下会在运动前拒绝执行
+  - 这是当前最小比赛级安全入口证据
+
+### 当前阻塞
+- 正式 `verified` 的 `left_tcp -> left_camera` 外参尚未生成并回写到 `calibration_transforms.yaml`；当前仍依赖调试静态 TF 做桌面/抓取验证。
+- 还没有完成“15~30 组图像+TCP”的真实手眼采样与 `eye_in_hand_calibration.py` 计算结果导入。
+- `dual_arm_assist` 仍只是最小等待/门禁模式，不等于比赛级双臂协作动作完成。
+- 还没有拿到 `water_bottle` / `cola_bottle` / `cup` 的正式真机抓取成功证据。
+- spill / 半杯液位 / 双臂接球 3 秒 / 入筐前 release guard 这些官方评分项仍未收口为完整 acceptance。
+
+### 下一步唯一优先级
+1. 用真实标定板或 ArUco 完成 `left_tcp -> left_camera` 的图像+TCP 采样。
+2. 运行 `eye_in_hand_calibration.py` 生成 `camera_to_gripper` 结果。
+3. 用 `promote_calibration_transform.py` dry-run -> 正式回写 `verified` 外参。
+4. 在 `allow_unverified_camera_extrinsics=false` 下重起 perception 热切链，确认：
+   - `left_camera_depth_frame -> world` 可查
+   - `table_surface_detector` 仍能稳定输出 `world` 桌面
+5. 再做真机单臂抓取：
+   - 左臂 `water_bottle`
+   - 右臂 `cola_bottle`

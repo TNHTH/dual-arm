@@ -25,6 +25,7 @@
 #include "depth_handler/msg/bbox3d.hpp"
 #include "depth_handler/msg/bbox3d_array.hpp"
 #include "dualarm_interfaces/msg/detection2_d_array.hpp"
+#include "dualarm_interfaces/msg/scene_object.hpp"
 #include "dualarm_interfaces/msg/scene_object_array.hpp"
 
 namespace depth_handler {
@@ -61,7 +62,8 @@ private:
     std::optional<DetectionGeometry> buildGeometry(
         const dualarm_interfaces::msg::Detection2D& detection,
         const DepthImage::ConstSharedPtr& depth_image,
-        const Eigen::Isometry3d& transform) const;
+        const Eigen::Isometry3d& transform,
+        const std::string& output_frame) const;
     std::vector<Eigen::Vector3f> extractRoiPoints(
         const DepthImage::ConstSharedPtr& depth_image,
         int x0,
@@ -76,6 +78,12 @@ private:
         const std::string& target_frame,
         const std::string& source_frame,
         const builtin_interfaces::msg::Time& stamp) const;
+    void tableSceneCallback(const dualarm_interfaces::msg::SceneObjectArray::SharedPtr message);
+    std::optional<dualarm_interfaces::msg::SceneObject> latestTableObject(const std::string& output_frame) const;
+    float signedDistanceToTable(
+        const Eigen::Vector3f& point,
+        const dualarm_interfaces::msg::SceneObject& table_object) const;
+    Eigen::Vector3f tableNormal(const dualarm_interfaces::msg::SceneObject& table_object) const;
 
     depth_handler::msg::Bbox3d makeLegacyBbox(
         const DetectionGeometry& geometry,
@@ -99,6 +107,7 @@ private:
     std::string scene_objects_topic_;
     std::string pointcloud_topic_;
     std::string visualization_topic_;
+    std::string table_scene_topic_;
     std::string target_frame_;
     bool enable_visualization_ {true};
     bool enable_pointcloud_ {true};
@@ -108,11 +117,15 @@ private:
     int min_points_ {50};
     double fill_target_offset_ {0.03};
     double roi_margin_ratio_ {0.1};
+    double table_reject_distance_ {0.018};
+    bool use_table_plane_ {true};
     std::string expected_detection_frame_;
     std::vector<std::string> allowed_semantic_types_;
 
     sensor_msgs::msg::CameraInfo::SharedPtr camera_info_;
+    dualarm_interfaces::msg::SceneObjectArray::SharedPtr table_scene_;
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
+    rclcpp::Subscription<dualarm_interfaces::msg::SceneObjectArray>::SharedPtr table_scene_sub_;
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle_;

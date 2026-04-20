@@ -301,3 +301,125 @@
   3. `docs/runbooks/engineering-process-standards.md`
   4. `.codex/tmp/resume/IMPLEMENTATION_BREAKPOINTS.md`
   5. `.codex/tmp/resume/SUBAGENT_REGISTRY.json`
+
+## 2026-04-19 真机控制台与姿态库复盘
+
+### Facts
+- 控制台已从验收壳层升级为真机操作台，地址为 `http://127.0.0.1:18081`。
+- API 地址为 `http://127.0.0.1:18080`，静态服务 `18081` 会反向代理 `/api/*`。
+- 姿态库文件为 `.artifacts/console_pose_presets.json`，保存控制器角度单位 `deg` 与 TCP 快照。
+- 姿态切换已改成 `PlanJoint -> ExecuteTrajectory`，不是直接 `MoveJ`。
+- 右臂姿态 `抓瓶子` 已在干净单栈下通过姿态库回放，返回 `success=true`。
+- 右臂控制器网页 `192.168.58.3` 的 Web 问题与 ROS 控制链分离：curl 可取 login HTML，但 Chromium 仍可能 `ERR_EMPTY_RESPONSE`。
+
+### Worked
+- 将 `PlanJoint` 目标单位从姿态库 `deg` 转为 `rad` 后，假碰撞问题消失。
+- 通过 `ros2 action info /execution/execute_trajectory` 快速发现多 action server 污染，是定位“网页点了不动”的关键。
+- 对 `robo_ctrl` ServoJ 线程加 `robot_mutex_` 与异常兜底后，避免 SDK 异常直接 abort 节点。
+- 控制台静态代理增加 API 失败 JSON，避免 `API UNKNOWN` 难以诊断。
+- 右臂通信问题先从 live 网络、单栈、服务、动作四层验证，避免被右臂自带 Web 页面异常误导。
+
+### Waste / Risk
+- 多次手动/网页重复启动 `competition_core`，造成 7 个 `/execution_adapter` action server，严重污染诊断。
+- 一开始把 MoveIt collision 当作“过于保守”，后来证明关键问题是角度/弧度单位错误。
+- 右臂自带 Web 页面异常和 ROS 控制链问题混在一起，容易误判“网页打不开 = 右臂不可控”。
+- `competition_console_api` 的 stale cleanup 仍需继续验证，确保不会误伤静态网页/API 自身，同时能清干净所有旧 core 子进程。
+
+### New Rules
+- 姿态库保存控制器角度时，文件字段必须明确为 `deg`；发送到 MoveIt 前必须转 `rad`。
+- 每次真机控制前必须先查：
+  1. `ros2 action info /execution/execute_trajectory`
+  2. `ros2 node list | rg 'execution_adapter|robo_ctrl|gripper'`
+  3. `curl -s http://127.0.0.1:18080/api/control/state`
+- `/execution/execute_trajectory` action server 数量不等于 1 时，禁止发运动命令。
+- 右臂控制器自带 Web 异常不能直接作为右臂不可控证据；必须用 `/R/robot_state` 和 `/R/robot_move_cart` 判断控制链。
+- 所有后台线程访问 Fairino `FRRobot` SDK 必须持 `robot_mutex_` 并捕获异常。
+
+### Next Actions
+- 优先继续实现用户提出的新功能：
+  1. 网页按住 jog，松开停止
+  2. 姿态保存时记录夹爪开合状态
+  3. 姿态可编排为动作组
+  4. 动作组支持左右臂姿态按顺序回放
+- 继续前先确认单栈：
+  - `ros2 action info /execution/execute_trajectory` 只有 1 个 server
+  - `gripper0/gripper1` 各只有 1 个节点
+  - 左右 `/robot_state` 都有新鲜状态
+
+## 2026-04-20 比赛级自动夹取 / 桌面标定复盘
+
+### Worked
+- 先把 world-frame 门禁前推到 `grasp_pose_generator` 和 `execution_adapter`，再改自动夹取入口，比只在 `pick_assist_auto_grasp.py` 里做局部校验更稳。
+- 将“外部环境只桌子”和“被抓物可 attach”拆开是必要的；如果在 `planning_scene_sync` 里把 attached object 也跟着 world collision 一起裁掉，会直接破坏抓取闭环。
+- 桌面标定做成“小脚本三件套”是高收益路径：
+  - `capture_table_calibration_sample.py`
+  - `evaluate_table_calibration_run.py`
+  - `promote_calibration_transform.py`
+- 桌面采样评估先在同一姿态做 3 次 smoke，很快暴露出法向翻转问题；说明先把工具链跑通再去追真实外参，是对的。
+- `pick_assist_auto_grasp.py` 从 alias 升级成“默认关闭 raw/cartesian fallback 的正式入口”，明显比继续沿用 debug 默认值更符合比赛级安全要求。
+
+### Waste / Risk
+- 一开始把“模型里所有语义都进 depth_handler 白名单”直接改进去了，会和 `ball_basket_pose_estimator` 的职责拆分冲突；比赛级语义全集不等于单个模块都要处理全部语义。
+- 只靠桌面平面不能稳定反推出完整 `left_tcp -> left_camera` 6DoF 外参；桌面更适合作为 verified 之后的 sanity check，而不是 hand-eye 解算替代物。
+- 当前 `dual_arm_assist` 还只是最小等待/门禁模式，不应该被包装成“比赛级双臂协作动作已完成”。
+
+### New Rules
+- 比赛级 perception 收口时，固定参数允许用在：
+  - 对象尺寸代理
+  - 抓取偏移
+  - 桌面阈值
+  - 稳定帧数
+  但不允许用来固定随机物体的 world 位置。
+- 以后桌面标定循环默认顺序固定为：
+  1. 深度尺度
+  2. 桌面阈值
+  3. 外参
+  4. 桌面剔除阈值
+  每轮只改一类参数。
+- 正式入口脚本不得继承 debug fallback 默认值；如果确实需要 fallback，必须显式通过参数打开。
+- `execution_adapter` 这类下游执行层，任何直接吃 `PoseStamped` 的路径都必须校验 `frame_id`，不能默认把数值当成 world 坐标。
+
+### Next Actions
+- 下一窗口优先完成：
+  1. 真实图像+TCP 的 hand-eye 采样
+  2. `eye_in_hand_calibration.py` 结果导入 `tf_node` verified
+  3. 在 strict verified 模式下的桌面 world 验证
+  4. 左臂宜宝 / 右臂可乐的真机抓取
+- 在拿到 verified 外参前，不要宣称比赛级自动夹取已经闭环。
+
+## 2026-04-20 相机与桌面建模复盘
+
+### Facts
+- Orbbec Gemini 335 本轮已恢复为 `2bc5:0800`，不再是上次的 recovery-like mass storage 态。
+- 单独启动 `orbbec_gemini_ros_bridge.py` 后，当前真实设备映射为：
+  - color=`/dev/video8`
+  - depth=`/dev/video2`
+  - depth_backend=`v4l2_z16`
+- `/camera/color/image_raw`、`/camera/depth/image_raw`、`/camera/depth/camera_info` 均有真实 publisher，彩色和深度频率大约 `7-8Hz`。
+- 纯深度 RANSAC 不能稳定给出“肉眼看到的桌面”；采用“彩色木桌先验 + 深度平面确认”后，桌面 overlay 明显更贴近人工观察。
+- 当前已有半成品脚本 `table_surface_detector.py`，但还没进入完整 build / install / runtime 验证闭环。
+
+### Worked
+- 先做 live 枚举，再决定是否恢复相机桥，避免把旧的 `349c:0418` 记忆误当现状。
+- 先保存 RGB、深度伪彩图和 overlay，再凭图修算法，而不是只看数值，是对的。
+- “绿色=肉眼桌面候选，蓝色=深度真实确认区域”这种双层可视化能把“识别效果”和“深度可信区域”明确分开，适合后续抓取辅助。
+
+### Waste / Risk
+- 还没把 `table_surface_detector.py` 真正接进 launch 和 scene/object 主链前，就开始扩 `depth_handler`，容易让中间状态长期悬空。
+- 纯深度平面最大内点策略会偏向背景完整平面；如果不做彩色先验，会持续误把背景当桌面。
+- 当前工具链有一个明显风险：`tools` 包和 `depth_handler` 已经开始修改，但 build 没走完；下个窗口如果直接继续实现而不先收口 build，很容易把错误源混在一起。
+
+### New Rules
+- 桌面建模以后默认用“RGB 视觉一致性为主，深度平面为约束”，不要再把“最大深度平面”直接当桌面。
+- 凡是用于后续机械臂辅助移动的桌面结果，必须同时给出：
+  - RGB overlay
+  - depth-confirmed overlay
+  - JSON 数值结论
+- 感知链新加一个节点时，先完成 build/install/runtime 三连验证，再继续接下游节点，避免半成品长期堆积。
+
+### Next Actions
+- 下一窗口优先做：
+  1. `table_surface_detector.py` build + run + topic 验证
+  2. `depth_handler` 接桌面约束后的 build + smoke
+  3. 把 `best.3.pt` 设为 detector 默认模型
+  4. 再开始自动夹取入口，不要反过来

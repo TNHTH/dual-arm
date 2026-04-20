@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -389,6 +390,10 @@ def run_camera_info_frame_rejection(node: EstimatorHarness) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--expected-calibration-status", default="verified")
+    args = parser.parse_args()
+
     root = repo_root()
     class_map = load_class_map(root)
     if class_map != EXPECTED_CLASS_MAP:
@@ -411,7 +416,7 @@ def main() -> int:
         return 1
     tf_metadata = load_tf_metadata(root)
     extrinsic = tf_metadata.get("left_tcp->left_camera", {})
-    if extrinsic.get("requires_calibration") is not True or extrinsic.get("calibration_status") != "unverified":
+    if extrinsic.get("requires_calibration") is not True or extrinsic.get("calibration_status") != args.expected_calibration_status:
         print(f"extrinsic metadata mismatch: {extrinsic}")
         return 1
 

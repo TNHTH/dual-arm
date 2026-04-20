@@ -25,6 +25,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 
 install(PROGRAMS
+  scripts/promote_calibration_transform.py
   scripts/static_frame_authority.py
   DESTINATION lib/${PROJECT_NAME}
 )

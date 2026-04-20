@@ -33,6 +33,7 @@ class SceneFusionNode(Node):
             [
                 "/perception/scene_objects",
                 "/perception/ball_basket_scene_objects",
+                "/perception/table_scene_objects",
             ],
         )
         self.declare_parameter("output_topic", "/scene_fusion/raw_scene_objects")
@@ -121,6 +122,8 @@ class SceneFusionNode(Node):
             return self._position_gates["cup"]
         if "ball" in semantic_type:
             return self._position_gates["ball"]
+        if semantic_type == "table_surface":
+            return 0.08
         return self._position_gates["basket"]
 
     def _distance(self, left: PoseStamped, right: PoseStamped) -> float:
@@ -156,6 +159,8 @@ class SceneFusionNode(Node):
     def _confidence_threshold(self, semantic_type: str) -> float:
         if "ball" in semantic_type or semantic_type == "basket":
             return 0.55
+        if semantic_type == "table_surface":
+            return 0.50
         return 0.60
 
     def _publish_scene(self) -> None:

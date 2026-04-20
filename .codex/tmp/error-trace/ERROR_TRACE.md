@@ -338,3 +338,143 @@
   - `ball_basket_pose_estimator_node.py` traceback：`Unable to convert call argument to Python object`
   - `move_group` 退出码 `-11`
 - Prevention: 总装停栈阶段若出现节点析构异常，应记录为独立 teardown incident，避免反向污染功能烟测结论。
+
+## Incident 29
+- Time: 2026-04-19
+- Scope: 控制台 API 与网页静态代理
+- Symptom: 控制台页面能打开，但右上角显示 `API UNKNOWN`，页面动作区显示 `null`；`curl http://127.0.0.1:18081/api/health` 返回 `Empty reply from server`。
+- Root cause: `competition_console_static_server.py` 仍在 `18081` 提供静态页面，但 `competition_console_api_node.py` 的 `18080` 后端未运行；静态代理遇到 API 连接失败时未返回明确 JSON，导致浏览器只看到空响应。
+- Handling:
+  1. 重新启动 `competition_console_api_node.py`
+  2. 在 `competition_console_static_server.py` 中为 `/api/*` 反向代理增加异常处理
+  3. API 不可用时返回 `502` 与 `{"error":"competition_console_api_unavailable"}` JSON
+- Evidence:
+  - 修复后 `curl http://127.0.0.1:18080/api/health` 正常
+  - 修复后 `curl http://127.0.0.1:18081/api/health` 正常
+- Prevention: 网页入口以后必须同时检查 `18081` 静态页面和 `18080` API；静态代理不得对后端失败返回空响应。
+
+## Incident 30
+- Time: 2026-04-19
+- Scope: 自定义姿态切换
+- Symptom: 用户保存多个姿态后，点击“切换”机械臂看起来不动或失败。
+- Root cause:
+  1. 早期实现直接调用 `/L|R/robot_move`，未经过规划和执行器
+  2. 后续改为 `PlanJoint -> ExecuteTrajectory` 后发现姿态库保存的是角度 `deg`，而 `PlanJoint.target_joints.position` 需要弧度 `rad`
+  3. 错误单位导致 MoveIt 把目标压到 joint bounds，并产生假碰撞
+- Handling:
+  1. `/api/presets/move` 改为先调用 `/planning/plan_joint`
+  2. 再发送 `/execution/execute_trajectory`
+  3. `_build_joint_state_target()` 中对姿态库角度执行 `math.radians(...)`
+  4. 返回 payload 增加 `stage`、`result_code`、`planning_time_ms`、`current_joint_positions`、`target_joint_positions`、`max_joint_delta_deg`
+- Evidence:
+  - 单位修复后不再复现原先的假碰撞日志
+  - 右臂姿态 `抓瓶子` 通过 `/api/presets/move` 返回 `success=true`
+- Prevention: 所有跨 ROS message 的角度字段都必须明确单位；控制器侧姿态库保持 `deg`，MoveIt/JointTrajectory 接口使用 `rad`。
+
+## Incident 31
+- Time: 2026-04-19
+- Scope: stale ROS graph / duplicate execution adapters
+- Symptom: 右夹爪出现反复合上/展开，姿态切换时 `competition_console_api` 日志提示 `/execution/execute_trajectory` 有多个 action server；`ros2 node list` 可见多个同名 `/execution_adapter`、多个 gripper、多个 `robo_ctrl`。
+- Root cause: 多次从网页/API 和命令行启动 `competition_core`，旧进程未完全清理，导致多个 action server 和多个硬件驱动同时存在，串口和控制器连接互相抢占。
+- Handling:
+  1. 手动强制清理旧 `competition_core`、`move_group`、planner、execution、gripper、`robo_ctrl_node`
+  2. 在 `competition_console_api` `_start_core_process()` 前增加 `_cleanup_stale_core_processes()`
+  3. 清理后确认 `/execution/execute_trajectory` 只有 1 个 server
+- Evidence:
+  - 清理前 `/execution/execute_trajectory` 曾出现 7 个 action server
+  - 清理后只有 `/execution_adapter` 1 个 server
+  - 清理后右臂姿态 `抓瓶子` 可执行
+- Prevention: 每次真机 bringup 前必须先查 action server 数量；若 `/execution/execute_trajectory` server > 1，禁止继续发运动/夹爪命令。
+
+## Incident 32
+- Time: 2026-04-19
+- Scope: `robo_ctrl` ServoJ execution
+- Symptom: 姿态切换规划通过后，左臂执行阶段 `left_robo_ctrl` 崩溃，日志出现 `terminate called after throwing an instance of 'XmlRpc::XmlRpcException'`。
+- Root cause: `robo_ctrl_node.cpp` 的 ServoJ 执行线程直接访问 `FRRobot`，没有和状态轮询共享 `robot_mutex_`，也没有捕获线程异常；SDK/RPC 异常会直接导致进程 abort。
+- Handling:
+  1. ServoJ 增量基准读取加 `robot_mutex_`
+  2. ServoJ 线程内 `robot_->ServoJ()` 和 `WaitMs()` 加 `robot_mutex_`
+  3. 线程体增加 `try/catch`，异常时记录日志并清 `is_servo_running_`
+  4. 重建 `robo_ctrl`
+- Evidence:
+  - 修改前日志出现 `XmlRpc::XmlRpcException` 并进程 exit code `-6`
+  - 修改后右臂姿态切换可通过 `ExecuteTrajectory` 成功执行
+- Prevention: 所有后台线程访问 `FRRobot` 必须统一走 `robot_mutex_` 并兜底异常，不能让 SDK 异常跨线程逃逸。
+
+## Incident 33
+- Time: 2026-04-19
+- Scope: 右臂控制器自带 Web 页面
+- Symptom: `http://192.168.58.3` 在浏览器中显示 `ERR_EMPTY_RESPONSE`；用户认为“右臂网页打不开”。
+- Root cause: 控制器 TCP/IP 可达，`/` 和 `/index.html` 可返回 `302`，`curl /login.html` 可取 HTML，但 Chromium 跟随页面加载时仍会空响应；问题在控制器 Web 服务/浏览器请求链路，不等同于 ROS 控制链断开。
+- Handling:
+  1. 用 Playwright 打开 `http://192.168.58.3` 与 `/login.html` 复现 `ERR_EMPTY_RESPONSE`
+  2. 用 `curl` 验证 `/index.html -> /login.html` 的 `302` 和 `/login.html` 的 HTML 内容
+  3. 将该问题从 ROS 控制链中拆出，避免误判为右臂不可控
+- Evidence:
+  - `ping 192.168.58.3` 正常
+  - `curl -I http://192.168.58.3` 返回 `302`
+  - `curl http://192.168.58.3/login.html` 返回 HTML
+  - Chromium 仍显示 `ERR_EMPTY_RESPONSE`
+- Prevention: 控制器自带网页异常时，优先区分“HTTP/Web 服务异常”和“SDK/ROS 控制链异常”；不要用网页打不开直接否定 `/R/robot_state` 和 `/R/robot_move_cart`。
+
+## Incident 34
+- Time: 2026-04-20
+- Scope: 桌面深度建模第一版
+- Symptom: 第一版桌面拟合 overlay 把中后部大平面与背景一起识别为桌面，而前景木桌大面积没有被覆盖；与肉眼看到的桌面不一致。
+- Root cause: 纯深度 RANSAC 默认选择“有效深度点最多的平面”，当前前景木桌存在明显深度缺失，导致中后部更完整的平面在统计上占优。
+- Handling:
+  1. 保留深度平面拟合作为约束；
+  2. 增加“彩色木桌区域先验”做候选筛选；
+  3. 输出两层 overlay：
+     - `table_color_guided_overlay.png`：更接近肉眼桌面
+     - `table_depth_confirmed_overlay.png`：深度真实确认区域
+  4. 将结论写入 `table_depth_analysis_adjusted.json`
+- Evidence:
+  - `.artifacts/camera_debug/table_depth_analysis_adjusted.json`
+  - `.artifacts/camera_debug/color_latest_adjusted.png`
+  - `.artifacts/camera_debug/table_color_guided_overlay.png`
+  - `.artifacts/camera_debug/table_depth_confirmed_overlay.png`
+- Prevention: 后续桌面建模不要只凭“最大深度平面”判桌面；必须把 RGB 视觉一致性作为主验收标准，深度平面作为几何确认。
+
+## Incident 35
+- Time: 2026-04-20
+- Scope: 桌面建模工具接入被中断
+- Symptom: `table_surface_detector.py` 已写入，`depth_handler` 和 `tools` 包也已开始接桌面约束，但中途被用户打断；当前工作树处于“脚本存在、运行态未验证、构建未闭环”的中间状态。
+- Root cause: 本轮实现跨 `tools` / `depth_handler` / launch 多处写集，尚未走完完整 build 和 runtime 验证。
+- Handling:
+  1. 停止继续扩写；
+  2. 把当前中间状态、证据和下一步入口写回 `STATE.md`、`RETRO.md`、`IMPLEMENTATION_BREAKPOINTS.md`；
+  3. 保留已启动的 Orbbec bridge 和 RGB viewer，作为下一窗口的 live 基线。
+- Evidence:
+  - `git status --short` 显示 `src/tools/tools/scripts/table_surface_detector.py`、`src/perception/depth_handler/*`、`src/perception/scene_fusion/scripts/scene_fusion_node.py` 等仍有未收口改动
+  - live 进程仍有：
+    - `competition_core.launch.py`
+    - `orbbec_gemini_ros_bridge.py`
+    - `ros_image_viewer.py`
+- Prevention: 下个窗口接续前先检查现有 live 进程和未提交改动，不要重复恢复相机；直接从构建与 integration 收口继续。
+
+## Incident 36
+- Time: 2026-04-20
+- Scope: `table_surface_detector` world 桌面发布
+- Symptom:
+  1. 当 `world` TF 接通后，`table_surface_detector.py` 运行时在 `do_transform_pose(...)` 处崩溃；
+  2. 多次静态采样评估时，桌面法向出现接近 `180 deg` 的跳变，导致桌面标定评估假失败。
+- Root cause:
+  1. ROS Humble 下 `tf2_geometry_msgs.do_transform_pose()` 这里被错误地喂入了 `PoseStamped`，而不是 `Pose`；
+  2. 平面法向存在符号二义性，运行态和评估脚本都没有做统一，导致同一平面被当成相反法向。
+- Handling:
+  1. `table_surface_detector.py` 改为先查原时间戳 TF，失败再回退到最新 TF；
+  2. `PoseStamped -> Pose` 转换后再做 TF，重新封装为 `PoseStamped`；
+  3. 失败时继续发布空 `SceneObjectArray` heartbeat；
+  4. 运行态按 `world` 法向方向重算桌面姿态，评估脚本按无符号法向比较；
+  5. 新增桌面采样与评估脚本，并实际采集 `live_smoke_v2` 三个样本。
+- Evidence:
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/calibration/left_camera/live_smoke_v2/summary.json`
+  - 结果：
+    - `world_height_range_m=0.000682`
+    - `normal_drift_deg_max=2.5226`
+    - `median_residual_mm_max=4.7870`
+    - `passes=true`
+- Prevention:
+  - 以后凡是平面或法向稳定性评估，都要先统一法向半球或按 `abs(dot)` 比较；
+  - ROS Python 下的 TF/Pose API 必须先做最小运行态验证，不能只凭记忆套接口。

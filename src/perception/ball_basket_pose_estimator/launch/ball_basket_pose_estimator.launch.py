@@ -13,12 +13,22 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("params_file", default_value=config_file),
+            DeclareLaunchArgument("require_depth_aligned_detections", default_value="true"),
+            DeclareLaunchArgument("expected_detection_frame", default_value=""),
+            DeclareLaunchArgument("require_camera_info_depth_frame", default_value="true"),
             Node(
                 package="ball_basket_pose_estimator",
                 executable="ball_basket_pose_estimator_node.py",
                 name="ball_basket_pose_estimator",
                 output="screen",
-                parameters=[LaunchConfiguration("params_file")],
+                parameters=[
+                    LaunchConfiguration("params_file"),
+                    {
+                        "require_depth_aligned_detections": LaunchConfiguration("require_depth_aligned_detections"),
+                        "expected_detection_frame": LaunchConfiguration("expected_detection_frame"),
+                        "require_camera_info_depth_frame": LaunchConfiguration("require_camera_info_depth_frame"),
+                    },
+                ],
             ),
         ]
     )

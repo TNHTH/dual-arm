@@ -13,6 +13,7 @@ import rclpy
 from ament_index_python.packages import get_package_prefix
 from geometry_msgs.msg import PoseStamped
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
+from rclpy.action import graph as action_graph
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
@@ -77,6 +78,22 @@ class DualArmTaskManagerNode(Node):
 
     def _handle_grasp_target(self, message: GraspTarget) -> None:
         self._grasp_targets[message.object_id] = message
+
+    def _count_action_servers(self, action_name: str) -> int:
+        count = 0
+        for node_name, node_namespace in self.get_node_names_and_namespaces():
+            try:
+                servers = action_graph.get_action_server_names_and_types_by_node(
+                    self,
+                    node_name,
+                    node_namespace,
+                )
+            except Exception:  # pylint: disable=broad-except
+                continue
+            for discovered_name, _types in servers:
+                if discovered_name == action_name:
+                    count += 1
+        return count
 
     def _execute_competition(self, goal_handle):
         run_id = f"run-{int(time.time())}"
@@ -311,6 +328,8 @@ class DualArmTaskManagerNode(Node):
                 missing.append("/execution/execute_primitive")
             if missing:
                 return False, f"SELF_CHECK 缺少依赖: {', '.join(missing)}"
+            if self._count_action_servers("/execution/execute_trajectory") != 1:
+                return False, "SELF_CHECK 发现 /execution/execute_trajectory action server 数量不是 1"
             return True, "SELF_CHECK 依赖可用"
 
         if state == "LOAD_CALIBRATION":
