@@ -4,6 +4,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -179,7 +180,10 @@ def generate_launch_description():
                         "image_topic": LaunchConfiguration("detector_image_topic"),
                         "confidence_threshold": LaunchConfiguration("detector_confidence_threshold"),
                         "device": LaunchConfiguration("detector_device"),
-                        "allowed_class_ids": LaunchConfiguration("detector_allowed_class_ids"),
+                        "allowed_class_ids": ParameterValue(
+                            LaunchConfiguration("detector_allowed_class_ids"),
+                            value_type=str,
+                        ),
                     }
                 ],
             ),
