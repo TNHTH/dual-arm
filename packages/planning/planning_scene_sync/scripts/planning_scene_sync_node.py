@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 import threading
 import time
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import rclpy
 from geometry_msgs.msg import Pose
@@ -17,7 +18,26 @@ from rclpy.node import Node
 from shape_msgs.msg import SolidPrimitive
 
 from dualarm_interfaces.msg import SceneObject, SceneObjectArray
-from dualarm_interfaces.srv import AttachObject, DetachObject, ReleaseObject, ReserveObject
+from dualarm_interfaces.srv import AttachObject, DetachObject, ReleaseObject, ReserveObject, SetObjectInteraction
+
+
+@dataclass(frozen=True)
+class CollisionEntry:
+    collision_id: str
+    primitives: Tuple[SolidPrimitive, ...]
+    poses: Tuple[Pose, ...]
+    frame_id: str
+    attached_link: str = ""
+    touch_links: Tuple[str, ...] = ()
+
+
+@dataclass
+class InteractionState:
+    mode: str = "free"
+    owner: str = ""
+    primary_link: str = ""
+    secondary_link: str = ""
+    enabled: bool = False
 
 
 class PlanningSceneSyncNode(Node):
@@ -36,6 +56,8 @@ class PlanningSceneSyncNode(Node):
         self._managed_scene_version = 0
         self._reservations: Dict[str, str] = {}
         self._attached_links: Dict[str, str] = {}
+        self._interaction_states: Dict[str, InteractionState] = {}
+        self._opened_objects: set[str] = set()
         self._object_cache: Dict[str, SceneObject] = {}
         self._object_last_seen_monotonic: Dict[str, float] = {}
         self._last_world_ids: set[str] = set()
@@ -87,6 +109,12 @@ class PlanningSceneSyncNode(Node):
             DetachObject,
             "/scene/detach_object",
             self._handle_detach,
+            callback_group=self._scene_callback_group,
+        )
+        self.create_service(
+            SetObjectInteraction,
+            "/scene/set_object_interaction",
+            self._handle_set_interaction,
             callback_group=self._scene_callback_group,
         )
         self.get_logger().info(f"planning_scene_sync 已启动，输入: {input_topic}，输出: {output_topic}")
@@ -151,6 +179,62 @@ class PlanningSceneSyncNode(Node):
         response.message = f"{request.object_id} 已 detach" if response.success else f"{request.object_id} detach 同步 MoveIt 失败"
         return response
 
+    def _handle_set_interaction(self, request: SetObjectInteraction.Request, response: SetObjectInteraction.Response):
+        object_id = request.object_id.strip()
+        mode = request.interaction_mode.strip()
+        if not object_id:
+            response.success = False
+            response.message = "object_id 不能为空"
+            return response
+        if mode not in ("free", "attached_single", "dual_contact", "opened_split"):
+            response.success = False
+            response.message = f"未知 interaction_mode={mode}"
+            return response
+        if not self._has_live_object(object_id):
+            response.success = False
+            response.message = f"{object_id} 尚未进入 managed scene，不能设置 interaction"
+            return response
+
+        def mutator():
+            if mode == "free":
+                self._interaction_states.pop(object_id, None)
+                self._attached_links.pop(object_id, None)
+                return
+
+            current = self._interaction_states.get(object_id, InteractionState())
+            next_state = InteractionState(
+                mode=mode,
+                owner=request.owner.strip(),
+                primary_link=request.primary_link.strip(),
+                secondary_link=request.secondary_link.strip(),
+                enabled=bool(request.enable),
+            )
+            if mode == "attached_single":
+                if request.enable and next_state.primary_link:
+                    self._attached_links[object_id] = next_state.primary_link
+                else:
+                    self._attached_links.pop(object_id, None)
+            else:
+                self._attached_links.pop(object_id, None)
+
+            if mode == "opened_split" and request.enable:
+                self._opened_objects.add(object_id)
+            if mode == "opened_split" and not request.enable:
+                self._opened_objects.add(object_id)
+
+            self._interaction_states[object_id] = next_state
+            if current.mode == "opened_split" and mode != "opened_split":
+                self._opened_objects.add(object_id)
+
+        apply_ok = self._run_transaction(mutator)
+        response.success = bool(apply_ok)
+        response.message = (
+            f"{object_id} interaction 已切到 {mode}"
+            if response.success
+            else f"{object_id} interaction={mode} 同步 MoveIt 失败"
+        )
+        return response
+
     def _publish_and_sync(self, wait_for_result: bool) -> bool:
         with self._sync_lock:
             managed = self._build_managed_scene()
@@ -205,6 +289,7 @@ class PlanningSceneSyncNode(Node):
             | fresh_cached_ids
             | set(self._attached_links.keys())
             | set(self._reservations.keys())
+            | set(self._interaction_states.keys())
         )
 
         for object_id in sorted(include_ids):
@@ -222,7 +307,18 @@ class PlanningSceneSyncNode(Node):
                     scene_object.lifecycle_state = "reserved"
             else:
                 scene_object.reserved_by = "none"
-            if object_id in self._attached_links:
+            interaction = self._interaction_states.get(object_id)
+            if interaction and interaction.mode == "dual_contact" and interaction.enabled:
+                scene_object.attached_link = ""
+                scene_object.lifecycle_state = "held_dual_contact"
+                if interaction.owner:
+                    scene_object.reserved_by = interaction.owner
+            elif interaction and interaction.mode == "opened_split":
+                scene_object.attached_link = interaction.primary_link
+                scene_object.lifecycle_state = "opened_split_active" if interaction.enabled else "opened_split"
+                if interaction.owner:
+                    scene_object.reserved_by = interaction.owner
+            elif object_id in self._attached_links:
                 scene_object.attached_link = self._attached_links[object_id]
                 scene_object.lifecycle_state = "attached" if recently_seen else "lost_but_attached"
             else:
@@ -235,8 +331,14 @@ class PlanningSceneSyncNode(Node):
         if not self._wait_for_pending_apply(timeout=5.0):
             return False
 
-        desired_world = {obj.id: obj for obj in managed.objects if not obj.attached_link}
-        desired_attached = {obj.id: obj for obj in managed.objects if obj.attached_link}
+        desired_world: Dict[str, CollisionEntry] = {}
+        desired_attached: Dict[str, CollisionEntry] = {}
+        for scene_object in managed.objects:
+            if not self._is_collision_managed_object(scene_object):
+                continue
+            world_entries, attached_entries = self._collision_entries_for_object(scene_object)
+            desired_world.update({entry.collision_id: entry for entry in world_entries})
+            desired_attached.update({entry.collision_id: entry for entry in attached_entries})
 
         request = ApplyPlanningScene.Request()
         request.scene = PlanningScene()
@@ -245,30 +347,30 @@ class PlanningSceneSyncNode(Node):
 
         world_frame = managed.header.frame_id or self._world_frame
 
-        removing_world_ids = (self._last_world_ids - set(desired_world.keys())) - set(desired_attached.keys())
+        removing_world_ids = self._last_world_ids - set(desired_world.keys())
         for object_id in sorted(removing_world_ids):
             request.scene.world.collision_objects.append(self._make_remove_collision_object(object_id, world_frame))
 
         new_world_snapshots: Dict[str, Tuple] = {}
         new_attached_snapshots: Dict[str, Tuple] = {}
 
-        for object_id, scene_object in desired_world.items():
-            snapshot = self._scene_snapshot(scene_object)
+        for object_id, collision_entry in desired_world.items():
+            snapshot = self._collision_snapshot(collision_entry)
             new_world_snapshots[object_id] = snapshot
             if self._world_snapshots.get(object_id) != snapshot or object_id not in self._last_world_ids:
-                request.scene.world.collision_objects.append(self._make_add_collision_object(scene_object, world_frame))
+                request.scene.world.collision_objects.append(self._make_add_collision_object(collision_entry))
 
         for object_id in sorted(self._last_attached_ids - set(desired_attached.keys())):
             request.scene.robot_state.attached_collision_objects.append(
                 self._make_remove_attached_object(object_id)
             )
 
-        for object_id, scene_object in desired_attached.items():
-            snapshot = self._scene_snapshot(scene_object)
+        for object_id, collision_entry in desired_attached.items():
+            snapshot = self._collision_snapshot(collision_entry)
             new_attached_snapshots[object_id] = snapshot
             if self._attached_snapshots.get(object_id) != snapshot or object_id not in self._last_attached_ids:
                 request.scene.robot_state.attached_collision_objects.append(
-                    self._make_add_attached_object(scene_object, world_frame)
+                    self._make_add_attached_object(collision_entry)
                 )
 
         if not request.scene.world.collision_objects and not request.scene.robot_state.attached_collision_objects:
@@ -298,16 +400,20 @@ class PlanningSceneSyncNode(Node):
             scene_object = self._object_cache.get(object_id)
             if scene_object is None:
                 return False
+            world_entries, attached_entries = self._collision_entries_for_object(scene_object)
+            if attached_entries:
+                self.get_logger().warn(f"{object_id} 当前不是 free world object，不能用于 _ensure_world_object")
+                return False
+            if not world_entries:
+                return False
             if not self._wait_for_pending_apply(timeout=5.0):
                 return False
 
             request = ApplyPlanningScene.Request()
             request.scene = PlanningScene()
             request.scene.is_diff = True
-            world_frame = self._raw_scene.header.frame_id or self._world_frame
-            request.scene.world.collision_objects.append(
-                self._make_add_collision_object(scene_object, world_frame)
-            )
+            for entry in world_entries:
+                request.scene.world.collision_objects.append(self._make_add_collision_object(entry))
             self._log_diff_summary(request.scene)
             if not self._call_apply_scene_blocking(request, timeout=5.0):
                 return False
@@ -315,8 +421,9 @@ class PlanningSceneSyncNode(Node):
                 self.get_logger().warn(f"{object_id} 已 apply ADD，但 GetPlanningScene 暂未确认 world object 可见")
                 return False
 
-            self._last_world_ids.add(object_id)
-            self._world_snapshots[object_id] = self._scene_snapshot(scene_object)
+            for entry in world_entries:
+                self._last_world_ids.add(entry.collision_id)
+                self._world_snapshots[entry.collision_id] = self._collision_snapshot(entry)
             return True
 
     def _wait_for_world_object(self, object_id: str, timeout: float) -> bool:
@@ -421,13 +528,15 @@ class PlanningSceneSyncNode(Node):
             if object_id in self._object_cache
         }
 
-    def _make_add_attached_object(self, scene_object: SceneObject, frame_id: str) -> AttachedCollisionObject:
+    def _make_add_attached_object(self, collision_entry: CollisionEntry) -> AttachedCollisionObject:
         attached = AttachedCollisionObject()
-        attached.link_name = scene_object.attached_link
-        attached.object = self._make_add_collision_object(scene_object, frame_id)
+        attached.link_name = collision_entry.attached_link
+        attached.object = self._make_add_collision_object(collision_entry)
         attached.object.operation = CollisionObject.ADD
-        if scene_object.attached_link:
-            attached.touch_links = [scene_object.attached_link]
+        if collision_entry.touch_links:
+            attached.touch_links = list(collision_entry.touch_links)
+        elif collision_entry.attached_link:
+            attached.touch_links = [collision_entry.attached_link]
         return attached
 
     def _make_remove_attached_object(self, object_id: str) -> AttachedCollisionObject:
@@ -436,13 +545,12 @@ class PlanningSceneSyncNode(Node):
         attached.object.operation = CollisionObject.REMOVE
         return attached
 
-    def _make_add_collision_object(self, scene_object: SceneObject, frame_id: str) -> CollisionObject:
+    def _make_add_collision_object(self, collision_entry: CollisionEntry) -> CollisionObject:
         collision_object = CollisionObject()
-        collision_object.id = scene_object.id
-        collision_object.header.frame_id = scene_object.pose.header.frame_id or frame_id
-        primitive, pose = self._scene_object_to_primitive(scene_object)
-        collision_object.primitives.append(primitive)
-        collision_object.primitive_poses.append(pose)
+        collision_object.id = collision_entry.collision_id
+        collision_object.header.frame_id = collision_entry.frame_id
+        collision_object.primitives.extend(collision_entry.primitives)
+        collision_object.primitive_poses.extend(collision_entry.poses)
         collision_object.operation = CollisionObject.ADD
         return collision_object
 
@@ -452,6 +560,19 @@ class PlanningSceneSyncNode(Node):
         collision_object.header.frame_id = frame_id
         collision_object.operation = CollisionObject.REMOVE
         return collision_object
+
+    def _is_collision_managed_object(self, scene_object: SceneObject) -> bool:
+        if not scene_object.semantic_type:
+            return False
+        return scene_object.semantic_type in {
+            "table_surface",
+            "water_bottle",
+            "cola_bottle",
+            "cup",
+            "basketball",
+            "soccer_ball",
+            "basket",
+        }
 
     def _log_diff_summary(self, scene: PlanningScene) -> None:
         world_add = [obj.id for obj in scene.world.collision_objects if obj.operation == CollisionObject.ADD]
@@ -472,7 +593,10 @@ class PlanningSceneSyncNode(Node):
             f"attached_add={attached_add}, attached_remove={attached_remove}"
         )
 
-    def _scene_object_to_primitive(self, scene_object: SceneObject) -> Tuple[SolidPrimitive, Pose]:
+    def _scene_object_to_collision(self, scene_object: SceneObject, include_cap: bool = True) -> Tuple[Tuple[SolidPrimitive, ...], Tuple[Pose, ...]]:
+        if scene_object.semantic_type in ("water_bottle", "cola_bottle"):
+            return self._make_bottle_collision(scene_object, include_cap=include_cap)
+
         primitive = SolidPrimitive()
         pose = Pose()
         pose.position = scene_object.pose.pose.position
@@ -483,7 +607,10 @@ class PlanningSceneSyncNode(Node):
         size_z = max(float(scene_object.size.z), 0.01)
         radius = max(size_x, size_y) / 2.0
 
-        if scene_object.semantic_type in ("basketball", "soccer_ball"):
+        if scene_object.semantic_type == "table_surface":
+            primitive.type = SolidPrimitive.BOX
+            primitive.dimensions = [size_x, size_y, size_z]
+        elif scene_object.semantic_type in ("basketball", "soccer_ball"):
             primitive.type = SolidPrimitive.SPHERE
             primitive.dimensions = [max(size_x, size_y, size_z) / 2.0]
         elif scene_object.semantic_type == "basket":
@@ -493,7 +620,141 @@ class PlanningSceneSyncNode(Node):
             primitive.type = SolidPrimitive.CYLINDER
             primitive.dimensions = [size_z, radius]
 
-        return primitive, pose
+        return (primitive,), (pose,)
+
+    def _collision_entries_for_object(self, scene_object: SceneObject) -> Tuple[List[CollisionEntry], List[CollisionEntry]]:
+        interaction = self._interaction_states.get(scene_object.id)
+        world_entries: List[CollisionEntry] = []
+        attached_entries: List[CollisionEntry] = []
+        frame_id = scene_object.pose.header.frame_id or self._world_frame
+
+        if interaction and interaction.mode == "dual_contact" and interaction.enabled:
+            return world_entries, attached_entries
+
+        if interaction and interaction.mode == "opened_split":
+            body_entry, cap_entry = self._make_split_entries(scene_object, interaction, frame_id)
+            if interaction.primary_link:
+                attached_entries.append(body_entry)
+            else:
+                world_entries.append(body_entry)
+            if interaction.enabled and interaction.secondary_link:
+                attached_entries.append(cap_entry)
+            return world_entries, attached_entries
+
+        if scene_object.attached_link:
+            primitives, poses = self._scene_object_to_collision(
+                scene_object,
+                include_cap=scene_object.id not in self._opened_objects,
+            )
+            attached_entries.append(
+                CollisionEntry(
+                    collision_id=scene_object.id,
+                    primitives=primitives,
+                    poses=poses,
+                    frame_id=frame_id,
+                    attached_link=scene_object.attached_link,
+                    touch_links=(scene_object.attached_link,),
+                )
+            )
+            return world_entries, attached_entries
+
+        primitives, poses = self._scene_object_to_collision(
+            scene_object,
+            include_cap=scene_object.id not in self._opened_objects,
+        )
+        world_entries.append(
+            CollisionEntry(
+                collision_id=scene_object.id,
+                primitives=primitives,
+                poses=poses,
+                frame_id=frame_id,
+            )
+        )
+        return world_entries, attached_entries
+
+    def _make_split_entries(
+        self,
+        scene_object: SceneObject,
+        interaction: InteractionState,
+        frame_id: str,
+    ) -> Tuple[CollisionEntry, CollisionEntry]:
+        body_radius = max(float(scene_object.size.x), float(scene_object.size.y)) * 0.5
+        body_height = max(float(scene_object.size.z), 0.01)
+        cap_radius = max(body_radius * 0.55, 0.01)
+        cap_height = max(body_height * 0.12, 0.01)
+
+        cap_center_pose = self._lookup_subframe_pose(scene_object, "bottle_cap_center")
+        if cap_center_pose is None:
+            cap_center_pose = deepcopy(scene_object.pose.pose)
+            cap_center_pose.position.z += max(body_height * 0.5 - cap_height * 0.5, 0.0)
+
+        body_pose = deepcopy(scene_object.pose.pose)
+        body_primitive = SolidPrimitive()
+        body_primitive.type = SolidPrimitive.CYLINDER
+        body_primitive.dimensions = [body_height, body_radius]
+
+        cap_primitive = SolidPrimitive()
+        cap_primitive.type = SolidPrimitive.CYLINDER
+        cap_primitive.dimensions = [cap_height, cap_radius]
+
+        body_entry = CollisionEntry(
+            collision_id=f"{scene_object.id}::body",
+            primitives=(body_primitive,),
+            poses=(body_pose,),
+            frame_id=frame_id,
+            attached_link=interaction.primary_link,
+            touch_links=((interaction.primary_link,) if interaction.primary_link else ()),
+        )
+        cap_entry = CollisionEntry(
+            collision_id=f"{scene_object.id}::cap",
+            primitives=(cap_primitive,),
+            poses=(cap_center_pose,),
+            frame_id=frame_id,
+            attached_link=interaction.secondary_link,
+            touch_links=((interaction.secondary_link,) if interaction.secondary_link else ()),
+        )
+        return body_entry, cap_entry
+
+    def _make_bottle_collision(
+        self,
+        scene_object: SceneObject,
+        include_cap: bool,
+    ) -> Tuple[Tuple[SolidPrimitive, ...], Tuple[Pose, ...]]:
+        body_radius = max(float(scene_object.size.x), float(scene_object.size.y)) * 0.5
+        full_height = max(float(scene_object.size.z), 0.01)
+        cap_radius = max(body_radius * 0.55, 0.01)
+        cap_height = max(full_height * 0.12, 0.01)
+        body_height = max(full_height - cap_height, 0.01)
+
+        body_primitive = SolidPrimitive()
+        body_primitive.type = SolidPrimitive.CYLINDER
+        body_primitive.dimensions = [body_height, body_radius]
+
+        body_pose = deepcopy(scene_object.pose.pose)
+        body_pose.position.z -= max((full_height - body_height) * 0.5, 0.0)
+
+        primitives: List[SolidPrimitive] = [body_primitive]
+        poses: List[Pose] = [body_pose]
+
+        if include_cap:
+            cap_pose = self._lookup_subframe_pose(scene_object, "bottle_cap_center")
+            if cap_pose is None:
+                cap_pose = deepcopy(scene_object.pose.pose)
+                cap_pose.position.z += max(full_height * 0.5 - cap_height * 0.5, 0.0)
+
+            cap_primitive = SolidPrimitive()
+            cap_primitive.type = SolidPrimitive.CYLINDER
+            cap_primitive.dimensions = [cap_height, cap_radius]
+            primitives.append(cap_primitive)
+            poses.append(cap_pose)
+
+        return tuple(primitives), tuple(poses)
+
+    def _lookup_subframe_pose(self, scene_object: SceneObject, subframe_name: str) -> Optional[Pose]:
+        for subframe in scene_object.subframes:
+            if subframe.name == subframe_name:
+                return deepcopy(subframe.pose.pose)
+        return None
 
     def _scene_snapshot(self, scene_object: SceneObject) -> Tuple:
         pose = scene_object.pose.pose
@@ -510,6 +771,27 @@ class PlanningSceneSyncNode(Node):
             round(float(scene_object.size.y), 4),
             round(float(scene_object.size.z), 4),
             scene_object.attached_link,
+        )
+
+    def _collision_snapshot(self, collision_entry: CollisionEntry) -> Tuple:
+        pose = collision_entry.poses[0]
+        dims = tuple(
+            tuple(round(float(value), 4) for value in primitive.dimensions)
+            for primitive in collision_entry.primitives
+        )
+        return (
+            collision_entry.collision_id,
+            tuple(primitive.type for primitive in collision_entry.primitives),
+            round(float(pose.position.x), 4),
+            round(float(pose.position.y), 4),
+            round(float(pose.position.z), 4),
+            round(float(pose.orientation.x), 4),
+            round(float(pose.orientation.y), 4),
+            round(float(pose.orientation.z), 4),
+            round(float(pose.orientation.w), 4),
+            dims,
+            collision_entry.attached_link,
+            collision_entry.touch_links,
         )
 
 def main() -> None:

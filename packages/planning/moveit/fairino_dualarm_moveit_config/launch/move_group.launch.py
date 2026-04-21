@@ -20,6 +20,18 @@ def load_yaml(package_name, relative_path):
 def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     publish_fake_joint_states = LaunchConfiguration("publish_fake_joint_states")
+    left_base_x = LaunchConfiguration("left_base_x")
+    left_base_y = LaunchConfiguration("left_base_y")
+    left_base_z = LaunchConfiguration("left_base_z")
+    left_base_roll = LaunchConfiguration("left_base_roll")
+    left_base_pitch = LaunchConfiguration("left_base_pitch")
+    left_base_yaw = LaunchConfiguration("left_base_yaw")
+    right_base_x = LaunchConfiguration("right_base_x")
+    right_base_y = LaunchConfiguration("right_base_y")
+    right_base_z = LaunchConfiguration("right_base_z")
+    right_base_roll = LaunchConfiguration("right_base_roll")
+    right_base_pitch = LaunchConfiguration("right_base_pitch")
+    right_base_yaw = LaunchConfiguration("right_base_yaw")
     description_package = "fairino_dualarm_description"
     config_package = "fairino_dualarm_moveit_config"
 
@@ -33,6 +45,18 @@ def generate_launch_description():
                     "fairino_dualarm.urdf.xacro",
                 ]
             ),
+            " left_base_x:=", left_base_x,
+            " left_base_y:=", left_base_y,
+            " left_base_z:=", left_base_z,
+            " left_base_roll:=", left_base_roll,
+            " left_base_pitch:=", left_base_pitch,
+            " left_base_yaw:=", left_base_yaw,
+            " right_base_x:=", right_base_x,
+            " right_base_y:=", right_base_y,
+            " right_base_z:=", right_base_z,
+            " right_base_roll:=", right_base_roll,
+            " right_base_pitch:=", right_base_pitch,
+            " right_base_yaw:=", right_base_yaw,
         ]
     )
     robot_description = {"robot_description": robot_description_content}
@@ -111,6 +135,18 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("publish_fake_joint_states", default_value="false"),
+            DeclareLaunchArgument("left_base_x", default_value="0"),
+            DeclareLaunchArgument("left_base_y", default_value="0.35"),
+            DeclareLaunchArgument("left_base_z", default_value="0"),
+            DeclareLaunchArgument("left_base_roll", default_value="0"),
+            DeclareLaunchArgument("left_base_pitch", default_value="0"),
+            DeclareLaunchArgument("left_base_yaw", default_value="0"),
+            DeclareLaunchArgument("right_base_x", default_value="0"),
+            DeclareLaunchArgument("right_base_y", default_value="-0.35"),
+            DeclareLaunchArgument("right_base_z", default_value="0"),
+            DeclareLaunchArgument("right_base_roll", default_value="0"),
+            DeclareLaunchArgument("right_base_pitch", default_value="0"),
+            DeclareLaunchArgument("right_base_yaw", default_value="3.141592653589793"),
             robot_state_publisher,
             joint_state_publisher,
             move_group,

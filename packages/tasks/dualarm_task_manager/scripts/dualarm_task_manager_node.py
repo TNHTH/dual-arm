@@ -2,22 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
 
 import rclpy
 from ament_index_python.packages import get_package_prefix
 from geometry_msgs.msg import PoseStamped
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
+from rclpy.action import graph as action_graph
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+import yaml
 
+from behavior_contract import BehaviorGripperCommand, BehaviorPlanExecutionCall, BehaviorPrimitiveCall, summarize_behavior_call
+from behaviors.cap_pour_boundary import CAP_POUR_BEHAVIOR_STATES, build_cap_pour_behavior_call
+from behaviors.handover_boundary import HANDOVER_BEHAVIOR_STATES, build_handover_behavior_call
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory, RunCompetition
 from dualarm_interfaces.msg import GraspTarget, SceneObject, SceneObjectArray, TaskEvent
-from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGripper
+from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGripper, SetObjectInteraction, TaskCommand
 
 
 class DualArmTaskManagerNode(Node):
@@ -26,14 +33,25 @@ class DualArmTaskManagerNode(Node):
         self.declare_parameter("task_sequence", "handover,pouring")
         repo_root = Path(get_package_prefix("dualarm_task_manager")).parent.parent
         self.declare_parameter("checkpoint_dir", str(repo_root / ".artifacts" / "checkpoints" / "competition"))
+        self.declare_parameter("workspace_profiles_file", str(repo_root / "config" / "competition" / "workspace_profiles.yaml"))
 
         self._scene_cache = SceneObjectArray()
         self._grasp_targets: Dict[str, GraspTarget] = {}
         self._assignments: Dict[str, str] = {}
+        self._current_task_sequence = ""
+        self._current_states: List[str] = []
         self._last_plan = None
+        self._last_plan_digest = ""
+        self._last_behavior_call = None
+        self._start_immediately = False
+        self._start_gate_source = ""
         self._checkpoint_dir = Path(str(self.get_parameter("checkpoint_dir").value))
         self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
         (self._checkpoint_dir / "runs").mkdir(parents=True, exist_ok=True)
+        workspace_profiles_file = Path(str(self.get_parameter("workspace_profiles_file").value)).expanduser().resolve()
+        workspace_profiles = yaml.safe_load(workspace_profiles_file.read_text(encoding="utf-8"))
+        active_profile_name = str(workspace_profiles.get("active_profile", "competition_default"))
+        self._active_workspace_profile = workspace_profiles.get("profiles", {}).get(active_profile_name, {})
 
         self._event_publisher = self.create_publisher(TaskEvent, "/task_manager/events", 10)
         self.create_subscription(SceneObjectArray, "/scene_fusion/scene_objects", self._handle_scene, 10)
@@ -43,8 +61,10 @@ class DualArmTaskManagerNode(Node):
         self._reserve_client = self.create_client(ReserveObject, "/scene/reserve_object")
         self._release_client = self.create_client(ReleaseObject, "/scene/release_object")
         self._set_gripper_client = self.create_client(SetGripper, "/execution/set_gripper")
+        self._set_object_interaction_client = self.create_client(SetObjectInteraction, "/scene/set_object_interaction")
         self._execute_client = ActionClient(self, ExecuteTrajectory, "/execution/execute_trajectory")
         self._primitive_client = ActionClient(self, ExecutePrimitive, "/execution/execute_primitive")
+        self.create_service(TaskCommand, "/task/command", self._handle_task_command)
 
         self._action_server = ActionServer(
             self,
@@ -62,15 +82,99 @@ class DualArmTaskManagerNode(Node):
     def _cancel_callback(self, _goal_handle) -> CancelResponse:
         return CancelResponse.ACCEPT
 
+    def _handle_task_command(self, request: TaskCommand.Request, response: TaskCommand.Response):
+        command_id = request.command_id.strip()
+        object_id = request.object_id.strip()
+        response.active_state = command_id
+
+        if command_id == "scan_table":
+            response.success, response.message = self._move_arm_to_named_pose("left_scan_table_pose_1")
+            return response
+        if command_id == "scan_basket":
+            response.success, response.message = self._move_arm_to_named_pose("left_scan_basket_pose")
+            return response
+        if command_id == "move_to_cap_workspace":
+            response.success, response.message = self._move_arm_to_named_pose("right_cap_workspace_pose")
+            return response
+        if command_id == "yield_left":
+            response.success, response.message = self._move_arm_to_named_pose("left_scan_yield_pose")
+            return response
+        if command_id == "yield_right":
+            response.success, response.message = self._move_arm_to_named_pose("right_scan_yield_pose")
+            return response
+        if command_id == "home_left":
+            response.success, response.message = self._move_arm_to_named_pose("left_home_pose")
+            return response
+        if command_id == "home_right":
+            response.success, response.message = self._move_arm_to_named_pose("right_home_pose")
+            return response
+        if command_id == "preview_pick":
+            response.success, response.message = self._preview_pick(object_id)
+            return response
+        if command_id == "execute_pick":
+            response.success, response.message = self._direct_grasp(object_id, f"rviz_pick:{object_id}")
+            return response
+        if command_id == "open_cap":
+            response.success, response.message = self._execute_open_cap_command(object_id)
+            return response
+        if command_id == "pick_cup":
+            response.success, response.message = self._execute_pick_cup_command(object_id)
+            return response
+        if command_id == "align_pour":
+            response.success, response.message = self._execute_align_pour_command(object_id)
+            return response
+        if command_id == "pour":
+            response.success, response.message = self._execute_pour_command(object_id)
+            return response
+        if command_id == "plan_ball_pair":
+            response.success, response.message = self._execute_plan_ball_pair_command(object_id)
+            return response
+        if command_id == "execute_ball_close":
+            response.success, response.message = self._execute_ball_close_command(object_id)
+            return response
+        if command_id == "release_ball":
+            response.success, response.message = self._execute_release_ball_command(object_id)
+            return response
+        if command_id == "abort":
+            response.success = True
+            response.message = "task_manager 已收到 abort 请求；当前版本请通过 action cancel 或上层中止联动"
+            return response
+
+        response.success = False
+        response.message = f"当前命令未实现: {command_id}"
+        return response
+
     def _handle_scene(self, message: SceneObjectArray) -> None:
         self._scene_cache = message
 
     def _handle_grasp_target(self, message: GraspTarget) -> None:
         self._grasp_targets[message.object_id] = message
 
+    def _count_action_servers(self, action_name: str) -> int:
+        count = 0
+        for node_name, node_namespace in self.get_node_names_and_namespaces():
+            try:
+                servers = action_graph.get_action_server_names_and_types_by_node(
+                    self,
+                    node_name,
+                    node_namespace,
+                )
+            except Exception:  # pylint: disable=broad-except
+                continue
+            for discovered_name, _types in servers:
+                if discovered_name == action_name:
+                    count += 1
+        return count
+
     def _execute_competition(self, goal_handle):
         run_id = f"run-{int(time.time())}"
         checkpoint_state = None
+        self._assignments = {}
+        self._last_plan = None
+        self._last_plan_digest = ""
+        self._last_behavior_call = None
+        self._start_immediately = goal_handle.request.start_immediately
+        self._start_gate_source = "auto_start" if goal_handle.request.start_immediately else "action_goal"
         if goal_handle.request.resume_from_checkpoint:
             checkpoint_state = self._load_checkpoint(goal_handle.request.checkpoint_id)
             if checkpoint_state is None:
@@ -84,9 +188,37 @@ class DualArmTaskManagerNode(Node):
             run_id = checkpoint_state["run_id"]
             self._assignments = dict(checkpoint_state.get("assignments", {}))
 
-        sequence = goal_handle.request.requested_order or self.get_parameter("task_sequence").value
-        ordered_tasks = [item.strip() for item in sequence.split(",") if item.strip()]
+        sequence = self._normalize_task_sequence(goal_handle.request.requested_order or self.get_parameter("task_sequence").value)
+        checkpoint_sequence = self._normalize_task_sequence(str(checkpoint_state.get("task_sequence", ""))) if checkpoint_state else ""
+        if checkpoint_sequence and checkpoint_sequence != sequence:
+            if goal_handle.request.allow_reconcile:
+                self.get_logger().warn(
+                    f"[task_manager] checkpoint task_sequence={checkpoint_sequence} 覆盖 requested_order={sequence}"
+                )
+                sequence = checkpoint_sequence
+            else:
+                result = RunCompetition.Result()
+                result.success = False
+                result.message = "checkpoint task_sequence 与 requested_order 不一致"
+                result.final_checkpoint_id = goal_handle.request.checkpoint_id
+                result.resume_hint = "如需按 checkpoint 中的状态序列恢复，请设置 allow_reconcile=true"
+                goal_handle.abort()
+                return result
+
+        self._current_task_sequence = sequence
+        ordered_tasks = self._parse_task_sequence(sequence)
         states = self._build_states(ordered_tasks)
+        self._current_states = list(states)
+        if checkpoint_state:
+            checkpoint_error = self._validate_checkpoint_state(checkpoint_state, states, goal_handle.request.allow_reconcile)
+            if checkpoint_error:
+                result = RunCompetition.Result()
+                result.success = False
+                result.message = f"checkpoint 校验失败: {checkpoint_error}"
+                result.final_checkpoint_id = goal_handle.request.checkpoint_id
+                result.resume_hint = "请修正 checkpoint 或重新开始一轮运行"
+                goal_handle.abort()
+                return result
 
         resume_completed_order = list(checkpoint_state.get("completed_states", [])) if checkpoint_state else []
         resume_completed = set(resume_completed_order)
@@ -189,18 +321,18 @@ class DualArmTaskManagerNode(Node):
 
     def _execute_state(self, state: str) -> Tuple[bool, str]:
         if state in {"BOOT", "SELF_CHECK", "LOAD_CALIBRATION", "HOME_ARMS", "WAIT_START", "PARK", "DONE"}:
-            return True, "基础状态完成"
+            return self._execute_orchestration_gate(state)
 
         if state == "SCAN_BASKET":
-            return self._require_object("basket")
+            return self._require_object("basket", allowed_states=("stable",))
         if state == "WAIT_BALL_1_STABLE":
-            return self._require_object("basketball")
+            return self._require_object("basketball", allowed_states=("stable",))
         if state == "WAIT_BALL_2_STABLE":
-            return self._require_object("soccer_ball")
+            return self._require_object("soccer_ball", allowed_states=("stable",))
         if state == "SCAN_TABLE_OBJECTS":
-            ok1, _ = self._require_object("water_bottle")
-            ok2, _ = self._require_object("cola_bottle")
-            cups = self._objects_by_prefix("cup")
+            ok1, _ = self._require_object("water_bottle", allowed_states=("stable",))
+            ok2, _ = self._require_object("cola_bottle", allowed_states=("stable",))
+            cups = self._objects_by_prefix("cup", allowed_states=("stable",))
             return ok1 and ok2 and len(cups) >= 2, f"water={ok1}, cola={ok2}, cups={len(cups)}"
         if state == "ASSIGN_BOTTLES_AND_CUPS":
             return self._assign_table_objects()
@@ -217,67 +349,92 @@ class DualArmTaskManagerNode(Node):
             semantic_type, target_field, reservation = plan_states[state]
             return self._plan_for_object(semantic_type, target_field, reservation)
 
-        if state in {"GRASP_BALL_1", "GRASP_BALL_2"}:
-            object_id = self._assignments.get("basketball" if state.endswith("1") else "soccer_ball")
-            return self._execute_last_plan_and_grasp(object_id, dual=True)
-        if state in {"RELEASE_BALL_1", "RELEASE_BALL_2"}:
-            object_id = self._assignments.get("basketball" if state.endswith("1") else "soccer_ball")
-            return self._execute_release_guard(object_id)
+        behavior_call, behavior_error = self._build_behavior_call(state)
+        if behavior_error is not None:
+            return False, behavior_error
+        if behavior_call is not None:
+            return self._execute_behavior_call(state, behavior_call)
+
         if state in {"VERIFY_BALL_1_DROP", "VERIFY_BALL_2_DROP"}:
             object_id = self._assignments.get("basketball" if state.endswith("1") else "soccer_ball")
-            return self._verify_detached(object_id)
-        if state in {"HOLD_BALL_1_3S", "HOLD_BALL_2_3S"}:
-            object_id = self._assignments.get("basketball" if state.endswith("1") else "soccer_ball", "")
-            return self._execute_hold_verify(object_id)
+            return self._verify_drop_in_basket(object_id)
 
         if state == "GRASP_WATER_BOTTLE_BODY":
             return self._direct_grasp("water_bottle", "water_task")
         if state == "GRASP_COLA_BOTTLE_BODY":
             return self._direct_grasp("cola_bottle", "cola_task")
-        if state == "GRASP_WATER_CAP":
-            return self._execute_cap_align_and_grasp(self._assignments.get("water_bottle", ""))
-        if state == "GRASP_COLA_CAP":
-            return self._execute_cap_align_and_grasp(self._assignments.get("cola_bottle", ""))
-        if state == "OPEN_WATER_CAP":
-            return self._execute_cap_twist(self._assignments.get("water_bottle", ""))
-        if state == "OPEN_COLA_CAP":
-            return self._execute_cap_twist(self._assignments.get("cola_bottle", ""))
-        if state == "PLACE_WATER_CAP":
-            return self._execute_cap_place(self._assignments.get("water_bottle", ""))
-        if state == "PLACE_COLA_CAP":
-            return self._execute_cap_place(self._assignments.get("cola_bottle", ""))
         if state == "GRASP_WATER_CUP":
             return self._direct_grasp(self._assignments.get("cup_water", "cup"), "water_task")
         if state == "GRASP_COLA_CUP":
             return self._direct_grasp(self._assignments.get("cup_cola", "cup"), "cola_task")
-        if state == "EXECUTE_WATER_POUR":
-            return self._execute_pour(self._assignments.get("water_bottle", ""), self._assignments.get("cup_water", ""))
-        if state == "EXECUTE_COLA_POUR":
-            return self._execute_pour(self._assignments.get("cola_bottle", ""), self._assignments.get("cup_cola", ""))
         if state == "PLACE_WATER_BOTTLE":
-            return self._place_object("water_bottle", "water_task")
+            return self._place_object("water_bottle")
         if state == "PLACE_COLA_BOTTLE":
-            return self._place_object("cola_bottle", "cola_task")
+            return self._place_object("cola_bottle")
         if state == "PLACE_WATER_CUP":
-            return self._place_object("cup_water", "water_task")
+            return self._place_object("cup_water")
         if state == "PLACE_COLA_CUP":
-            return self._place_object("cup_cola", "cola_task")
+            return self._place_object("cup_cola")
 
         return False, f"未定义状态: {state}"
 
-    def _require_object(self, semantic_type: str) -> Tuple[bool, str]:
-        scene_object = self._find_object(semantic_type)
+    def _execute_orchestration_gate(self, state: str) -> Tuple[bool, str]:
+        if state == "BOOT":
+            if not self._checkpoint_dir.exists() or not self._checkpoint_dir.is_dir():
+                return False, f"checkpoint_dir 不可用: {self._checkpoint_dir}"
+            return True, f"checkpoint_dir ready: {self._checkpoint_dir}"
+
+        if state == "SELF_CHECK":
+            missing = []
+            service_checks = [
+                ("/planning/plan_pose", self._plan_pose_client.wait_for_service(timeout_sec=0.1)),
+                ("/scene/reserve_object", self._reserve_client.wait_for_service(timeout_sec=0.1)),
+                ("/scene/release_object", self._release_client.wait_for_service(timeout_sec=0.1)),
+                ("/execution/set_gripper", self._set_gripper_client.wait_for_service(timeout_sec=0.1)),
+            ]
+            missing.extend(name for name, ready in service_checks if not ready)
+            if not self._execute_client.wait_for_server(timeout_sec=0.1):
+                missing.append("/execution/execute_trajectory")
+            if not self._primitive_client.wait_for_server(timeout_sec=0.1):
+                missing.append("/execution/execute_primitive")
+            if missing:
+                return False, f"SELF_CHECK 缺少依赖: {', '.join(missing)}"
+            if self._count_action_servers("/execution/execute_trajectory") != 1:
+                return False, "SELF_CHECK 发现 /execution/execute_trajectory action server 数量不是 1"
+            return True, "SELF_CHECK 依赖可用"
+
+        if state == "LOAD_CALIBRATION":
+            frame_id = self._scene_cache.header.frame_id.strip()
+            if not frame_id:
+                return False, "scene_fusion 尚未提供 frame_id，不能确认标定/场景参考系"
+            return True, f"scene frame ready: {frame_id}"
+
+        if state == "HOME_ARMS":
+            return self._verify_no_live_allocations("HOME_ARMS")
+
+        if state == "WAIT_START":
+            if self._start_gate_source == "auto_start":
+                return True, "WAIT_START 通过：start_immediately=true"
+            if self._start_gate_source == "action_goal":
+                return True, "WAIT_START 通过：已收到显式 RunCompetition goal，视为外部开赛 gate 已满足"
+            return False, "WAIT_START 缺少合法开赛来源"
+
+        if state in {"PARK", "DONE"}:
+            return self._verify_no_live_allocations(state)
+
+        return False, f"未定义 orchestration gate: {state}"
+
+    def _require_object(self, semantic_type: str, allowed_states: Tuple[str, ...] = ("stable", "reserved", "attached")) -> Tuple[bool, str]:
+        scene_object = self._find_object(semantic_type, allowed_states=allowed_states)
         if scene_object is None:
             return False, f"未找到 {semantic_type}"
-        if scene_object.lifecycle_state not in ("stable", "reserved", "attached"):
-            return False, f"{semantic_type} 状态不满足: {scene_object.lifecycle_state}"
         self._assignments[semantic_type] = scene_object.id
         return True, f"{semantic_type}={scene_object.id}"
 
     def _assign_table_objects(self) -> Tuple[bool, str]:
-        water = self._find_object("water_bottle")
-        cola = self._find_object("cola_bottle")
-        cups = self._objects_by_prefix("cup")
+        water = self._find_object("water_bottle", allowed_states=("stable",))
+        cola = self._find_object("cola_bottle", allowed_states=("stable",))
+        cups = self._objects_by_prefix("cup", allowed_states=("stable",))
         if water is None or cola is None or len(cups) < 2:
             return False, "桌面对象不完整，正式流程要求两只杯子"
         self._assignments["water_bottle"] = water.id
@@ -287,7 +444,7 @@ class DualArmTaskManagerNode(Node):
         return True, f"water={water.id}, cola={cola.id}, cups={[cup.id for cup in cups]}"
 
     def _plan_for_object(self, semantic_type: str, target_field: str, reserved_by: str) -> Tuple[bool, str]:
-        scene_object = self._find_object(semantic_type)
+        scene_object = self._find_object(semantic_type, allowed_states=("stable",))
         if scene_object is None:
             return False, f"未找到 {semantic_type}"
         target = self._grasp_targets.get(scene_object.id)
@@ -300,39 +457,8 @@ class DualArmTaskManagerNode(Node):
         if planner_response is None or not planner_response.success or planner_response.result_code != "success":
             self._release(scene_object.id)
             return False, f"planner 失败: {planner_response.result_code if planner_response else 'no_response'}"
-        self._last_plan = planner_response
+        self._set_last_plan(planner_response)
         return True, f"planner 成功: {scene_object.id}, scene_version={planner_response.scene_version}"
-
-    def _execute_last_plan_and_grasp(self, object_id: Optional[str], dual: bool = False) -> Tuple[bool, str]:
-        if self._last_plan is None:
-            return False, "没有可执行的规划结果"
-        action_result = self._execute_plan(self._last_plan)
-        if action_result is None or not action_result.success:
-            return False, f"执行失败: {action_result.result_code if action_result else 'no_result'}"
-        if object_id is None:
-            return False, "object_id 缺失"
-        if dual:
-            left_ok = self._set_gripper("left_arm", object_id=object_id, link_name="left_tcp", attach=True)
-            right_ok = self._set_gripper("right_arm", command=2, position=200)
-            return left_ok and right_ok, "双臂抓取执行完成" if left_ok and right_ok else "双臂抓取失败"
-        return self._set_gripper("left_arm", object_id=object_id, link_name="left_tcp", attach=True), "单臂抓取完成"
-
-    def _execute_release_guard(self, object_id: Optional[str]) -> Tuple[bool, str]:
-        if self._last_plan is None or object_id is None:
-            return False, "释放保护前置条件不足"
-        action_result = self._execute_plan(self._last_plan)
-        if action_result is None or not action_result.success:
-            return False, "释放前轨迹执行失败"
-        primitive_result = self._execute_primitive_action(
-            primitive_id="release_guard",
-            arm_group="left_arm",
-            secondary_arm_group="right_arm",
-            object_id=object_id,
-            synchronized=True,
-        )
-        if primitive_result is None:
-            return False, "release_guard 无响应"
-        return primitive_result.success, primitive_result.message
 
     def _direct_grasp(self, semantic_type_or_id: str, reserved_by: str) -> Tuple[bool, str]:
         scene_object = self._find_object_by_id_or_semantic(semantic_type_or_id)
@@ -344,7 +470,7 @@ class DualArmTaskManagerNode(Node):
         planner_response = self._call_plan_pose(target.arm_mode, target.pregrasp)
         if planner_response is None or not planner_response.success:
             return False, "抓取前规划失败"
-        self._last_plan = planner_response
+        self._set_last_plan(planner_response)
         executed = self._execute_plan(planner_response)
         if executed is None or not executed.success:
             return False, "抓取前执行失败"
@@ -359,90 +485,7 @@ class DualArmTaskManagerNode(Node):
         )
         return attached, f"{scene_object.id} 抓取{'成功' if attached else '失败'}"
 
-    def _execute_cap_align_and_grasp(self, object_id: str) -> Tuple[bool, str]:
-        target = self._grasp_targets.get(object_id)
-        if target is None:
-            return False, "瓶盖交互 target 不存在"
-        primitive_result = self._execute_primitive_action(
-            primitive_id="cap_align_and_grasp",
-            arm_group=target.partner_arm_mode,
-            object_id=object_id,
-            primary_waypoints=[target.operate],
-            execution_profile=target.execution_profile,
-        )
-        if primitive_result is None:
-            return False, "cap_align_and_grasp 无响应"
-        return primitive_result.success, primitive_result.message
-
-    def _execute_cap_twist(self, object_id: str) -> Tuple[bool, str]:
-        target = self._grasp_targets.get(object_id)
-        if target is None:
-            return False, "瓶盖旋拧 target 不存在"
-        cap_waypoints = self._build_cap_twist_waypoints(target)
-        hold_waypoints = [deepcopy(target.grasp) for _ in cap_waypoints]
-        primitive_result = self._execute_primitive_action(
-            primitive_id="cap_twist_and_unthread",
-            arm_group=target.arm_mode,
-            secondary_arm_group=target.partner_arm_mode,
-            object_id=object_id,
-            primary_waypoints=hold_waypoints,
-            secondary_waypoints=cap_waypoints,
-            synchronized=True,
-            execution_profile=target.execution_profile,
-        )
-        if primitive_result is None:
-            return False, "cap_twist_and_unthread 无响应"
-        return primitive_result.success, primitive_result.message
-
-    def _execute_cap_place(self, object_id: str) -> Tuple[bool, str]:
-        target = self._grasp_targets.get(object_id)
-        if target is None:
-            return False, "瓶盖放置 target 不存在"
-        primitive_result = self._execute_primitive_action(
-            primitive_id="cap_place_or_release",
-            arm_group=target.partner_arm_mode,
-            object_id=object_id,
-            primary_waypoints=[target.place],
-            execution_profile=target.execution_profile,
-        )
-        if primitive_result is None:
-            return False, "cap_place_or_release 无响应"
-        return primitive_result.success, primitive_result.message
-
-    def _execute_pour(self, bottle_id: str, cup_id: str) -> Tuple[bool, str]:
-        bottle_target = self._grasp_targets.get(bottle_id)
-        cup_target = self._grasp_targets.get(cup_id)
-        if bottle_target is None or cup_target is None:
-            return False, "倒水 target 不存在"
-        bottle_waypoints = self._build_pour_waypoints(bottle_target)
-        cup_hold_waypoints = [deepcopy(cup_target.grasp) for _ in bottle_waypoints]
-        primitive_result = self._execute_primitive_action(
-            primitive_id="pour_tilt",
-            arm_group=bottle_target.arm_mode,
-            secondary_arm_group=cup_target.arm_mode,
-            object_id=bottle_id,
-            reference_object_id=cup_id,
-            primary_waypoints=bottle_waypoints,
-            secondary_waypoints=cup_hold_waypoints,
-            synchronized=True,
-            execution_profile=bottle_target.execution_profile,
-        )
-        if primitive_result is None:
-            return False, "pour_tilt 无响应"
-        return primitive_result.success, primitive_result.message
-
-    def _execute_hold_verify(self, object_id: str) -> Tuple[bool, str]:
-        primitive_result = self._execute_primitive_action(
-            primitive_id="hold_verify",
-            arm_group="left_arm",
-            object_id=object_id,
-            hold_duration_s=3.0,
-        )
-        if primitive_result is None:
-            return False, "hold_verify 无响应"
-        return primitive_result.success, primitive_result.message
-
-    def _place_object(self, key: str, reserved_by: str) -> Tuple[bool, str]:
+    def _place_object(self, key: str) -> Tuple[bool, str]:
         object_id = self._assignments.get(key, key)
         scene_object = self._find_object_by_id_or_semantic(object_id)
         target = self._grasp_targets.get(object_id) if object_id else None
@@ -451,7 +494,7 @@ class DualArmTaskManagerNode(Node):
         planner_response = self._call_plan_pose(target.arm_mode, target.place)
         if planner_response is None or not planner_response.success:
             return False, f"{object_id} 放置前规划失败"
-        self._last_plan = planner_response
+        self._set_last_plan(planner_response)
         executed = self._execute_plan(planner_response)
         if executed is None or not executed.success:
             return False, f"{object_id} 放置前执行失败"
@@ -460,24 +503,71 @@ class DualArmTaskManagerNode(Node):
             return False, f"{object_id} 放置释放失败"
         if not self._release(object_id):
             return False, f"{object_id} release 失败"
-        return True, f"{object_id} 已放置并释放"
+        position_tolerance = target.position_tolerance if target.position_tolerance > 0.0 else 0.08
+        return self._verify_placed_near_target(object_id, target.place, position_tolerance)
 
-    def _verify_detached(self, object_id: Optional[str]) -> Tuple[bool, str]:
-        if object_id is None:
-            return False, "object_id 缺失"
-        scene_object = self._find_object_by_id_or_semantic(object_id)
-        if scene_object is None:
-            return True, f"{object_id} 已从场景中移除"
-        if scene_object.attached_link:
-            return False, f"{object_id} 仍处于 attached 状态"
-        return True, f"{object_id} 已脱附"
+    def _verify_drop_in_basket(self, object_id: Optional[str]) -> Tuple[bool, str]:
+        if not object_id:
+            return False, "VERIFY_BALL_* 缺少球体 object_id"
 
-    def _find_object(self, semantic_type: str) -> Optional[SceneObject]:
+        def predicate() -> Tuple[bool, str]:
+            scene_object = self._find_object_by_id_or_semantic(object_id)
+            basket = self._find_object("basket", allowed_states=("stable", "reserved", "attached"))
+            if scene_object is None:
+                return False, f"{object_id} 尚未在 managed scene 中稳定可见"
+            if basket is None:
+                return False, "basket 尚未在 managed scene 中稳定可见"
+            if scene_object.attached_link:
+                return False, f"{object_id} 仍 attached 到 {scene_object.attached_link}"
+            if scene_object.reserved_by:
+                return False, f"{object_id} 仍被 {scene_object.reserved_by} 占用"
+            if scene_object.lifecycle_state != "stable":
+                return False, f"{object_id} 当前 lifecycle_state={scene_object.lifecycle_state}"
+            basket_radius = max(basket.size.x, basket.size.y, 0.18) * 0.6
+            dx = scene_object.pose.pose.position.x - basket.pose.pose.position.x
+            dy = scene_object.pose.pose.position.y - basket.pose.pose.position.y
+            dz = abs(scene_object.pose.pose.position.z - basket.pose.pose.position.z)
+            distance_xy = (dx * dx + dy * dy) ** 0.5
+            vertical_tolerance = max(basket.size.z, 0.12) + 0.10
+            if distance_xy > basket_radius:
+                return False, f"{object_id} 距篮筐中心过远: {distance_xy:.3f}m > {basket_radius:.3f}m"
+            if dz > vertical_tolerance:
+                return False, f"{object_id} 与篮筐高度差过大: {dz:.3f}m > {vertical_tolerance:.3f}m"
+            return True, f"{object_id} 已稳定进入篮筐区域"
+
+        return self._poll_scene_predicate(predicate, timeout_sec=1.5, interval_sec=0.1)
+
+    def _verify_placed_near_target(self, object_id: str, target_pose: PoseStamped, position_tolerance: float) -> Tuple[bool, str]:
+        tolerance = max(position_tolerance, 0.05)
+
+        def predicate() -> Tuple[bool, str]:
+            scene_object = self._find_object_by_id_or_semantic(object_id)
+            if scene_object is None:
+                return False, f"{object_id} 尚未在 managed scene 中稳定可见"
+            if scene_object.attached_link:
+                return False, f"{object_id} 仍 attached 到 {scene_object.attached_link}"
+            if scene_object.reserved_by:
+                return False, f"{object_id} 仍被 {scene_object.reserved_by} 占用"
+            if scene_object.lifecycle_state != "stable":
+                return False, f"{object_id} 当前 lifecycle_state={scene_object.lifecycle_state}"
+            distance = self._pose_distance(scene_object.pose, target_pose)
+            if distance > tolerance:
+                return False, f"{object_id} 仍未到达放置位: {distance:.3f}m > {tolerance:.3f}m"
+            return True, f"{object_id} 已稳定到达放置位"
+
+        return self._poll_scene_predicate(predicate, timeout_sec=1.5, interval_sec=0.1)
+
+    def _find_object(self, semantic_type: str, allowed_states: Optional[Tuple[str, ...]] = None) -> Optional[SceneObject]:
         candidates = [obj for obj in self._scene_cache.objects if obj.semantic_type == semantic_type]
+        if allowed_states is not None:
+            candidates = [obj for obj in candidates if obj.lifecycle_state in allowed_states]
         return candidates[0] if candidates else None
 
-    def _objects_by_prefix(self, prefix: str) -> List[SceneObject]:
-        return [obj for obj in self._scene_cache.objects if obj.semantic_type.startswith(prefix)]
+    def _objects_by_prefix(self, prefix: str, allowed_states: Optional[Tuple[str, ...]] = None) -> List[SceneObject]:
+        candidates = [obj for obj in self._scene_cache.objects if obj.semantic_type.startswith(prefix)]
+        if allowed_states is not None:
+            candidates = [obj for obj in candidates if obj.lifecycle_state in allowed_states]
+        return candidates
 
     def _find_object_by_id_or_semantic(self, key: str) -> Optional[SceneObject]:
         for scene_object in self._scene_cache.objects:
@@ -519,7 +609,7 @@ class DualArmTaskManagerNode(Node):
 
     def _execute_plan(self, planner_response):
         if not self._execute_client.wait_for_server(timeout_sec=1.0):
-            return None
+            return SimpleNamespace(success=False, result_code="server_unavailable")
         goal = ExecuteTrajectory.Goal()
         goal.arm_group = planner_response.primary_arm_group or "left_arm"
         goal.secondary_arm_group = planner_response.secondary_arm_group
@@ -531,12 +621,15 @@ class DualArmTaskManagerNode(Node):
         goal.execution_profile = "default"
         goal_future = self._execute_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, goal_future, timeout_sec=2.0)
-        if goal_future.result() is None:
-            return None
-        result_future = goal_future.result().get_result_async()
+        goal_handle = goal_future.result()
+        if goal_handle is None:
+            return SimpleNamespace(success=False, result_code="goal_send_timeout")
+        if not goal_handle.accepted:
+            return SimpleNamespace(success=False, result_code="goal_rejected")
+        result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(self, result_future, timeout_sec=15.0)
         if result_future.result() is None:
-            return None
+            return SimpleNamespace(success=False, result_code="result_timeout")
         return result_future.result().result
 
     def _execute_primitive_action(
@@ -553,7 +646,7 @@ class DualArmTaskManagerNode(Node):
         synchronized: bool = False,
     ):
         if not self._primitive_client.wait_for_server(timeout_sec=1.0):
-            return None
+            return SimpleNamespace(success=False, message="primitive server unavailable", result_code="server_unavailable")
         goal = ExecutePrimitive.Goal()
         goal.primitive_id = primitive_id
         goal.arm_group = arm_group
@@ -568,12 +661,15 @@ class DualArmTaskManagerNode(Node):
         goal.synchronized = synchronized
         goal_future = self._primitive_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, goal_future, timeout_sec=2.0)
-        if goal_future.result() is None:
-            return None
-        result_future = goal_future.result().get_result_async()
+        goal_handle = goal_future.result()
+        if goal_handle is None:
+            return SimpleNamespace(success=False, message="primitive goal 发送超时", result_code="goal_send_timeout")
+        if not goal_handle.accepted:
+            return SimpleNamespace(success=False, message="primitive goal 被拒绝", result_code="goal_rejected")
+        result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(self, result_future, timeout_sec=20.0)
         if result_future.result() is None:
-            return None
+            return SimpleNamespace(success=False, message="primitive result 等待超时", result_code="result_timeout")
         return result_future.result().result
 
     def _set_gripper(
@@ -629,23 +725,39 @@ class DualArmTaskManagerNode(Node):
         return {
             "run_id": run_id,
             "checkpoint_id": "",
-            "checkpoint_schema_version": 1,
-            "task_sequence": self.get_parameter("task_sequence").value,
+            "checkpoint_schema_version": 2,
+            "task_sequence": self._current_task_sequence or self.get_parameter("task_sequence").value,
+            "effective_requested_order": self._current_task_sequence or self.get_parameter("task_sequence").value,
+            "state_sequence_digest": self._state_sequence_digest(self._current_states),
+            "behavior_contract_version": 1,
             "completed_states": completed_states,
             "next_state": next_state,
+            "next_state_owner": self._state_owner(next_state),
+            "next_behavior_group": self._behavior_group_for_state(next_state),
             "scene_version": int(getattr(self._scene_cache, "scene_version", 0)),
             "assignments": self._assignments,
-            "reserved_objects": [],
+            "reserved_objects": [
+                {"id": obj.id, "reserved_by": obj.reserved_by}
+                for obj in self._scene_cache.objects
+                if obj.reserved_by
+            ],
             "attached_objects": [
                 {"id": obj.id, "attached_link": obj.attached_link}
                 for obj in self._scene_cache.objects
                 if obj.attached_link
             ],
-            "gripper_snapshot": {},
-            "robot_state_stamps": {},
-            "last_plan_digest": "",
+            "gripper_snapshot": {
+                "captured": False,
+                "reason": "task_manager_has_no_gripper_feedback_subscription",
+            },
+            "robot_state_stamps": {
+                "captured": False,
+                "reason": "task_manager_has_no_robot_state_subscription",
+            },
+            "last_plan_digest": self._last_plan_digest,
+            "last_behavior_call": self._last_behavior_call,
             "pending_transition": pending_transition,
-            "resume_hint": "从 latest.json 的 next_state 恢复",
+            "resume_hint": f"从 latest.json 的 next_state={next_state} 恢复",
         }
 
     def _append_run_event(self, run_id: str, event_type: str, state: str, data) -> None:
@@ -671,46 +783,373 @@ class DualArmTaskManagerNode(Node):
         message.detail = detail
         self._event_publisher.publish(message)
 
-    def _build_cap_twist_waypoints(self, target: GraspTarget) -> List[PoseStamped]:
-        base = deepcopy(target.operate)
-        waypoints = [deepcopy(target.pregrasp), deepcopy(base)]
-        for index, angle_deg in enumerate((15.0, 30.0, 45.0), start=1):
-            pose = deepcopy(base)
-            pose.pose.orientation = self._quaternion_from_rpy(0.0, 0.0, math.radians(angle_deg))
-            pose.pose.position.z += 0.003 * index
-            waypoints.append(pose)
-        waypoints.append(deepcopy(target.retreat))
-        return waypoints
+    def _build_behavior_call(self, state: str) -> Tuple[Optional[object], Optional[str]]:
+        if state in HANDOVER_BEHAVIOR_STATES:
+            return build_handover_behavior_call(state, self._assignments, self._grasp_targets)
+        if state in CAP_POUR_BEHAVIOR_STATES:
+            return build_cap_pour_behavior_call(state, self._assignments, self._grasp_targets)
+        return None, None
 
-    def _build_pour_waypoints(self, target: GraspTarget) -> List[PoseStamped]:
-        base = deepcopy(target.operate)
-        waypoints = [deepcopy(target.pregrasp), deepcopy(base)]
-        for index, pitch_deg in enumerate((15.0, 30.0, 45.0, 55.0), start=1):
-            pose = deepcopy(base)
-            pose.pose.orientation = self._quaternion_from_rpy(0.0, math.radians(pitch_deg), 0.0)
-            pose.pose.position.z -= 0.002 * index
-            pose.pose.position.x += 0.004 * index
-            waypoints.append(pose)
-        reset = deepcopy(base)
-        waypoints.append(reset)
-        waypoints.append(deepcopy(target.retreat))
-        return waypoints
+    def _execute_behavior_call(self, state: str, call) -> Tuple[bool, str]:
+        self._last_behavior_call = summarize_behavior_call(state, call)
+        if isinstance(call, BehaviorPlanExecutionCall):
+            return self._execute_behavior_plan_call(call)
+        primitive_result = self._execute_primitive_action(
+            primitive_id=call.primitive_id,
+            arm_group=call.arm_group,
+            object_id=call.object_id,
+            reference_object_id=call.reference_object_id,
+            secondary_arm_group=call.secondary_arm_group,
+            primary_waypoints=call.primary_waypoints,
+            secondary_waypoints=call.secondary_waypoints,
+            execution_profile=call.execution_profile,
+            hold_duration_s=call.hold_duration_s,
+            synchronized=call.synchronized,
+        )
+        return primitive_result.success, primitive_result.message
 
-    def _quaternion_from_rpy(self, roll: float, pitch: float, yaw: float):
-        from geometry_msgs.msg import Quaternion
+    def _execute_behavior_plan_call(self, call: BehaviorPlanExecutionCall) -> Tuple[bool, str]:
+        if call.execute_last_plan:
+            if self._last_plan is None:
+                return False, "行为调用缺少可执行规划结果"
+            action_result = self._execute_plan(self._last_plan)
+            if not action_result.success:
+                return False, f"行为规划执行失败: {action_result.result_code}"
 
+        for command in call.gripper_commands:
+            if not self._apply_gripper_command(command):
+                return False, f"{command.arm_name} gripper command 执行失败"
+
+        if call.behavior_group == "handover":
+            object_id = call.object_id
+            if object_id and ("basketball" in object_id or "soccer_ball" in object_id):
+                interaction_ok = self._set_object_interaction(
+                    object_id=object_id,
+                    interaction_mode="dual_contact",
+                    owner="handover",
+                    primary_link="left_tcp",
+                    secondary_link="right_tcp",
+                    enable=True,
+                )
+                if not interaction_ok:
+                    return False, "球体 dual_contact 切换失败"
+
+        return True, f"{call.behavior_group} 行为规划执行完成"
+
+    def _apply_gripper_command(self, command: BehaviorGripperCommand) -> bool:
+        return self._set_gripper(
+            arm_name=command.arm_name,
+            command=command.command,
+            position=command.position,
+            object_id=command.object_id,
+            link_name=command.link_name,
+            attach=command.attach,
+            detach=command.detach,
+        )
+
+    def _set_object_interaction(
+        self,
+        object_id: str,
+        interaction_mode: str,
+        owner: str,
+        primary_link: str,
+        secondary_link: str,
+        enable: bool,
+    ) -> bool:
+        if not self._set_object_interaction_client.wait_for_service(timeout_sec=0.5):
+            return False
+        request = SetObjectInteraction.Request()
+        request.object_id = object_id
+        request.interaction_mode = interaction_mode
+        request.owner = owner
+        request.primary_link = primary_link
+        request.secondary_link = secondary_link
+        request.enable = enable
+        future = self._set_object_interaction_client.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=3.0)
+        return future.result() is not None and future.result().success
+
+    def _verify_no_live_allocations(self, state: str) -> Tuple[bool, str]:
+        attached = [obj.id for obj in self._scene_cache.objects if obj.attached_link]
+        reserved = [obj.id for obj in self._scene_cache.objects if obj.reserved_by]
+        if attached or reserved:
+            return False, f"{state} 前仍有 live allocation: attached={attached}, reserved={reserved}"
+        return True, f"{state} 前未检测到 live allocation"
+
+    def _poll_scene_predicate(self, predicate, timeout_sec: float, interval_sec: float) -> Tuple[bool, str]:
+        deadline = time.monotonic() + timeout_sec
+        last_detail = "scene predicate 未执行"
+        while time.monotonic() < deadline:
+            success, detail = predicate()
+            if success:
+                return True, detail
+            last_detail = detail
+            time.sleep(interval_sec)
+        return False, last_detail
+
+    def _move_arm_to_named_pose(self, pose_name: str) -> Tuple[bool, str]:
+        poses = self._active_workspace_profile.get("poses", {})
+        pose_spec = poses.get(pose_name)
+        if pose_spec is None:
+            return False, f"workspace profile 缺少 pose={pose_name}"
+        arm_group = str(pose_spec.get("arm", "")).strip()
+        pose = self._pose_from_spec(pose_spec)
+        planner_response = self._call_plan_pose(arm_group, pose)
+        if planner_response is None or not planner_response.success:
+            return False, f"{pose_name} 规划失败"
+        self._set_last_plan(planner_response)
+        executed = self._execute_plan(planner_response)
+        if executed is None or not executed.success:
+            return False, f"{pose_name} 执行失败"
+        return True, f"{pose_name} 执行成功"
+
+    def _pose_from_spec(self, pose_spec: Dict[str, object]) -> PoseStamped:
+        pose = PoseStamped()
+        pose.header.frame_id = str(self._active_workspace_profile.get("frame_id", "world"))
+        xyz = pose_spec.get("position_m", [0.0, 0.0, 0.0])
+        rpy = pose_spec.get("rpy_deg", [0.0, 0.0, 0.0])
+        pose.pose.position.x = float(xyz[0])
+        pose.pose.position.y = float(xyz[1])
+        pose.pose.position.z = float(xyz[2])
+        roll, pitch, yaw = [math.radians(float(value)) for value in rpy]
+        qx, qy, qz, qw = self._quaternion_from_rpy(roll, pitch, yaw)
+        pose.pose.orientation.x = qx
+        pose.pose.orientation.y = qy
+        pose.pose.orientation.z = qz
+        pose.pose.orientation.w = qw
+        return pose
+
+    def _quaternion_from_rpy(self, roll: float, pitch: float, yaw: float) -> Tuple[float, float, float, float]:
         cy = math.cos(yaw * 0.5)
         sy = math.sin(yaw * 0.5)
         cp = math.cos(pitch * 0.5)
         sp = math.sin(pitch * 0.5)
         cr = math.cos(roll * 0.5)
         sr = math.sin(roll * 0.5)
-        q = Quaternion()
-        q.x = sr * cp * cy - cr * sp * sy
-        q.y = cr * sp * cy + sr * cp * sy
-        q.z = cr * cp * sy - sr * sp * cy
-        q.w = cr * cp * cy + sr * sp * sy
-        return q
+        return (
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy,
+            cr * cp * cy + sr * sp * sy,
+        )
+
+    def _preview_pick(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None:
+            return False, f"未找到 {object_id}"
+        target = self._grasp_targets.get(scene_object.id)
+        if target is None:
+            return False, f"{scene_object.id} 的 grasp target 不存在"
+        planner_response = self._call_plan_pose(target.arm_mode, target.pregrasp)
+        if planner_response is None or not planner_response.success:
+            return False, f"{scene_object.id} 预抓取规划失败"
+        self._set_last_plan(planner_response)
+        return True, f"{scene_object.id} 预抓取规划成功"
+
+    def _execute_open_cap_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"water_bottle", "cola_bottle"}:
+            return False, f"{object_id} 不是可开盖瓶子"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        moved, detail = self._move_arm_to_named_pose("right_cap_workspace_pose")
+        if not moved:
+            return False, f"开盖工作位移动失败: {detail}"
+        grasp_state = "GRASP_WATER_CAP" if scene_object.semantic_type == "water_bottle" else "GRASP_COLA_CAP"
+        open_state = "OPEN_WATER_CAP" if scene_object.semantic_type == "water_bottle" else "OPEN_COLA_CAP"
+        grasp_call, grasp_error = self._build_behavior_call(grasp_state)
+        if grasp_error or grasp_call is None:
+            return False, grasp_error or f"{grasp_state} 行为构造失败"
+        success, detail = self._execute_behavior_call(grasp_state, grasp_call)
+        if not success:
+            return False, detail
+        open_call, open_error = self._build_behavior_call(open_state)
+        if open_error or open_call is None:
+            return False, open_error or f"{open_state} 行为构造失败"
+        return self._execute_behavior_call(open_state, open_call)
+
+    def _execute_pick_cup_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or not scene_object.semantic_type.startswith("cup"):
+            return False, f"{object_id} 不是 cup"
+        return self._direct_grasp(scene_object.id, f"rviz_cup:{scene_object.id}")
+
+    def _execute_align_pour_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"water_bottle", "cola_bottle"}:
+            return False, f"{object_id} 不是 bottle"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        target = self._grasp_targets.get(scene_object.id)
+        if target is None:
+            return False, f"{scene_object.id} grasp target 缺失"
+        planner_response = self._call_plan_pose(target.arm_mode, target.operate)
+        if planner_response is None or not planner_response.success:
+            return False, "倒水对位规划失败"
+        self._set_last_plan(planner_response)
+        return True, "倒水对位规划成功"
+
+    def _execute_pour_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"water_bottle", "cola_bottle"}:
+            return False, f"{object_id} 不是 bottle"
+        bottle_key = scene_object.semantic_type
+        cup_key = "cup_water" if bottle_key == "water_bottle" else "cup_cola"
+        self._assignments[bottle_key] = scene_object.id
+        if cup_key not in self._assignments:
+            cups = self._objects_by_prefix("cup", allowed_states=("stable", "reserved", "attached"))
+            if not cups:
+                return False, "当前没有可用 cup"
+            self._assignments[cup_key] = cups[0].id
+        state = "EXECUTE_WATER_POUR" if bottle_key == "water_bottle" else "EXECUTE_COLA_POUR"
+        behavior_call, behavior_error = self._build_behavior_call(state)
+        if behavior_error or behavior_call is None:
+            return False, behavior_error or f"{state} 行为构造失败"
+        return self._execute_behavior_call(state, behavior_call)
+
+    def _execute_plan_ball_pair_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"basketball", "soccer_ball"}:
+            return False, f"{object_id} 不是球体"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        target = self._grasp_targets.get(scene_object.id)
+        if target is None:
+            return False, f"{scene_object.id} grasp target 缺失"
+        planner_response = self._call_plan_pose(target.arm_mode, target.pregrasp)
+        if planner_response is None or not planner_response.success:
+            return False, "双臂预抓规划失败"
+        self._set_last_plan(planner_response)
+        return True, "双臂预抓规划成功"
+
+    def _execute_ball_close_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"basketball", "soccer_ball"}:
+            return False, f"{object_id} 不是球体"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        state = "GRASP_BALL_1" if scene_object.semantic_type == "basketball" else "GRASP_BALL_2"
+        behavior_call, behavior_error = self._build_behavior_call(state)
+        if behavior_error or behavior_call is None:
+            return False, behavior_error or f"{state} 行为构造失败"
+        return self._execute_behavior_call(state, behavior_call)
+
+    def _execute_release_ball_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"basketball", "soccer_ball"}:
+            return False, f"{object_id} 不是球体"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        state = "RELEASE_BALL_1" if scene_object.semantic_type == "basketball" else "RELEASE_BALL_2"
+        behavior_call, behavior_error = self._build_behavior_call(state)
+        if behavior_error or behavior_call is None:
+            return False, behavior_error or f"{state} 行为构造失败"
+        return self._execute_behavior_call(state, behavior_call)
+
+    def _pose_distance(self, lhs: PoseStamped, rhs: PoseStamped) -> float:
+        dx = lhs.pose.position.x - rhs.pose.position.x
+        dy = lhs.pose.position.y - rhs.pose.position.y
+        dz = lhs.pose.position.z - rhs.pose.position.z
+        return (dx * dx + dy * dy + dz * dz) ** 0.5
+
+    def _state_owner(self, state: str) -> str:
+        if state == "competition_done":
+            return "terminal"
+        behavior_group = self._behavior_group_for_state(state)
+        if behavior_group:
+            return f"behavior:{behavior_group}"
+        return "orchestration"
+
+    def _behavior_group_for_state(self, state: str) -> str:
+        if state in HANDOVER_BEHAVIOR_STATES:
+            return "handover"
+        if state in CAP_POUR_BEHAVIOR_STATES:
+            return "cap_pour"
+        return ""
+
+    def _normalize_task_sequence(self, raw_sequence: str) -> str:
+        return ",".join(self._parse_task_sequence(raw_sequence))
+
+    def _parse_task_sequence(self, raw_sequence: str) -> List[str]:
+        return [item.strip() for item in raw_sequence.split(",") if item.strip()]
+
+    def _validate_checkpoint_state(self, checkpoint_state, states: List[str], allow_reconcile: bool) -> Optional[str]:
+        schema_version = int(checkpoint_state.get("checkpoint_schema_version", 0))
+        if schema_version not in (1, 2):
+            return f"不支持的 checkpoint_schema_version={schema_version}"
+        if schema_version == 1 and not allow_reconcile:
+            return "legacy checkpoint schema_version=1 仅允许在 allow_reconcile=true 时恢复"
+
+        completed_states = checkpoint_state.get("completed_states", [])
+        unknown_completed = [state for state in completed_states if state not in states]
+        if unknown_completed:
+            return f"checkpoint 含未知 completed_states={unknown_completed}"
+
+        next_state = str(checkpoint_state.get("next_state", "")).strip()
+        if next_state and next_state not in states and next_state != "competition_done":
+            return f"checkpoint next_state 不在当前状态序列内: {next_state}"
+
+        pending_transition = checkpoint_state.get("pending_transition")
+        if pending_transition and not allow_reconcile:
+            return f"checkpoint 仍处于 pending_transition={pending_transition}，需 allow_reconcile=true"
+
+        if schema_version == 2:
+            required_fields = [
+                "effective_requested_order",
+                "state_sequence_digest",
+                "behavior_contract_version",
+                "next_state_owner",
+            ]
+            missing_fields = [
+                field
+                for field in required_fields
+                if field not in checkpoint_state or checkpoint_state.get(field) in ("", None)
+            ]
+            if missing_fields:
+                return f"schema 2 checkpoint 缺少必填字段: {missing_fields}"
+
+            effective_requested_order = self._normalize_task_sequence(str(checkpoint_state.get("effective_requested_order", "")))
+            if not effective_requested_order:
+                return "schema 2 checkpoint 的 effective_requested_order 不能为空"
+            if effective_requested_order != self._current_task_sequence and not allow_reconcile:
+                return "schema 2 checkpoint 的 effective_requested_order 与当前请求不一致"
+
+            try:
+                behavior_contract_version = int(checkpoint_state.get("behavior_contract_version", 0))
+            except (TypeError, ValueError):
+                return "schema 2 checkpoint 的 behavior_contract_version 非法"
+            if behavior_contract_version < 1:
+                return "schema 2 checkpoint 的 behavior_contract_version 必须大于 0"
+
+        stored_digest = str(checkpoint_state.get("state_sequence_digest", "")).strip()
+        current_digest = self._state_sequence_digest(states)
+        if stored_digest and stored_digest != current_digest and not allow_reconcile:
+            return "checkpoint state_sequence_digest 与当前状态序列不一致"
+
+        stored_owner = str(checkpoint_state.get("next_state_owner", "")).strip()
+        if stored_owner and next_state and stored_owner != self._state_owner(next_state) and not allow_reconcile:
+            return f"checkpoint next_state_owner 与当前边界不一致: {stored_owner}"
+        if schema_version == 2 and next_state and not stored_owner:
+            return "schema 2 checkpoint 缺少 next_state_owner"
+
+        return None
+
+    def _state_sequence_digest(self, states: List[str]) -> str:
+        digest_source = "|".join(states).encode("utf-8")
+        return hashlib.sha256(digest_source).hexdigest()[:16]
+
+    def _set_last_plan(self, planner_response) -> None:
+        self._last_plan = planner_response
+        self._last_plan_digest = self._plan_digest(planner_response)
+
+    def _plan_digest(self, planner_response) -> str:
+        if planner_response is None:
+            return ""
+        summary = {
+            "primary_arm_group": planner_response.primary_arm_group,
+            "secondary_arm_group": planner_response.secondary_arm_group,
+            "scene_version": getattr(planner_response, "scene_version", 0),
+            "primary_joint_points": len(getattr(planner_response.joint_trajectory, "points", [])),
+            "secondary_joint_points": len(getattr(planner_response.secondary_joint_trajectory, "points", [])),
+            "cartesian_waypoints": len(getattr(planner_response, "cartesian_waypoints", [])),
+            "synchronized": getattr(planner_response, "synchronized", False),
+        }
+        return hashlib.sha256(json.dumps(summary, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
 def main() -> None:

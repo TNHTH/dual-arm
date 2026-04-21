@@ -25,7 +25,7 @@ from dualarm_interfaces.action import RunCompetition
 def _discover_repo_root_from_file() -> Optional[Path]:
     current = Path(__file__).resolve()
     for parent in [current.parent, *current.parents]:
-        if (parent / "STATE.md").exists() and (parent / "packages").is_dir():
+        if (parent / "packages").is_dir() and (parent / "config").is_dir():
             return parent
     return None
 
@@ -43,7 +43,7 @@ except Exception:  # pylint: disable=broad-except
         if start is not None:
             current = start.resolve()
             for parent in [current if current.is_dir() else current.parent, *(current if current.is_dir() else current.parent).parents]:
-                if (parent / "STATE.md").exists() and (parent / "packages").is_dir():
+                if (parent / "packages").is_dir() and (parent / "config").is_dir():
                     return parent
         if _REPO_ROOT_HINT is not None:
             return _REPO_ROOT_HINT
