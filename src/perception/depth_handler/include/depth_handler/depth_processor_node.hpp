@@ -46,6 +46,7 @@ private:
         Eigen::Vector3f min_point;
         Eigen::Vector3f max_point;
         Eigen::Vector3f center;
+        std::vector<Eigen::Vector3f> support_points;
         float confidence {0.0f};
     };
 

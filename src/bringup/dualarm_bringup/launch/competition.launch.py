@@ -75,6 +75,10 @@ def generate_launch_description():
             DeclareLaunchArgument("start_hardware", default_value="false"),
             DeclareLaunchArgument("left_robot_ip", default_value="192.168.58.2"),
             DeclareLaunchArgument("right_robot_ip", default_value="192.168.58.3"),
+            DeclareLaunchArgument("left_base_xyz", default_value="0 0.35 0"),
+            DeclareLaunchArgument("left_base_rpy", default_value="0 0 0"),
+            DeclareLaunchArgument("right_base_xyz", default_value="0 -0.35 0"),
+            DeclareLaunchArgument("right_base_rpy", default_value="0 0 3.141592653589793"),
             DeclareLaunchArgument("left_robot_port", default_value="8080"),
             DeclareLaunchArgument("right_robot_port", default_value="8080"),
             DeclareLaunchArgument("robot_state_query_interval", default_value="0.05"),
@@ -141,9 +145,24 @@ def generate_launch_description():
             _include(
                 "fairino_dualarm_moveit_config",
                 "move_group.launch.py",
-                launch_arguments={"publish_fake_joint_states": LaunchConfiguration("publish_fake_joint_states")}.items(),
+                launch_arguments={
+                    "publish_fake_joint_states": LaunchConfiguration("publish_fake_joint_states"),
+                    "left_base_xyz": LaunchConfiguration("left_base_xyz"),
+                    "left_base_rpy": LaunchConfiguration("left_base_rpy"),
+                    "right_base_xyz": LaunchConfiguration("right_base_xyz"),
+                    "right_base_rpy": LaunchConfiguration("right_base_rpy"),
+                }.items(),
             ),
-            _include("fairino_dualarm_planner", "fairino_dualarm_planner.launch.py"),
+            _include(
+                "fairino_dualarm_planner",
+                "fairino_dualarm_planner.launch.py",
+                launch_arguments={
+                    "left_base_xyz": LaunchConfiguration("left_base_xyz"),
+                    "left_base_rpy": LaunchConfiguration("left_base_rpy"),
+                    "right_base_xyz": LaunchConfiguration("right_base_xyz"),
+                    "right_base_rpy": LaunchConfiguration("right_base_rpy"),
+                }.items(),
+            ),
             _include(
                 "execution_adapter",
                 "execution_adapter.launch.py",

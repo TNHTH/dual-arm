@@ -1,11 +1,14 @@
 #!/usr/bin/python3
 
 from copy import deepcopy
+from pathlib import Path
 from typing import Dict
 
 from geometry_msgs.msg import PoseStamped
 import rclpy
+from ament_index_python.packages import get_package_prefix
 from rclpy.node import Node
+import yaml
 
 from dualarm_interfaces.msg import GraspTarget, SceneObjectArray
 
@@ -17,6 +20,8 @@ class GraspPoseGeneratorNode(Node):
         self.declare_parameter("output_topic", "/planning/grasp_targets")
         self.declare_parameter("world_frame", "world")
         self.declare_parameter("require_world_objects", True)
+        repo_root = Path(get_package_prefix("grasp_pose_generator")).parent.parent
+        self.declare_parameter("workspace_profiles_file", str(repo_root / "configs" / "competition" / "workspace_profiles.yaml"))
         self.declare_parameter("pregrasp_offset", 0.10)
         self.declare_parameter("retreat_offset", 0.15)
         self.declare_parameter("release_offset", 0.04)
@@ -44,6 +49,11 @@ class GraspPoseGeneratorNode(Node):
 
         input_topic = self.get_parameter("input_topic").value
         output_topic = self.get_parameter("output_topic").value
+        workspace_profiles_file = Path(str(self.get_parameter("workspace_profiles_file").value)).expanduser().resolve()
+        workspace_profiles = yaml.safe_load(workspace_profiles_file.read_text(encoding="utf-8"))
+        active_profile_name = str(workspace_profiles.get("active_profile", "competition_default"))
+        active_profile = workspace_profiles.get("profiles", {}).get(active_profile_name, {})
+        self._role_policy = active_profile.get("arm_policy", {}).get("pouring", {}).get("default_pairings", {})
         self._pregrasp_offset = float(self.get_parameter("pregrasp_offset").value)
         self._retreat_offset = float(self.get_parameter("retreat_offset").value)
         self._release_offset = float(self.get_parameter("release_offset").value)
@@ -106,7 +116,7 @@ class GraspPoseGeneratorNode(Node):
         target = GraspTarget()
         target.object_id = scene_object.id
         target.arm_mode = self._select_arm_mode(scene_object.semantic_type)
-        target.partner_arm_mode = "right_arm" if target.arm_mode == "left_arm" else "left_arm"
+        target.partner_arm_mode = self._partner_arm_mode(scene_object.semantic_type, target.arm_mode)
         target.source_scene_id = scene_object.scene_version
         target.position_tolerance = 0.01
         target.orientation_tolerance_deg = 10.0
@@ -164,13 +174,26 @@ class GraspPoseGeneratorNode(Node):
     def _select_arm_mode(self, semantic_type: str) -> str:
         if semantic_type in ("basketball", "soccer_ball"):
             return "dual_arm"
+        if semantic_type == "water_bottle":
+            return str(self._role_policy.get("water_bottle", {}).get("bottle_arm", "right_arm"))
         if semantic_type == "cola_bottle":
-            return "right_arm"
+            return str(self._role_policy.get("cola_bottle", {}).get("bottle_arm", "right_arm"))
+        if semantic_type.startswith("cup"):
+            return str(self._role_policy.get("water_bottle", {}).get("cup_arm", "left_arm"))
         return "left_arm"
+
+    def _partner_arm_mode(self, semantic_type: str, arm_mode: str) -> str:
+        if arm_mode == "dual_arm":
+            return "right_arm"
+        if semantic_type == "water_bottle":
+            return str(self._role_policy.get("water_bottle", {}).get("cup_arm", "left_arm" if arm_mode == "right_arm" else "right_arm"))
+        if semantic_type == "cola_bottle":
+            return str(self._role_policy.get("cola_bottle", {}).get("cup_arm", "left_arm" if arm_mode == "right_arm" else "right_arm"))
+        return "right_arm" if arm_mode == "left_arm" else "left_arm"
 
     def _strategy_id_for(self, semantic_type: str) -> str:
         if semantic_type in ("basketball", "soccer_ball"):
-            return "ball_bimanual_handover"
+            return "ball_dual_contact_pair"
         if semantic_type == "basket":
             return "basket_release"
         if semantic_type == "water_bottle":

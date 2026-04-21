@@ -73,6 +73,7 @@ def build_cap_pour_behavior_call(
                 behavior_group="cap_pour",
                 primitive_id="cap_place_or_release",
                 arm_group=bottle_target.partner_arm_mode,
+                secondary_arm_group=bottle_target.arm_mode,
                 object_id=bottle_id,
                 primary_waypoints=[bottle_target.place],
                 execution_profile=bottle_target.execution_profile,

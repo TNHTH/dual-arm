@@ -423,3 +423,94 @@
   2. `depth_handler` 接桌面约束后的 build + smoke
   3. 把 `best.3.pt` 设为 detector 默认模型
   4. 再开始自动夹取入口，不要反过来
+
+## 2026-04-20 左夹爪续测复盘
+
+### Facts
+- 当前 `competition_core.launch.py` live 栈里，仅右夹爪节点 `/gripper1/gripper_node_right` 存活。
+- 当前系统只剩 1 个已枚举 USB-485 口：`/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0`。
+- 当前在线链路上，`slave_id=10` 可稳定返回状态并执行命令；`slave_id=9` 不通。
+- `execution_adapter` 与 `/execution/set_gripper` 路由正常；显式指定 `slave_id=10` 时，即使 `arm_name=left_arm` 也能成功。
+
+### Worked
+- 先查 ROS 图和串口枚举，再查 service 行为，避免把“client 名称还在”误判成左夹爪 server 还活着。
+- 用 `left_arm + slave_id=10` 旁路验证上层链路，是快速排除 `execution_adapter` 故障的有效方法。
+- 在当前唯一在线串口上做 `slave_id=1..16` 扫描，比继续盲改 launch 参数更快缩小根因。
+
+### Waste
+- 如果只看 `/gripper0/epg50_gripper/*` 还出现在 `ros2 service list`，很容易误判为左夹爪驱动仍在线；实际上那只是客户端也会把服务名带进图里。
+- 如果直接把左夹爪 launch 参数改绑到当前右侧串口，而不先扫从站，会得到“节点能起但左夹爪仍不通”的假进展。
+
+### New Rule
+- 当双夹爪或多从站 RS485 链路异常时，默认顺序固定为：
+  1. `ls /dev/serial/by-id`
+  2. 对每条在线串口做 `status` 从站扫描
+  3. 用 `/execution/set_gripper` 分别验证“默认从站”和“显式从站”
+  4. 只有默认从站可读后，才进入真实夹爪动作阶段
+
+### Next Actions
+- 下一窗口先做硬件侧确认：
+  1. 恢复左 USB-485 转换器枚举
+  2. 确认左夹爪供电、A/B、通信地线
+  3. 在左侧串口上重新扫描从站 ID
+- 在左夹爪 `status` 可读之前，不继续做任何依赖左夹爪的左臂真抓。
+
+## 2026-04-20 左夹爪重连成功复盘
+
+### Facts
+- 用户重新连接接口后，左 USB-485 转换器 `A7BIb114J19` 恢复枚举到 `/dev/ttyUSB1`。
+- 原 live 栈没有自动恢复 `/gripper0/gripper_node_left`，需要手动补起左夹爪节点。
+- 左夹爪 `slave_id=9` 状态可读，`/execution/set_gripper` 对 `left_arm` 默认从站控制成功。
+- 最终状态为 `position=0, error=0`，即最大张开且无错误。
+
+### Worked
+- 先只读 `status`，再用正式上层接口发最大张开命令，安全性和证据链都更清晰。
+- 保留 by-id 路径而不是 `/dev/ttyUSB1`，避免下次重插后 tty 编号漂移。
+- 用 `/execution/set_gripper` 而不是只用底层 `/gripper0/command`，同时验证了硬件链路和上层路由。
+
+### Remaining Risk
+- 当前只验证最大张开，没有验证闭合夹持。
+- 当前左夹爪节点是手动补起；如果整套 launch 重启，需要确认 `/gripper0` 会自动拉起并绑定 `A7BIb114J19`。
+
+### Rule
+- 夹爪接口重插后，不要假设原 launch 会自动恢复已退出节点；必须重新检查 `ros2 node list`，必要时手动补起或重启 core launch。
+
+## 2026-04-21 RViz / 双相机 / 模型点云复盘
+
+### Facts
+- 本轮新增了 RViz operator 包和统一 `competition_rviz.launch.py` 入口。
+- RViz 首次被用户反馈为空白；后续截图确认 RobotModel 和点云可见，但相对现实比例/位姿仍不准。
+- 右臂新增视觉相机，系统从“唯一左臂相机”进入“左右双相机”阶段。
+- 当前 ROS 图已安全停止，没有遗留 RViz/core 进程。
+
+### Worked
+- 把 RViz 正常性的判定从“进程存在”升级为“截图确认”，这是正确方向。
+- 将 model pointcloud 从 marker 逻辑中独立出来，便于在 RViz 中直接观察桌面、水瓶、可乐、球、筐的几何点云。
+- 将双臂基座安装位姿参数化，是解决机械臂姿态不准的必要前置条件。
+- 右臂相机接入时先补 frame/topic contract，避免继续把 `/camera/*` 当成唯一相机。
+
+### Waste / Risk
+- 直接用默认 `world_to_left_base/right_base = 0 ±0.35 0` 打开 RViz，会把工程假设误展示成真实姿态。
+- 如果不截图确认，RViz 空白/错位很容易被误报告成“已打开”。
+- 在外参未 verified 前，继续调模型点云高度只能解决展示观感，不能证明 world pose 比赛级准确。
+
+### New Rules
+- 以后打开 RViz 必须执行：
+  1. 启动
+  2. 截图
+  3. 检查 RobotModel、点云、marker 是否可见
+  4. 若空白或明显错位，先修复再交付
+- 双相机阶段强制命名：
+  - 左相机：`left_camera`, `left_camera_color_frame`, `left_camera_depth_frame`
+  - 右相机：`right_camera`, `right_camera_color_frame`, `right_camera_depth_frame`
+- 机械臂姿态不准时，先查：
+  1. `/L|R/joint_states` 是否弧度
+  2. `/joint_states` 是否聚合正确
+  3. `world_to_left_base/right_base` 是否实测
+  4. 再查 meshes 或 RViz 配置
+
+### Next Actions
+- 下窗口先用新的 `competition_rviz.launch.py` 启动并截图。
+- 测量左右机械臂基座实际位置和 yaw，覆盖 `left_base_xyz/right_base_xyz/right_base_rpy`。
+- 分别做左右相机 hand-eye 标定。
+- 用实测参数更新 `object_geometry.yaml`。

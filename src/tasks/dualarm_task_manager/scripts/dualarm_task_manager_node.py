@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,13 +17,14 @@ from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalRespons
 from rclpy.action import graph as action_graph
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+import yaml
 
 from behavior_contract import BehaviorGripperCommand, BehaviorPlanExecutionCall, BehaviorPrimitiveCall, summarize_behavior_call
 from behaviors.cap_pour_boundary import CAP_POUR_BEHAVIOR_STATES, build_cap_pour_behavior_call
 from behaviors.handover_boundary import HANDOVER_BEHAVIOR_STATES, build_handover_behavior_call
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory, RunCompetition
 from dualarm_interfaces.msg import GraspTarget, SceneObject, SceneObjectArray, TaskEvent
-from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGripper
+from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGripper, SetObjectInteraction, TaskCommand
 
 
 class DualArmTaskManagerNode(Node):
@@ -31,6 +33,7 @@ class DualArmTaskManagerNode(Node):
         self.declare_parameter("task_sequence", "handover,pouring")
         repo_root = Path(get_package_prefix("dualarm_task_manager")).parent.parent
         self.declare_parameter("checkpoint_dir", str(repo_root / ".artifacts" / "checkpoints" / "competition"))
+        self.declare_parameter("workspace_profiles_file", str(repo_root / "configs" / "competition" / "workspace_profiles.yaml"))
 
         self._scene_cache = SceneObjectArray()
         self._grasp_targets: Dict[str, GraspTarget] = {}
@@ -45,6 +48,10 @@ class DualArmTaskManagerNode(Node):
         self._checkpoint_dir = Path(str(self.get_parameter("checkpoint_dir").value))
         self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
         (self._checkpoint_dir / "runs").mkdir(parents=True, exist_ok=True)
+        workspace_profiles_file = Path(str(self.get_parameter("workspace_profiles_file").value)).expanduser().resolve()
+        workspace_profiles = yaml.safe_load(workspace_profiles_file.read_text(encoding="utf-8"))
+        active_profile_name = str(workspace_profiles.get("active_profile", "competition_default"))
+        self._active_workspace_profile = workspace_profiles.get("profiles", {}).get(active_profile_name, {})
 
         self._event_publisher = self.create_publisher(TaskEvent, "/task_manager/events", 10)
         self.create_subscription(SceneObjectArray, "/scene_fusion/scene_objects", self._handle_scene, 10)
@@ -54,8 +61,10 @@ class DualArmTaskManagerNode(Node):
         self._reserve_client = self.create_client(ReserveObject, "/scene/reserve_object")
         self._release_client = self.create_client(ReleaseObject, "/scene/release_object")
         self._set_gripper_client = self.create_client(SetGripper, "/execution/set_gripper")
+        self._set_object_interaction_client = self.create_client(SetObjectInteraction, "/scene/set_object_interaction")
         self._execute_client = ActionClient(self, ExecuteTrajectory, "/execution/execute_trajectory")
         self._primitive_client = ActionClient(self, ExecutePrimitive, "/execution/execute_primitive")
+        self.create_service(TaskCommand, "/task/command", self._handle_task_command)
 
         self._action_server = ActionServer(
             self,
@@ -72,6 +81,68 @@ class DualArmTaskManagerNode(Node):
 
     def _cancel_callback(self, _goal_handle) -> CancelResponse:
         return CancelResponse.ACCEPT
+
+    def _handle_task_command(self, request: TaskCommand.Request, response: TaskCommand.Response):
+        command_id = request.command_id.strip()
+        object_id = request.object_id.strip()
+        response.active_state = command_id
+
+        if command_id == "scan_table":
+            response.success, response.message = self._move_arm_to_named_pose("left_scan_table_pose_1")
+            return response
+        if command_id == "scan_basket":
+            response.success, response.message = self._move_arm_to_named_pose("left_scan_basket_pose")
+            return response
+        if command_id == "move_to_cap_workspace":
+            response.success, response.message = self._move_arm_to_named_pose("right_cap_workspace_pose")
+            return response
+        if command_id == "yield_left":
+            response.success, response.message = self._move_arm_to_named_pose("left_scan_yield_pose")
+            return response
+        if command_id == "yield_right":
+            response.success, response.message = self._move_arm_to_named_pose("right_scan_yield_pose")
+            return response
+        if command_id == "home_left":
+            response.success, response.message = self._move_arm_to_named_pose("left_home_pose")
+            return response
+        if command_id == "home_right":
+            response.success, response.message = self._move_arm_to_named_pose("right_home_pose")
+            return response
+        if command_id == "preview_pick":
+            response.success, response.message = self._preview_pick(object_id)
+            return response
+        if command_id == "execute_pick":
+            response.success, response.message = self._direct_grasp(object_id, f"rviz_pick:{object_id}")
+            return response
+        if command_id == "open_cap":
+            response.success, response.message = self._execute_open_cap_command(object_id)
+            return response
+        if command_id == "pick_cup":
+            response.success, response.message = self._execute_pick_cup_command(object_id)
+            return response
+        if command_id == "align_pour":
+            response.success, response.message = self._execute_align_pour_command(object_id)
+            return response
+        if command_id == "pour":
+            response.success, response.message = self._execute_pour_command(object_id)
+            return response
+        if command_id == "plan_ball_pair":
+            response.success, response.message = self._execute_plan_ball_pair_command(object_id)
+            return response
+        if command_id == "execute_ball_close":
+            response.success, response.message = self._execute_ball_close_command(object_id)
+            return response
+        if command_id == "release_ball":
+            response.success, response.message = self._execute_release_ball_command(object_id)
+            return response
+        if command_id == "abort":
+            response.success = True
+            response.message = "task_manager 已收到 abort 请求；当前版本请通过 action cancel 或上层中止联动"
+            return response
+
+        response.success = False
+        response.message = f"当前命令未实现: {command_id}"
+        return response
 
     def _handle_scene(self, message: SceneObjectArray) -> None:
         self._scene_cache = message
@@ -749,6 +820,20 @@ class DualArmTaskManagerNode(Node):
             if not self._apply_gripper_command(command):
                 return False, f"{command.arm_name} gripper command 执行失败"
 
+        if call.behavior_group == "handover":
+            object_id = call.object_id
+            if object_id and ("basketball" in object_id or "soccer_ball" in object_id):
+                interaction_ok = self._set_object_interaction(
+                    object_id=object_id,
+                    interaction_mode="dual_contact",
+                    owner="handover",
+                    primary_link="left_tcp",
+                    secondary_link="right_tcp",
+                    enable=True,
+                )
+                if not interaction_ok:
+                    return False, "球体 dual_contact 切换失败"
+
         return True, f"{call.behavior_group} 行为规划执行完成"
 
     def _apply_gripper_command(self, command: BehaviorGripperCommand) -> bool:
@@ -761,6 +846,28 @@ class DualArmTaskManagerNode(Node):
             attach=command.attach,
             detach=command.detach,
         )
+
+    def _set_object_interaction(
+        self,
+        object_id: str,
+        interaction_mode: str,
+        owner: str,
+        primary_link: str,
+        secondary_link: str,
+        enable: bool,
+    ) -> bool:
+        if not self._set_object_interaction_client.wait_for_service(timeout_sec=0.5):
+            return False
+        request = SetObjectInteraction.Request()
+        request.object_id = object_id
+        request.interaction_mode = interaction_mode
+        request.owner = owner
+        request.primary_link = primary_link
+        request.secondary_link = secondary_link
+        request.enable = enable
+        future = self._set_object_interaction_client.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=3.0)
+        return future.result() is not None and future.result().success
 
     def _verify_no_live_allocations(self, state: str) -> Tuple[bool, str]:
         attached = [obj.id for obj in self._scene_cache.objects if obj.attached_link]
@@ -779,6 +886,160 @@ class DualArmTaskManagerNode(Node):
             last_detail = detail
             time.sleep(interval_sec)
         return False, last_detail
+
+    def _move_arm_to_named_pose(self, pose_name: str) -> Tuple[bool, str]:
+        poses = self._active_workspace_profile.get("poses", {})
+        pose_spec = poses.get(pose_name)
+        if pose_spec is None:
+            return False, f"workspace profile 缺少 pose={pose_name}"
+        arm_group = str(pose_spec.get("arm", "")).strip()
+        pose = self._pose_from_spec(pose_spec)
+        planner_response = self._call_plan_pose(arm_group, pose)
+        if planner_response is None or not planner_response.success:
+            return False, f"{pose_name} 规划失败"
+        self._set_last_plan(planner_response)
+        executed = self._execute_plan(planner_response)
+        if executed is None or not executed.success:
+            return False, f"{pose_name} 执行失败"
+        return True, f"{pose_name} 执行成功"
+
+    def _pose_from_spec(self, pose_spec: Dict[str, object]) -> PoseStamped:
+        pose = PoseStamped()
+        pose.header.frame_id = str(self._active_workspace_profile.get("frame_id", "world"))
+        xyz = pose_spec.get("position_m", [0.0, 0.0, 0.0])
+        rpy = pose_spec.get("rpy_deg", [0.0, 0.0, 0.0])
+        pose.pose.position.x = float(xyz[0])
+        pose.pose.position.y = float(xyz[1])
+        pose.pose.position.z = float(xyz[2])
+        roll, pitch, yaw = [math.radians(float(value)) for value in rpy]
+        qx, qy, qz, qw = self._quaternion_from_rpy(roll, pitch, yaw)
+        pose.pose.orientation.x = qx
+        pose.pose.orientation.y = qy
+        pose.pose.orientation.z = qz
+        pose.pose.orientation.w = qw
+        return pose
+
+    def _quaternion_from_rpy(self, roll: float, pitch: float, yaw: float) -> Tuple[float, float, float, float]:
+        cy = math.cos(yaw * 0.5)
+        sy = math.sin(yaw * 0.5)
+        cp = math.cos(pitch * 0.5)
+        sp = math.sin(pitch * 0.5)
+        cr = math.cos(roll * 0.5)
+        sr = math.sin(roll * 0.5)
+        return (
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy,
+            cr * cp * cy + sr * sp * sy,
+        )
+
+    def _preview_pick(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None:
+            return False, f"未找到 {object_id}"
+        target = self._grasp_targets.get(scene_object.id)
+        if target is None:
+            return False, f"{scene_object.id} 的 grasp target 不存在"
+        planner_response = self._call_plan_pose(target.arm_mode, target.pregrasp)
+        if planner_response is None or not planner_response.success:
+            return False, f"{scene_object.id} 预抓取规划失败"
+        self._set_last_plan(planner_response)
+        return True, f"{scene_object.id} 预抓取规划成功"
+
+    def _execute_open_cap_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"water_bottle", "cola_bottle"}:
+            return False, f"{object_id} 不是可开盖瓶子"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        moved, detail = self._move_arm_to_named_pose("right_cap_workspace_pose")
+        if not moved:
+            return False, f"开盖工作位移动失败: {detail}"
+        grasp_state = "GRASP_WATER_CAP" if scene_object.semantic_type == "water_bottle" else "GRASP_COLA_CAP"
+        open_state = "OPEN_WATER_CAP" if scene_object.semantic_type == "water_bottle" else "OPEN_COLA_CAP"
+        grasp_call, grasp_error = self._build_behavior_call(grasp_state)
+        if grasp_error or grasp_call is None:
+            return False, grasp_error or f"{grasp_state} 行为构造失败"
+        success, detail = self._execute_behavior_call(grasp_state, grasp_call)
+        if not success:
+            return False, detail
+        open_call, open_error = self._build_behavior_call(open_state)
+        if open_error or open_call is None:
+            return False, open_error or f"{open_state} 行为构造失败"
+        return self._execute_behavior_call(open_state, open_call)
+
+    def _execute_pick_cup_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or not scene_object.semantic_type.startswith("cup"):
+            return False, f"{object_id} 不是 cup"
+        return self._direct_grasp(scene_object.id, f"rviz_cup:{scene_object.id}")
+
+    def _execute_align_pour_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"water_bottle", "cola_bottle"}:
+            return False, f"{object_id} 不是 bottle"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        target = self._grasp_targets.get(scene_object.id)
+        if target is None:
+            return False, f"{scene_object.id} grasp target 缺失"
+        planner_response = self._call_plan_pose(target.arm_mode, target.operate)
+        if planner_response is None or not planner_response.success:
+            return False, "倒水对位规划失败"
+        self._set_last_plan(planner_response)
+        return True, "倒水对位规划成功"
+
+    def _execute_pour_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"water_bottle", "cola_bottle"}:
+            return False, f"{object_id} 不是 bottle"
+        bottle_key = scene_object.semantic_type
+        cup_key = "cup_water" if bottle_key == "water_bottle" else "cup_cola"
+        self._assignments[bottle_key] = scene_object.id
+        if cup_key not in self._assignments:
+            cups = self._objects_by_prefix("cup", allowed_states=("stable", "reserved", "attached"))
+            if not cups:
+                return False, "当前没有可用 cup"
+            self._assignments[cup_key] = cups[0].id
+        state = "EXECUTE_WATER_POUR" if bottle_key == "water_bottle" else "EXECUTE_COLA_POUR"
+        behavior_call, behavior_error = self._build_behavior_call(state)
+        if behavior_error or behavior_call is None:
+            return False, behavior_error or f"{state} 行为构造失败"
+        return self._execute_behavior_call(state, behavior_call)
+
+    def _execute_plan_ball_pair_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"basketball", "soccer_ball"}:
+            return False, f"{object_id} 不是球体"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        target = self._grasp_targets.get(scene_object.id)
+        if target is None:
+            return False, f"{scene_object.id} grasp target 缺失"
+        planner_response = self._call_plan_pose(target.arm_mode, target.pregrasp)
+        if planner_response is None or not planner_response.success:
+            return False, "双臂预抓规划失败"
+        self._set_last_plan(planner_response)
+        return True, "双臂预抓规划成功"
+
+    def _execute_ball_close_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"basketball", "soccer_ball"}:
+            return False, f"{object_id} 不是球体"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        state = "GRASP_BALL_1" if scene_object.semantic_type == "basketball" else "GRASP_BALL_2"
+        behavior_call, behavior_error = self._build_behavior_call(state)
+        if behavior_error or behavior_call is None:
+            return False, behavior_error or f"{state} 行为构造失败"
+        return self._execute_behavior_call(state, behavior_call)
+
+    def _execute_release_ball_command(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None or scene_object.semantic_type not in {"basketball", "soccer_ball"}:
+            return False, f"{object_id} 不是球体"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        state = "RELEASE_BALL_1" if scene_object.semantic_type == "basketball" else "RELEASE_BALL_2"
+        behavior_call, behavior_error = self._build_behavior_call(state)
+        if behavior_error or behavior_call is None:
+            return False, behavior_error or f"{state} 行为构造失败"
+        return self._execute_behavior_call(state, behavior_call)
 
     def _pose_distance(self, lhs: PoseStamped, rhs: PoseStamped) -> float:
         dx = lhs.pose.position.x - rhs.pose.position.x

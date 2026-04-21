@@ -258,6 +258,7 @@
 - Time: 2026-04-16
 - Scope: MoveIt shutdown during Wave 5 smoke
 - Symptom: `Ctrl+C` 停止 `competition_core.launch.py` 时，`move_group` 在析构阶段再次出现 segmentation fault，日志包含 `Attempting to unload library while objects created by this loader exist`。
+
 - Root cause: 尚未闭环；该现象与此前记录的 MoveIt 退出阶段稳定性问题一致，发生在验证收尾阶段，不是本次 `planning_scene_sync` attach 失败的直接原因。
 - Handling:
   1. 记录为运行态噪声与后续环境治理项；
@@ -478,3 +479,96 @@
 - Prevention:
   - 以后凡是平面或法向稳定性评估，都要先统一法向半球或按 `abs(dot)` 比较；
   - ROS Python 下的 TF/Pose API 必须先做最小运行态验证，不能只凭记忆套接口。
+
+## Incident 37
+- Time: 2026-04-20
+- Scope: 左夹爪 live reconnect
+- Symptom:
+  1. 当前 live ROS 图中仅有 `/gripper1/gripper_node_right` 存活，未见 `/gripper0/gripper_node_left`
+  2. `/execution/set_gripper` 对默认 `left_arm` 返回 `success=False`
+  3. 当前系统只剩 1 个已枚举 USB-485 口：`/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0`
+- Root cause:
+  - 当前尚未闭环到单一硬件根因，但软件证据已收缩到“现场没有一条能稳定触达左夹爪从站的物理串口链路”。
+  - 当前唯一在线串口上，`slave_id=10` 可稳定读状态和执行命令，`slave_id=9` 不可读且扫描超时。
+  - `execution_adapter` 上层路由未坏：当显式指定 `slave_id=10` 时，`arm_name=left_arm` 的 `SetGripper` 也能成功。
+- Handling:
+  1. 复查当前 live ROS 图、串口枚举和右夹爪参数
+  2. 验证 `/gripper1/epg50_gripper/status`：
+     - `slave_id=10 -> success=True`
+     - `slave_id=9 -> success=False`
+  3. 扫描当前在线串口 `slave_id=1..16`，仅 `10` 返回 `OK`
+  4. 临时启动 `left_probe.left_gripper_probe`，将当前唯一串口绑定到 `default_slave_id:=9`，结果持续 `获取夹爪状态失败`
+  5. 通过 `/execution/set_gripper` 验证：
+     - `left_arm + slave_id=0 -> success=False`
+     - `left_arm + slave_id=10 -> success=True`
+- Evidence:
+  - `ls -l /dev/serial/by-id /dev/ttyUSB* /dev/ttyACM*`
+  - `ros2 node list | sort`
+  - `ros2 param get /gripper1/gripper_node_right port`
+  - `ros2 service call /gripper1/epg50_gripper/status ... "{slave_id: 10}"`
+  - `ros2 service call /gripper1/epg50_gripper/status ... "{slave_id: 9}"`
+  - `ros2 service call /execution/set_gripper ... "{arm_name: left_arm, command: 2, slave_id: 0, ...}"`
+  - `ros2 service call /execution/set_gripper ... "{arm_name: left_arm, command: 2, slave_id: 10, ...}"`
+- Prevention:
+  - 以后排查夹爪前，先确认三件事：
+    1. `/dev/serial/by-id` 当前实际有哪些设备
+    2. 每条在线串口上哪些 `slave_id` 真正有响应
+    3. 左右 `SetGripper` 失败是否来自上层路由，还是来自底层无 server / 无响应
+- Remaining:
+  - 需现场恢复左 USB-485 转换器枚举，或确认左夹爪电源、A/B、通信地线和实际从站 ID。
+  - 左夹爪 `status` 可读之前，不继续做左夹爪 `enable/open/close` 真动作验收。
+
+### Closure Update
+- Time: 2026-04-20
+- Corrective action:
+  1. 用户重新连接左夹爪接口后，左 USB-485 转换器重新枚举为 `A7BIb114J19 -> /dev/ttyUSB1`
+  2. 由于原 live 栈中的 `/gripper0/gripper_node_left` 未存活，手动补起左夹爪节点并绑定左侧 by-id 串口
+  3. 先只读查询 `slave_id=9` 状态，确认 `success=True, error=0`
+  4. 再通过正式 `/execution/set_gripper` 对 `left_arm` 下发最大张开命令 `position=0`
+- Verification evidence:
+  - `/gripper0/epg50_gripper/status` with `slave_id=9` 返回 `success=True, gact=True, gsta=3, error=0, position=255`
+  - `/execution/set_gripper` with `arm_name=left_arm, slave_id=0, command=2, position=0` 返回 `success=True`
+  - 控制后状态回读返回 `success=True, error=0, position=0`
+- Remaining:
+  - 左夹爪已恢复状态读取与最大张开控制；闭合夹持尚未测试。
+  - 当前左夹爪节点为手动补起；重启整套 launch 后仍需确认 `/gripper0` 能自动拉起。
+
+## Incident 38
+- Time: 2026-04-21
+- Scope: RViz competition display / model pointcloud / robot pose
+- Symptom:
+  1. 用户反馈 RViz 里看不到有效内容，后续截图显示 RobotModel 可见但点云/机械臂/桌面比例和现实不一致。
+  2. 生成的模型点云高度不对，桌面/水瓶/可乐/球/筐模型展示不理想。
+  3. 右臂新增视觉相机后，原有系统仍大量默认使用 `left_camera_*` 或 `/camera/*`，存在左右相机混淆风险。
+- Root cause:
+  1. RViz 空白的一次直接原因是底层 ROS 图已经退出；不能只看 RViz 进程，要同时确认 core topic/node。
+  2. 机械臂姿态不准不是关节单位问题；`robo_ctrl_node.cpp` 已将 SDK 角度制关节转换为 ROS/MoveIt 期望的弧度。更高概率是 URDF 中 `world_to_left_base/right_base` 硬编码安装位姿与现场实际不一致。
+  3. 模型点云高度不准来自 `scene_model_pointcloud` 直接使用 `SceneObject.pose` 作为几何中心；当外参/桌面估计未 verified 时，显示高度会漂。
+  4. 当前 `left_tcp -> left_camera` 和新增 `right_tcp -> right_camera` 都未 verified，不能把 world object pose 当比赛级最终结果。
+- Handling:
+  1. 新增 `competition_rviz_tools`，提供 RViz task bridge、interactive marker、grasp marker 和 scene model pointcloud。
+  2. 新增 `/competition/rviz/scene_model_points`，把 managed scene 中的桌面、瓶、杯、球、筐采样成模型点云。
+  3. 修正 `scene_model_pointcloud`：桌面按平面高度显示；瓶/杯/筐等桌面支撑物体按 table surface 贴底显示。
+  4. 将 `fairino_dualarm.urdf.xacro` 的左右基座安装位姿改为 xacro 参数，并通过 MoveIt/planner/bringup launch 透传。
+  5. 在 `tf_node` 配置中新增右臂相机 frame，防止左右相机混淆。
+  6. 将 `orbbec_gemini_bridge.launch.py` 改为可传 node name、topic 和 frame id，为左右双相机启动做准备。
+- Evidence:
+  - 增量构建通过：
+    - `fairino_dualarm_description`
+    - `fairino_dualarm_moveit_config`
+    - `fairino_dualarm_planner`
+    - `orbbec_gemini_bridge`
+    - `tf_node`
+    - `competition_rviz_tools`
+    - `dualarm_bringup`
+  - `xacro ... fairino_dualarm.urdf.xacro left_base_xyz:=... right_base_xyz:=...` 生成通过。
+  - RViz 截图：`/tmp/competition_rviz_latest.png` 可见 RobotModel 与点云，但空间对齐仍不准确。
+  - 安全收口后 `ps` 查询未见 ROS/RViz 业务进程残留。
+- Prevention:
+  - 以后每次声称 RViz 正常前，必须先截图并人工检查是否可见 RobotModel、点云、scene markers。
+  - 不再把硬编码 `0 ±0.35 0` 的双臂基座安装位姿当现场事实；必须用 launch 参数或配置覆盖。
+  - 新增右臂相机后，所有相机 topic/frame 必须带 left/right 前缀或明确 alias，不允许继续扩大 `/camera/*` 语义。
+- Remaining:
+  - 需要现场实测左右机器人基座位置/yaw。
+  - 需要分别完成 `left_tcp -> left_camera` 和 `right_tcp -> right_camera` hand-eye 标定。
+  - 怡宝/可乐瓶尺寸仍需卡尺实测或可靠资料校准；当前只是工程代理值。

@@ -27,7 +27,7 @@ struct SemanticPrior {
 };
 
 constexpr SemanticPrior kYibao350Prior {
-    {0.055f, 0.055f, 0.180f},
+    {0.060f, 0.060f, 0.175f},
     0.012f,
     0.040f,
     0.015f,
@@ -35,7 +35,7 @@ constexpr SemanticPrior kYibao350Prior {
     0.0f,
 };
 constexpr SemanticPrior kCocaCola300Prior {
-    {0.061f, 0.061f, 0.210f},
+    {0.060f, 0.060f, 0.145f},
     0.015f,
     0.040f,
     0.020f,
@@ -262,7 +262,7 @@ void DepthProcessorNode::synchronizedCallback(
         const int legacy_class_id = static_cast<int>(index);
         bbox_array.results.push_back(makeLegacyBbox(*geometry, legacy_class_id));
         scene_array.objects.push_back(makeSceneObject(*geometry, static_cast<int>(index), scene_array.header));
-        all_points.push_back(geometry->center);
+        all_points.insert(all_points.end(), geometry->support_points.begin(), geometry->support_points.end());
     }
 
     bbox3d_publisher_->publish(bbox_array);
@@ -299,28 +299,109 @@ std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGe
         return std::nullopt;
     }
 
+    const auto source_frame =
+        depth_image->header.frame_id.empty() ? camera_info_->header.frame_id : depth_image->header.frame_id;
     auto points = extractRoiPoints(depth_image, x0, y0, x1, y1);
     if (static_cast<int>(points.size()) < min_points_) {
         return std::nullopt;
     }
 
     const auto table_object = latestTableObject(output_frame);
+    std::optional<Eigen::Vector3f> table_point_source_frame;
+    std::optional<Eigen::Vector3f> table_normal_source_frame;
+    std::optional<Eigen::Vector3f> table_point_output_frame;
+    std::optional<Eigen::Vector3f> table_normal_output_frame;
+    if (table_object) {
+        const auto& table_position = table_object->pose.pose.position;
+        table_point_output_frame = Eigen::Vector3f(
+            static_cast<float>(table_position.x),
+            static_cast<float>(table_position.y),
+            static_cast<float>(table_position.z));
+        table_normal_output_frame = tableNormal(*table_object);
+        if (output_frame.empty() || output_frame == source_frame) {
+            table_point_source_frame = *table_point_output_frame;
+            table_normal_source_frame = *table_normal_output_frame;
+        } else {
+            const Eigen::Isometry3f output_to_source = transform.inverse().cast<float>();
+            table_point_source_frame = output_to_source * *table_point_output_frame;
+            Eigen::Vector3f normal_source_frame = output_to_source.linear() * *table_normal_output_frame;
+            const float normal_norm = normal_source_frame.norm();
+            if (normal_norm > 1e-6f) {
+                table_normal_source_frame = normal_source_frame / normal_norm;
+            }
+        }
+    }
+
     std::vector<Eigen::Vector3f> transformed_points;
     transformed_points.reserve(points.size());
     int table_rejected = 0;
     for (const auto& point : points) {
-        const Eigen::Vector3f transformed = (transform * point.cast<double>()).cast<float>();
-        if (table_object) {
-            const float distance = signedDistanceToTable(transformed, *table_object);
+        if (table_point_source_frame && table_normal_source_frame) {
+            const float distance =
+                table_normal_source_frame->dot(point - *table_point_source_frame);
             if (std::abs(distance) <= static_cast<float>(table_reject_distance_)) {
                 ++table_rejected;
                 continue;
             }
         }
+        const Eigen::Vector3f transformed = (transform * point.cast<double>()).cast<float>();
         transformed_points.push_back(transformed);
     }
 
     if (static_cast<int>(transformed_points.size()) < min_points_) {
+        if (table_point_source_frame && table_normal_source_frame && table_point_output_frame && table_normal_output_frame) {
+            if (const auto* prior = priorForSemantic(detection.semantic_type)) {
+                Eigen::Vector3f support_normal_source = *table_normal_source_frame;
+                if (support_normal_source.dot(*table_point_source_frame) > 0.0f) {
+                    support_normal_source = -support_normal_source;
+                }
+
+                const float fx = static_cast<float>(camera_info_->k[0]);
+                const float fy = static_cast<float>(camera_info_->k[4]);
+                const float cx = static_cast<float>(camera_info_->k[2]);
+                const float cy = static_cast<float>(camera_info_->k[5]);
+                if (std::abs(fx) > 1e-6f && std::abs(fy) > 1e-6f) {
+                    const float support_u = 0.5f * static_cast<float>(x0 + x1);
+                    const float support_v = static_cast<float>(std::max(y0, y1 - 1));
+                    Eigen::Vector3f support_ray(
+                        (support_u - cx) / fx,
+                        (support_v - cy) / fy,
+                        1.0f);
+                    const float denominator = support_normal_source.dot(support_ray);
+                    if (std::abs(denominator) > 1e-6f) {
+                        const float distance_along_ray =
+                            support_normal_source.dot(*table_point_source_frame) / denominator;
+                        if (distance_along_ray > 0.0f) {
+                            const Eigen::Vector3f contact_point_source = support_ray * distance_along_ray;
+                            const Eigen::Vector3f center_source =
+                                contact_point_source + support_normal_source * (prior->size[2] * 0.5f);
+                            const Eigen::Vector3f center_output =
+                                (transform * center_source.cast<double>()).cast<float>();
+
+                            DetectionGeometry geometry;
+                            geometry.semantic_type = detection.semantic_type;
+                            geometry.confidence = detection.score;
+                            geometry.center = center_output;
+                            geometry.support_points = {center_output};
+                            geometry.min_point =
+                                center_output - Eigen::Vector3f(prior->size[0], prior->size[1], prior->size[2]) * 0.5f;
+                            geometry.max_point =
+                                center_output + Eigen::Vector3f(prior->size[0], prior->size[1], prior->size[2]) * 0.5f;
+
+                            RCLCPP_WARN(
+                                get_logger(),
+                                "%s ROI 点经桌面平面剔除后不足，回退到桌面交点+语义先验，raw=%zu filtered=%zu rejected=%d",
+                                detection.semantic_type.c_str(),
+                                points.size(),
+                                transformed_points.size(),
+                                table_rejected);
+                            return geometry;
+                        }
+                    }
+                }
+            }
+        }
+
         RCLCPP_WARN(
             get_logger(),
             "%s ROI 点经桌面平面剔除后不足，raw=%zu filtered=%zu rejected=%d",
@@ -344,6 +425,7 @@ std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGe
     }
 
     geometry.center = (geometry.min_point + geometry.max_point) / 2.0f;
+    geometry.support_points = transformed_points;
     return geometry;
 }
 
@@ -547,10 +629,16 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
             "bottle_cap_center",
             Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z));
         add_subframe(
+            "bottle_cap_grasp",
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z));
+        add_subframe(
             "bottle_cap_pregrasp",
             Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z + prior->cap_pregrasp_offset));
         add_subframe(
             "bottle_mouth",
+            Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z));
+        add_subframe(
+            "bottle_twist_axis",
             Eigen::Vector3f(geometry.center.x(), geometry.center.y(), cap_center_z));
         add_subframe(
             "bottle_pour_pivot",

@@ -173,6 +173,55 @@
 - `tools`、`detector` 等历史包仍含旧路径与旧工作区假设，使用时要按当前工作区重新核对。
 - 当前本机不具备稳定的机械臂控制条件：机械臂本体控制实际走 IP/RPC，夹爪串口未枚举，左臂 IP 虽可短暂握手但会话随即被控制器重置。
 
+### Session: 2026-04-21 RViz / 双相机 / 模型点云收口
+
+### Actions Taken
+- 按 v4 方案继续推进 RViz 展示、交互控制、scene interaction、模型点云和左右相机 frame 契约。
+- 新增 `TaskCommand.srv` 与 `SetObjectInteraction.srv` 并完成接口构建。
+- 新增 `configs/competition/object_geometry.yaml`、`workspace_profiles.yaml`、`task_thresholds.yaml`。
+- 新增 `competition_rviz_tools` 包，包含：
+  - `rviz_task_bridge`
+  - `scene_interactive_markers`
+  - `grasp_debug_markers`
+  - `scene_model_pointcloud`
+  - `competition_control.rviz`
+- 新增 `dualarm_bringup/launch/competition_rviz.launch.py` 作为一键展示/控制入口。
+- `planning_scene_sync` 新增 `dual_contact` / `opened_split` interaction 语义，并支持 bottle body + cap 复合碰撞体。
+- `execution_adapter` 接入 `SetObjectInteraction`，用于开盖后 split 和球类 release。
+- `dualarm_task_manager` 新增 `/task/command`，RViz operator 通过任务层发命令。
+- `depth_handler` 增加瓶盖抓取和旋拧轴 subframe。
+- `table_surface_detector` 增加 detection-seeded table component 选择，降低桌面 mask 选中旁边木色桌/机器人底座的概率。
+- `scene_model_pointcloud` 新增 scene object 几何模型点云，并随后改为对桌面支撑物体做 table-surface 贴底显示。
+- `fairino_dualarm.urdf.xacro`、MoveIt launch 和 planner launch 已支持可配置左右基座安装位姿：
+  - `left_base_xyz`
+  - `left_base_rpy`
+  - `right_base_xyz`
+  - `right_base_rpy`
+- `tf_node/config/calibration_transforms.yaml` 新增右臂相机 frame：
+  - `right_tcp -> right_camera`
+  - `right_camera -> right_camera_color_frame`
+  - `right_camera -> right_camera_depth_frame`
+- `orbbec_gemini_bridge.launch.py` 已支持自定义 node name、topic 和 frame id，为左右相机双 bridge 做准备。
+- 安全收口时已停止 RViz/ROS 调试栈，并确认无残留业务进程。
+
+### Verification
+- 相关包增量构建通过。
+- `xacro` 带左右基座参数生成 URDF 通过。
+- RViz 截图 `/tmp/competition_rviz_latest.png` 曾确认 RobotModel 与点云可见。
+- 安全收口后 `ps` 查询未见 ROS/RViz 业务进程残留。
+
+### Key Intermediate Conclusions
+- 机械臂姿态不准不是 joint state 角度单位问题；`robo_ctrl_node.cpp` 中 `/L|R/joint_states` 已做 `deg -> rad`。
+- 机械臂姿态不准首要嫌疑是双臂基座安装位姿与现场真实摆放不一致；已将其改为可配置。
+- 模型点云高度不准首要嫌疑是直接按 `SceneObject.pose` 当几何中心显示；已改成桌面支撑物体按 table surface 贴底显示，但还需下窗口截图复验。
+- 右臂相机加入后，必须彻底区分左右相机 frame/topic；不能再默认 `/camera/*` 是唯一相机。
+
+### Next Steps
+- 下窗口启动 RViz 后必须先截图自检，不允许把空白或明显错位窗口交给用户。
+- 现场测量左右底座安装位姿并通过 launch 参数覆盖。
+- 分别标定左/右相机外参。
+- 用实测尺寸修正怡宝/可乐参数。
+
 ### Session: 2026-04-16 Five-Window Parallel Limit
 
 ### Actions Taken
@@ -218,6 +267,29 @@
 - 明确将实时共享状态从 repo 内 tracked 文件切换为外部共享目录 `/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared`。
 - 为 Wave 4、Wave 2/3、Wave 6、Wave 7/8、Wave 9、Wave 10、Wave 11 新增模块任务卡。
 - 为行为并行提前建立独立模块目录：
+
+### Session: 2026-04-20 Camera / Table Modeling
+
+### Actions Taken
+- 重新核对了 live 设备与 ROS 图，确认 Orbbec 已恢复为 `2bc5:0800`，并且系统存在 `/dev/video2..9` 的 Orbbec 视频节点。
+- 保持当前 `competition_core` 不重启，单独启动了 `orbbec_gemini_ros_bridge.py`。
+- 验证 `/camera/color/image_raw`、`/camera/depth/image_raw`、`/camera/depth/camera_info` 都有真实 publisher，并记录了约 `7-8Hz` 的发布频率。
+- 启动了 `ros_image_viewer.py`，实时查看 `/camera/color/image_raw`。
+- 保存了：
+  - 彩色图
+  - 深度伪彩图
+  - 第一版桌面 overlay
+  - 调整后的桌面 overlay 和 JSON 结果
+- 新增了 `table_surface_detector.py` 原型脚本，并开始把桌面建模从“一次性分析脚本”转成“可持续发布的 ROS 节点”。
+- 同时开始修改：
+  - `scene_fusion` 默认输入增加 `/perception/table_scene_objects`
+  - `depth_handler` 接桌面平面入口
+  - `tools` 包安装脚本列表
+
+### Key Intermediate Conclusions
+- 相机链路已经真实恢复，不再是上次的 recovery-like mass storage 状态。
+- 纯深度最大平面不等于肉眼桌面；“彩色木桌先验 + 深度平面确认”明显更接近真实桌面。
+- 当前桌面建模还没进入正式 ROS 运行链，仍停留在“代码已写一半、build 未闭环”的中间状态。
   - `src/tasks/dualarm_task_manager/scripts/behaviors/`
   - `src/control/execution_adapter/scripts/primitives/`
 - 新增窗口提示词文档，供用户直接在不同窗口打开并复制使用。

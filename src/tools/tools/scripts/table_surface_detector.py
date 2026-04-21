@@ -16,7 +16,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.time import Time
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from tf2_geometry_msgs import do_transform_pose
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -79,6 +79,7 @@ class TableSurfaceDetector(Node):
         self.declare_parameter("depth_confirmed_overlay_topic", "/perception/table_surface/depth_confirmed_overlay")
         self.declare_parameter("color_guided_overlay_topic", "/perception/table_surface/color_guided_overlay")
         self.declare_parameter("mask_topic", "/perception/table_surface/mask")
+        self.declare_parameter("table_points_topic", "/perception/table_points")
         self.declare_parameter("detections_topic", "/perception/detection_2d")
         self.declare_parameter("rgb_overlay_topic", "/perception/pick_assist/rgb_overlay")
         self.declare_parameter("target_frame", "world")
@@ -120,6 +121,9 @@ class TableSurfaceDetector(Node):
         )
         self._rgb_overlay_pub = self.create_publisher(Image, str(self.get_parameter("rgb_overlay_topic").value), 10)
         self._mask_pub = self.create_publisher(Image, str(self.get_parameter("mask_topic").value), 10)
+        self._table_points_pub = self.create_publisher(
+            PointCloud2, str(self.get_parameter("table_points_topic").value), 10
+        )
 
         hz = max(float(self.get_parameter("timer_hz").value), 0.2)
         self.create_timer(1.0 / hz, self._tick)
@@ -202,6 +206,7 @@ class TableSurfaceDetector(Node):
             "depth_confirmed_overlay": depth_overlay,
             "rgb_overlay": rgb_overlay,
             "mask_image": mask_image,
+            "table_points_m": points[inliers] / 1000.0,
             "normal": normal,
             "plane_d_mm": float(d),
             "center_m": center_m,
@@ -229,7 +234,7 @@ class TableSurfaceDetector(Node):
         lower_prior = np.zeros((height, width), dtype=bool)
         lower_prior[int(height * 0.22) :, int(width * 0.02) : int(width * 0.98)] = True
         wood_prior = (distance < threshold) & lower_prior
-        component = self._largest_foreground_component(wood_prior, height)
+        component = self._select_table_component(wood_prior, height, width)
         kernel_close = np.ones((17, 17), np.uint8)
         kernel_open = np.ones((7, 7), np.uint8)
         component = cv2.morphologyEx(component.astype(np.uint8) * 255, cv2.MORPH_CLOSE, kernel_close) > 0
@@ -238,7 +243,8 @@ class TableSurfaceDetector(Node):
         _ = valid
         return component
 
-    def _largest_foreground_component(self, mask: np.ndarray, height: int) -> np.ndarray:
+    def _select_table_component(self, mask: np.ndarray, height: int, width: int) -> np.ndarray:
+        seed_mask = self._detection_seed_mask(height, width)
         count, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
         if count <= 1:
             return mask
@@ -249,11 +255,28 @@ class TableSurfaceDetector(Node):
             top = int(stats[label, cv2.CC_STAT_TOP])
             comp_height = int(stats[label, cv2.CC_STAT_HEIGHT])
             bottom = top + comp_height
-            score = area + (50000 if bottom > int(height * 0.80) else 0)
+            overlap = int(np.count_nonzero(seed_mask & (labels == label))) if seed_mask is not None else 0
+            score = area + (50000 if bottom > int(height * 0.80) else 0) + overlap * 200000
             if score > best_score:
                 best_score = score
                 best_label = label
         return labels == best_label
+
+    def _detection_seed_mask(self, height: int, width: int) -> np.ndarray:
+        mask = np.zeros((height, width), dtype=np.uint8)
+        if self._detections is None:
+            return mask.astype(bool)
+        for detection in self._detections.detections:
+            cx = int(np.clip(detection.x, 0, width - 1))
+            cy = int(np.clip(detection.y + detection.height * 0.15, 0, height - 1))
+            radius = int(max(12, min(detection.width, detection.height) * 0.18))
+            cv2.circle(mask, (cx, cy), radius, 1, thickness=-1)
+            x0 = int(np.clip(detection.x - detection.width * 0.25, 0, width - 1))
+            x1 = int(np.clip(detection.x + detection.width * 0.25, 0, width - 1))
+            y0 = int(np.clip(detection.y + detection.height * 0.15, 0, height - 1))
+            y1 = int(np.clip(detection.y + detection.height * 0.45, 0, height - 1))
+            mask[y0 : max(y0 + 1, y1), x0 : max(x0 + 1, x1)] = True
+        return mask.astype(bool)
 
     def _backproject(self, depth: np.ndarray, info: CameraInfo, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         ys, xs = np.where(mask)
@@ -489,12 +512,31 @@ class TableSurfaceDetector(Node):
         self._publish_image(self._color_overlay_pub, result["color_guided_overlay"], stamp, frame_id, "bgr8")
         self._publish_image(self._rgb_overlay_pub, result["rgb_overlay"], stamp, frame_id, "bgr8")
         self._publish_image(self._mask_pub, result["mask_image"], stamp, frame_id, "mono8")
+        self._publish_pointcloud(self._table_points_pub, result["table_points_m"], stamp, frame_id)
 
     def _publish_image(self, publisher, image: np.ndarray, stamp, frame_id: str, encoding: str) -> None:
         msg = self._bridge.cv2_to_imgmsg(image, encoding=encoding)
         msg.header.stamp = stamp
         msg.header.frame_id = frame_id
         publisher.publish(msg)
+
+    def _publish_pointcloud(self, publisher, points: np.ndarray, stamp, frame_id: str) -> None:
+        cloud = PointCloud2()
+        cloud.header.stamp = stamp
+        cloud.header.frame_id = frame_id
+        cloud.height = 1
+        cloud.width = int(points.shape[0]) if points.ndim == 2 else 0
+        cloud.is_dense = False
+        cloud.is_bigendian = False
+        cloud.point_step = 12
+        cloud.row_step = cloud.point_step * cloud.width
+        cloud.fields = [
+            PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+        ]
+        cloud.data = np.asarray(points, dtype=np.float32).reshape(-1, 3).tobytes()
+        publisher.publish(cloud)
 
     def _save_debug_artifacts(self, result: dict, published_frame: str, world_pose: Optional[PoseStamped]) -> None:
         debug_dir = Path(str(self.get_parameter("debug_dir").value))

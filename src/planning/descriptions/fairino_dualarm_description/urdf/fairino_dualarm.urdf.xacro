@@ -1,5 +1,9 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fairino_dualarm">
+  <xacro:arg name="left_base_xyz" default="0 0.35 0"/>
+  <xacro:arg name="left_base_rpy" default="0 0 0"/>
+  <xacro:arg name="right_base_xyz" default="0 -0.35 0"/>
+  <xacro:arg name="right_base_rpy" default="0 0 3.141592653589793"/>
   <xacro:include filename="$(find fairino_dualarm_description)/urdf/fairino3_v6_macro.xacro"/>
 
   <link name="world"/>
@@ -12,14 +16,14 @@
 
   <link name="left_base"/>
   <joint name="world_to_left_base" type="fixed">
-    <origin xyz="0 0.35 0" rpy="0 0 0"/>
+    <origin xyz="$(arg left_base_xyz)" rpy="$(arg left_base_rpy)"/>
     <parent link="world"/>
     <child link="left_base"/>
   </joint>
 
   <link name="right_base"/>
   <joint name="world_to_right_base" type="fixed">
-    <origin xyz="0 -0.35 0" rpy="0 0 3.141592653589793"/>
+    <origin xyz="$(arg right_base_xyz)" rpy="$(arg right_base_rpy)"/>
     <parent link="world"/>
     <child link="right_base"/>
   </joint>

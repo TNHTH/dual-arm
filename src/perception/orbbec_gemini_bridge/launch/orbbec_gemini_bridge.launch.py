@@ -14,6 +14,13 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("color_device", default_value="auto"),
             DeclareLaunchArgument("depth_device", default_value="auto"),
+            DeclareLaunchArgument("node_name", default_value="orbbec_gemini_ros_bridge"),
+            DeclareLaunchArgument("color_topic", default_value="/camera/color/image_raw"),
+            DeclareLaunchArgument("depth_topic", default_value="/camera/depth/image_raw"),
+            DeclareLaunchArgument("color_camera_info_topic", default_value="/camera/color/camera_info"),
+            DeclareLaunchArgument("depth_camera_info_topic", default_value="/camera/depth/camera_info"),
+            DeclareLaunchArgument("color_frame_id", default_value="left_camera_color_frame"),
+            DeclareLaunchArgument("depth_frame_id", default_value="left_camera_depth_frame"),
             DeclareLaunchArgument("depth_backend", default_value="auto"),
             DeclareLaunchArgument("depth_obsensor_index", default_value="0"),
             DeclareLaunchArgument("rotate_180", default_value="true"),
@@ -25,11 +32,17 @@ def generate_launch_description():
             Node(
                 package="orbbec_gemini_bridge",
                 executable="orbbec_gemini_ros_bridge.py",
-                name="orbbec_gemini_ros_bridge",
+                name=LaunchConfiguration("node_name"),
                 condition=UnlessCondition(LaunchConfiguration("use_mock_stream")),
                 output="screen",
                 parameters=[
                     {
+                        "color_topic": LaunchConfiguration("color_topic"),
+                        "depth_topic": LaunchConfiguration("depth_topic"),
+                        "color_camera_info_topic": LaunchConfiguration("color_camera_info_topic"),
+                        "depth_camera_info_topic": LaunchConfiguration("depth_camera_info_topic"),
+                        "color_frame_id": LaunchConfiguration("color_frame_id"),
+                        "depth_frame_id": LaunchConfiguration("depth_frame_id"),
                         "color_device": LaunchConfiguration("color_device"),
                         "depth_device": LaunchConfiguration("depth_device"),
                         "depth_backend": LaunchConfiguration("depth_backend"),

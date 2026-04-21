@@ -18,7 +18,7 @@ from sensor_msgs.msg import JointState
 
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory
 from dualarm_interfaces.msg import SceneObjectArray
-from dualarm_interfaces.srv import AttachObject, DetachObject, SetGripper
+from dualarm_interfaces.srv import AttachObject, DetachObject, SetGripper, SetObjectInteraction
 from primitive_contract import (
     PRIMITIVE_CONTRACT_VERSION,
     RESULT_CONTACT_FAILED,
@@ -114,6 +114,9 @@ class ExecutionAdapterNode(Node):
         )
         self._detach_client = self.create_client(
             DetachObject, "/scene/detach_object", callback_group=self._reentrant_group
+        )
+        self._set_interaction_client = self.create_client(
+            SetObjectInteraction, "/scene/set_object_interaction", callback_group=self._reentrant_group
         )
 
         self._left_robot_state: Optional[RobotState] = None
@@ -356,6 +359,18 @@ class ExecutionAdapterNode(Node):
                 secondary_arm_group(goal.arm_group, goal.secondary_arm_group)
             )
             outcome.success = motion_success and outcome.contact_verified
+            if outcome.success:
+                primary_link = self._tool_link_for_arm(primary_arm_group(goal.arm_group))
+                secondary_link = self._tool_link_for_arm(secondary_arm_group(goal.arm_group, goal.secondary_arm_group))
+                outcome.detach_verified = self._set_object_interaction(
+                    object_id=goal.object_id,
+                    interaction_mode="opened_split",
+                    owner="cap_pour",
+                    primary_link=primary_link,
+                    secondary_link=secondary_link,
+                    enable=True,
+                )
+                outcome.success = outcome.success and outcome.detach_verified
             outcome.result_code = (
                 RESULT_SUCCESS
                 if outcome.success
@@ -373,8 +388,16 @@ class ExecutionAdapterNode(Node):
             if outcome.success:
                 outcome.success = self._set_gripper_internal(primary_arm_group(goal.arm_group), command=2, position=0)
                 if outcome.success:
-                    detached = self._call_detach(goal.object_id)
-                    outcome.detach_verified = detached and self._verify_detached(goal.object_id)
+                    outcome.detach_verified = self._set_object_interaction(
+                        object_id=goal.object_id,
+                        interaction_mode="opened_split",
+                        owner="cap_pour",
+                        primary_link=self._tool_link_for_arm(
+                            secondary_arm_group(goal.arm_group, goal.secondary_arm_group) or goal.arm_group
+                        ),
+                        secondary_link="",
+                        enable=True,
+                    )
                     outcome.success = outcome.detach_verified
                 outcome.message = "cap 放置并释放完成" if outcome.success else "cap 放置后释放验证失败"
             outcome.result_code = RESULT_SUCCESS if outcome.success else (
@@ -388,9 +411,12 @@ class ExecutionAdapterNode(Node):
                 primary_arm_group(goal.arm_group),
                 goal.object_id,
                 goal.hold_duration_s or 3.0,
+                secondary_arm_group(goal.arm_group, goal.secondary_arm_group),
             )
             outcome.primary_started = True
+            outcome.secondary_started = bool(secondary_arm_group(goal.arm_group, goal.secondary_arm_group))
             outcome.primary_completed = outcome.success
+            outcome.secondary_completed = outcome.success if outcome.secondary_started else False
             outcome.message = "持物保持验证通过" if outcome.success else "持物保持验证失败"
             outcome.result_code = RESULT_SUCCESS if outcome.success else RESULT_HOLD_FAILED
         elif goal.primitive_id == "release_guard":
@@ -404,8 +430,15 @@ class ExecutionAdapterNode(Node):
                 outcome.secondary_completed = secondary_success
                 outcome.success = secondary_success
             if outcome.success:
-                outcome.detach_verified = self._call_detach(goal.object_id)
-            outcome.detach_verified = outcome.detach_verified and self._verify_detached(goal.object_id)
+                outcome.detach_verified = self._set_object_interaction(
+                    object_id=goal.object_id,
+                    interaction_mode="dual_contact" if goal.synchronized or goal.arm_group == "dual_arm" else "free",
+                    owner="handover",
+                    primary_link="",
+                    secondary_link="",
+                    enable=False,
+                )
+            outcome.detach_verified = outcome.detach_verified and self._verify_released(goal.object_id)
             outcome.success = outcome.success and outcome.detach_verified
             outcome.message = "释放保护动作完成" if outcome.success else "释放保护动作失败"
             outcome.result_code = RESULT_SUCCESS if outcome.success else RESULT_DETACH_FAILED
@@ -683,13 +716,14 @@ class ExecutionAdapterNode(Node):
 
     def _call_detach(self, object_id: str) -> bool:
         if not self._detach_client.wait_for_service(timeout_sec=0.5):
-            self.get_logger().warn("detach_object 服务不可用，跳过 detach 同步")
-            return False
+            return self._fallback_free_interaction(object_id)
         request = DetachObject.Request()
         request.object_id = object_id
         future = self._detach_client.call_async(request)
         response = self._wait_future(future, 2.0)
-        return response is not None and bool(response.success)
+        if response is not None and bool(response.success):
+            return True
+        return self._fallback_free_interaction(object_id)
 
     def _verify_detached(self, object_id: str) -> bool:
         if not object_id:
@@ -705,23 +739,95 @@ class ExecutionAdapterNode(Node):
             return False
         return bool(status.gobj in (1, 2) or status.gsta == 3)
 
-    def _hold_verify(self, arm_name: str, object_id: str, duration_s: float) -> tuple[bool, bool]:
+    def _hold_verify(self, arm_name: str, object_id: str, duration_s: float, secondary_arm: str = "") -> tuple[bool, bool]:
         deadline = time.monotonic() + max(duration_s, 0.1)
         while time.monotonic() < deadline:
             status_ok = self._check_gripper_contact(arm_name)
-            attached_ok = self._verify_object_attached_or_hidden(object_id)
+            if secondary_arm:
+                status_ok = status_ok and self._check_gripper_contact(secondary_arm)
+                attached_ok = self._verify_dual_contact(object_id)
+            else:
+                attached_ok = self._verify_object_attached_or_hidden(object_id)
             if not status_ok or not attached_ok:
                 return False, status_ok
             time.sleep(0.05)
         return True, True
+
+    def _verify_dual_contact(self, object_id: str) -> bool:
+        for scene_object in self._scene_cache.objects:
+            if scene_object.id == object_id:
+                return scene_object.lifecycle_state == "held_dual_contact"
+        return False
+
+    def _verify_released(self, object_id: str) -> bool:
+        for scene_object in self._scene_cache.objects:
+            if scene_object.id == object_id:
+                return scene_object.lifecycle_state not in {"held_dual_contact", "attached", "opened_split_active"}
+        return True
 
     def _verify_object_attached_or_hidden(self, object_id: str) -> bool:
         if not object_id:
             return False
         for scene_object in self._scene_cache.objects:
             if scene_object.id == object_id:
-                return scene_object.attached_link != "" or scene_object.lifecycle_state == "lost"
+                return scene_object.attached_link != "" or scene_object.lifecycle_state in {"lost", "opened_split_active", "opened_split"}
         return True
+
+    def _set_object_interaction(
+        self,
+        object_id: str,
+        interaction_mode: str,
+        owner: str,
+        primary_link: str,
+        secondary_link: str,
+        enable: bool,
+    ) -> bool:
+        if not self._set_interaction_client.wait_for_service(timeout_sec=0.5):
+            return False
+        request = SetObjectInteraction.Request()
+        request.object_id = object_id
+        request.interaction_mode = interaction_mode
+        request.owner = owner
+        request.primary_link = primary_link
+        request.secondary_link = secondary_link
+        request.enable = enable
+        future = self._set_interaction_client.call_async(request)
+        response = self._wait_future(future, 2.0)
+        return response is not None and bool(response.success)
+
+    def _tool_link_for_arm(self, arm_name: str) -> str:
+        return "left_tcp" if arm_name == "left_arm" else "right_tcp"
+
+    def _fallback_free_interaction(self, object_id: str) -> bool:
+        scene_object = self._find_scene_object(object_id)
+        if scene_object is None:
+            return False
+        if scene_object.lifecycle_state.startswith("opened_split"):
+            return self._set_object_interaction(
+                object_id=object_id,
+                interaction_mode="free",
+                owner="cap_pour",
+                primary_link="",
+                secondary_link="",
+                enable=False,
+            )
+        if scene_object.lifecycle_state == "held_dual_contact":
+            return self._set_object_interaction(
+                object_id=object_id,
+                interaction_mode="dual_contact",
+                owner="handover",
+                primary_link="",
+                secondary_link="",
+                enable=False,
+            )
+        self.get_logger().warn("detach_object 服务不可用，且没有可用 interaction fallback")
+        return False
+
+    def _find_scene_object(self, object_id: str):
+        for scene_object in self._scene_cache.objects:
+            if scene_object.id == object_id:
+                return scene_object
+        return None
 
     def _get_gripper_status(self, arm_name: str) -> Optional[GripperStatus]:
         resolved_slave_id = self._resolve_gripper_slave_id(arm_name, 0)

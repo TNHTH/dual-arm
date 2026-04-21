@@ -37,9 +37,8 @@ def build_handover_behavior_call(
                 gripper_commands=[
                     BehaviorGripperCommand(
                         arm_name="left_arm",
-                        object_id=object_id,
-                        link_name="left_tcp",
-                        attach=True,
+                        command=2,
+                        position=200,
                     ),
                     BehaviorGripperCommand(
                         arm_name="right_arm",
@@ -56,9 +55,11 @@ def build_handover_behavior_call(
             BehaviorPrimitiveCall(
                 behavior_group="handover",
                 primitive_id="hold_verify",
-                arm_group="left_arm",
+                arm_group="dual_arm",
+                secondary_arm_group="right_arm",
                 object_id=object_id,
                 hold_duration_s=3.0,
+                synchronized=True,
             ),
             None,
         )
@@ -68,7 +69,7 @@ def build_handover_behavior_call(
             BehaviorPrimitiveCall(
                 behavior_group="handover",
                 primitive_id="release_guard",
-                arm_group="left_arm",
+                arm_group="dual_arm",
                 secondary_arm_group="right_arm",
                 object_id=object_id,
                 synchronized=True,

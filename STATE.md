@@ -721,3 +721,304 @@
 5. 再做真机单臂抓取：
    - 左臂 `water_bottle`
    - 右臂 `cola_bottle`
+
+## 2026-04-20 新窗口接续前状态更新
+
+### Git / Remote
+- 本轮关键改动已提交并推送到远程分支：
+  - `codex/competition-pick-assist-calibration`
+- 远程 PR 入口：
+  - `https://github.com/TNHTH/dual-arm/pull/new/codex/competition-pick-assist-calibration`
+- 提交：
+  - `4186a75 Implement competition pick assist calibration gates`
+  - `bbe89f6 Fix detector launch parameter typing`
+- 未直接推送 `origin/test` 的原因：
+  - 本地 `test` 与 `origin/test` 分叉：本地领先 12、远端领先 1。
+  - `git pull --rebase origin test` 在旧提交 `524ec6a` 处出现目录重命名、文件/目录类型冲突和状态文件冲突。
+  - 为避免强推或误合并，已改为推送新分支。
+
+### 当前 Live 状态
+- 当前核心链已经在断电后重新拉起：
+  - `competition_core.launch.py` PID `13206`
+  - `orbbec_gemini_ros_bridge.py` PID `13238`
+  - `depth_processor_node` PID `13242`
+  - `move_group` PID `13256`
+  - `table_surface_detector.py` PID `13268`
+  - 左夹爪节点 PID `13270`
+  - 右夹爪节点 PID `13274`
+  - 左臂 `robo_ctrl_node` PID `13276`
+  - 右臂 `robo_ctrl_node` PID `13281`
+  - 手动补起的 `detector_pt_node.py` PID `14348/14395`
+  - OpenCV 检测窗口 PID `14597`
+  - OpenCV pick-assist overlay 窗口 PID `14606`
+- 当前启动方式：
+  - `start_hardware:=true`
+  - `start_camera_bridge:=true`
+  - `start_table_surface_detector:=true`
+  - `detector_model_path:=/home/gwh/下载/best.3.pt`
+  - `allow_unverified_camera_extrinsics:=true`
+  - `depth_require_depth_aligned_detections:=false`
+  - `ball_require_depth_aligned_detections:=false`
+- 注意：
+  - launch 内的 detector 曾因 `allowed_class_ids` 参数类型崩溃，已修复代码并重建 `dualarm_bringup`。
+  - 当前 detector 是手动补起的，使用 `/home/gwh/下载/best.3.pt`，正常跑在 `cuda:0`。
+
+### 当前 ROS 图证据
+- `/execution/execute_trajectory` 当前只有 1 个 server：
+  - `/execution_adapter`
+- 左右臂本体状态正常：
+  - `/L/robot_state`: `motion_done=true`, `error_code=0`
+  - `/R/robot_state`: `motion_done=true`, `error_code=0`
+- 右夹爪状态正常：
+  - `/gripper1/epg50_gripper/status` with `slave_id=10` 返回 `success=True`
+- 左夹爪状态异常：
+  - `/gripper0/epg50_gripper/status` with `slave_id=9` 返回 `success=False`
+  - `/gripper0/epg50_gripper/status` with `slave_id=10` 也返回 `success=False`
+  - 当前更像左夹爪电源/接线/通信地线/USB-485 链路问题，而不是单纯从站 ID 互换。
+
+### 当前感知效果
+- `/perception/detection_2d` 已实际识别到：
+  - `cup`
+  - `basket`
+  - `water_bottle`
+  - `cola_bottle`
+  - `soccer_ball`
+- 已保存识别效果图：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/camera_debug/best3_detector_latest.png`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/camera_debug/pick_assist_overlay_latest.png`
+- `/perception/table_scene_objects` 已发布 `world` 下的 `table_surface`。
+- `/scene_fusion/scene_objects` 已出现：
+  - `basket`
+  - `soccer_ball`
+  - `cup`
+  - `water_bottle`
+  - `cola_bottle`
+- `/planning/grasp_targets` 已生成 `world` target：
+  - `water_bottle -> left_arm`
+  - `cup -> left_arm`
+  - `cola_bottle -> right_arm`
+  - `soccer_ball -> dual_arm`
+
+### 临时调试状态 / 不可当作验收
+- 当前为了快速验证 RGB+depth 到 `world` 对象链路，已临时设置：
+  - `ros2 param set /depth_processor_node use_table_plane false`
+- 这证明了未注册色深链下的 3D 主链可以输出瓶/杯对象，但不能作为比赛级抓取验收输入。
+- 当 `use_table_plane=true` 时，当前 `depth_handler` 会大量提示：
+  - `ROI 点经桌面平面剔除后不足`
+- 说明当前色深未注册 + 桌面剔除阈值下，瓶/杯 ROI 深度基本落在桌面平面上；下一步需要修 color-depth 对齐或桌面剔除策略，而不是直接抓取。
+
+### 下一窗口第一批命令
+```bash
+cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+pgrep -af 'competition_core.launch.py|orbbec_gemini_ros_bridge|detector_pt_node|ros_image_viewer|table_surface_detector|depth_processor_node|epg50_gripper_node|robo_ctrl_node|move_group'
+ros2 action info /execution/execute_trajectory
+ros2 topic echo --once /perception/detection_2d
+ros2 topic echo --once /scene_fusion/scene_objects
+ros2 topic echo --once /planning/grasp_targets
+ros2 service call /gripper0/epg50_gripper/status epg50_gripper_ros/srv/GripperStatus "{slave_id: 9}"
+ros2 service call /gripper1/epg50_gripper/status epg50_gripper_ros/srv/GripperStatus "{slave_id: 10}"
+```
+
+### 下一步优先级
+1. 先修左夹爪通信；左夹爪不通前，不要执行左臂真抓。
+2. 修 `depth_handler` 在 `use_table_plane=true` 下的瓶/杯 3D 保留问题。
+3. 完成 `left_tcp -> left_camera` verified 标定；当前仍是 unverified 调试外参。
+4. 只在以上三项通过后，才做真机自动夹取：
+   - 左臂 `water_bottle`
+   - 右臂 `cola_bottle`
+
+## 2026-04-20 左夹爪连接续测
+
+### 本次结论
+- 当前 `competition_core.launch.py` live 栈里，右夹爪节点仍在运行，但左夹爪节点没有存活到当前 ROS 图中：
+  - 存活节点：`/gripper1/gripper_node_right`
+  - 未见存活节点：`/gripper0/gripper_node_left`
+- 当前系统只枚举到 1 个 USB-485 串口：
+  - `/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0 -> /dev/ttyUSB0`
+- 当前这根实际在线串口只对 `slave_id=10` 有稳定响应；对 `slave_id=9` 不通。
+- `execution_adapter`、`/execution/set_gripper` 和上层路由逻辑本身没有卡死；当显式把 `slave_id` 指到 `10` 时，即使 `arm_name=left_arm` 也能成功下发命令。
+- 因此，当前左夹爪未打通的主因不是上层控制接口，而是现场没有一条能稳定触达 `slave_id=9` 的物理串口链路。
+
+### 本次证据
+- 当前 ROS 图：
+  - `ros2 node list | sort`
+  - 仅见 `/gripper1/gripper_node_right`
+- 当前右夹爪参数：
+  - `ros2 param get /gripper1/gripper_node_right port`
+    - `/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0`
+  - `ros2 param get /gripper1/gripper_node_right default_slave_id`
+    - `10`
+- 当前在线从站验证：
+  - `ros2 service call /gripper1/epg50_gripper/status epg50_gripper_ros/srv/GripperStatus "{slave_id: 10}"`
+    - `success=True`
+  - `ros2 service call /gripper1/epg50_gripper/status epg50_gripper_ros/srv/GripperStatus "{slave_id: 9}"`
+    - `success=False`
+- 当前上层路由验证：
+  - `ros2 service call /execution/set_gripper dualarm_interfaces/srv/SetGripper "{arm_name: right_arm, command: 2, slave_id: 0, position: 0, speed: 80, torque: 40, object_id: '', link_name: '', attach_on_success: false, detach_on_success: false}"`
+    - `success=True`
+  - `ros2 service call /execution/set_gripper dualarm_interfaces/srv/SetGripper "{arm_name: left_arm, command: 2, slave_id: 0, position: 0, speed: 80, torque: 40, object_id: '', link_name: '', attach_on_success: false, detach_on_success: false}"`
+    - `success=False`
+  - `ros2 service call /execution/set_gripper dualarm_interfaces/srv/SetGripper "{arm_name: left_arm, command: 2, slave_id: 10, position: 0, speed: 80, torque: 40, object_id: '', link_name: '', attach_on_success: false, detach_on_success: false}"`
+    - `success=True`
+- 当前单口从站扫描结果：
+  - 在 `/gripper1/epg50_gripper/status` 上扫描 `slave_id=1..16`
+  - 仅 `slave_id=10` 返回 `OK`
+  - `slave_id=9` 为 `TIMEOUT`
+- 当前最小旁路探针：
+  - 临时启动 `left_probe.left_gripper_probe`
+  - 绑定当前唯一串口 `/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0`
+  - `default_slave_id:=9`
+  - 结果：状态线程持续 `获取夹爪状态失败`
+
+### 当前判断
+- 左夹爪问题已经收缩到物理层或设备侧参数层：
+  - 左 USB-485 转换器当前未枚举或已掉线
+  - 左夹爪独立供电异常
+  - RS485 A/B 或通信地线异常
+  - 左夹爪实际从站 ID 已变化，但当前在线串口上未扫描到
+- 当前不支持把“左夹爪未通”解释成 `execution_adapter` 或网页控制接口故障。
+
+### 下一步
+1. 先恢复或确认左 USB-485 转换器重新枚举，再核对 `/dev/serial/by-id` 是否重新出现左侧 by-id。
+2. 左侧串口恢复后，优先只做 `status` 扫描，确认能稳定读到 `slave_id=9` 或新的实际从站 ID。
+3. 只有在左侧 `status` 可读后，才继续 `enable` 和最小开合命令。
+4. 在左夹爪重新打通前，不执行任何依赖左夹爪的左臂真抓动作。
+
+## 2026-04-20 左夹爪重连控制成功
+
+### 本次结论
+- 用户重新连接左夹爪接口后，左 USB-485 转换器重新枚举成功：
+  - `/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A7BIb114J19-if00-port0 -> /dev/ttyUSB1`
+  - `/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0 -> /dev/ttyUSB0`
+- 原 live 栈中左夹爪节点未存活，因此已手动补起：
+  - node: `/gripper0/gripper_node_left`
+  - port: `/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A7BIb114J19-if00-port0`
+  - default slave: `9`
+  - `disable_on_shutdown:=false`
+- 左夹爪 `slave_id=9` 状态可读，并通过正式上层接口 `/execution/set_gripper` 控制成功。
+
+### 验证证据
+- 串口枚举：
+  - `A7BIb114J19 -> /dev/ttyUSB1`
+  - `A_COb114J19 -> /dev/ttyUSB0`
+- 左夹爪节点启动日志：
+  - `初始化EPG50夹爪 ... 默认从站ID: 0x09`
+  - `EPG50夹爪节点已启动`
+- 状态读取：
+  - `ros2 service call /gripper0/epg50_gripper/status epg50_gripper_ros/srv/GripperStatus "{slave_id: 9}"`
+  - 返回：`success=True, gact=True, gsta=3, error=0, position=255`
+- 正式上层控制：
+  - `ros2 service call /execution/set_gripper dualarm_interfaces/srv/SetGripper "{arm_name: left_arm, command: 2, slave_id: 0, position: 0, speed: 80, torque: 40, object_id: '', link_name: '', attach_on_success: false, detach_on_success: false}"`
+  - 返回：`success=True, message='夹爪命令完成'`
+- 控制后状态回读：
+  - `success=True, status=241, gact=True, gsta=3, gobj=3, error=0, position=0, voltage=23, temperature=36`
+
+### 当前状态
+- 左夹爪已恢复到最大张开 `position=0`。
+- 右夹爪节点仍存活在 `/gripper1/gripper_node_right`。
+- 左夹爪节点当前是手动补起的，不是 `competition_core.launch.py` 自动重启出来的；若重启整套 live 栈，需要确认 launch 是否能同时拉起 `/gripper0` 与 `/gripper1`。
+
+### 剩余风险
+- 本次只验证了左夹爪状态读取与最大张开命令，没有做闭合夹持测试。
+- 若要进入左臂真抓，仍需先确认现场夹爪开合空间安全，再做小力度闭合或目标物夹持测试。
+
+## 2026-04-21 RViz 展示、双相机契约与模型点云收口
+
+### 本次结论
+- 已按 v4 路线继续推进，但本轮在用户要求下先安全收口，未继续做真机动作。
+- 新增 RViz Operator 层已经落地，能够通过 `competition_rviz.launch.py` 一键拉起 core + RViz + interactive marker / debug marker / scene model point cloud。
+- RViz 曾出现空白，根因不是 RViz 配置单点问题，而是底层 ROS 图已退出；后续必须先启动、再截图确认，不再只凭进程判断。
+- RViz 截图确认过一次可见：
+  - 双臂 RobotModel 可见
+  - scene/model 点云可见
+  - 但模型点云与机械臂/桌面仍存在明显位姿偏差
+- 机械臂姿态不准的首要嫌疑已收缩：
+  - `/L|R/joint_states` 发布逻辑在 `robo_ctrl_node.cpp` 中已做 `deg -> rad`，不是关节单位错误
+  - 当前 URDF 中 `world_to_left_base/right_base` 原先是硬编码估计值，已改为 xacro/launch 可配置参数
+  - 后续需要现场实测左右底座在 `world` 下的位置和 yaw，不能继续用默认 `0 ±0.35 0` 当真实安装
+- 模型点云高度不对的首要嫌疑已收缩：
+  - `scene_model_pointcloud` 原先直接按 `SceneObject.pose` 作为几何中心采样
+  - 已改为对桌面支撑物体按 table surface 贴底显示，避免瓶/杯/筐模型云上下漂
+  - 最新“贴底显示”改动已构建通过，但在安全收口前未再次完成 RViz 截图验收
+- 右臂现在也有视觉相机，已开始建立左右相机命名隔离：
+  - 新增 `right_tcp -> right_camera -> right_camera_color_frame/right_camera_depth_frame` TF 配置项，状态仍为 `unverified`
+  - `orbbec_gemini_bridge.launch.py` 已支持传入 node name、topic 和 frame id，便于后续启动左右两套相机 bridge
+  - 当前正式感知主链仍需明确采用左相机还是右相机输入，不能再把 `/camera/*` 当成唯一相机事实
+
+### 已完成代码与配置
+- 新增统一配置：
+  - `configs/competition/object_geometry.yaml`
+  - `configs/competition/workspace_profiles.yaml`
+  - `configs/competition/task_thresholds.yaml`
+- 已记录或修正的固定参数：
+  - 小号篮球/足球：直径约 `0.12m`
+  - 收纳筐：`0.30 x 0.20 x 0.12m`
+  - 水杯：口径 `0.075m`、底径 `0.060m`、高度 `0.115m`
+  - 怡宝 350ml / 可口可乐 300ml 当前仍为工程代理尺寸；下一轮需用卡尺或可靠公开资料最终校准
+- 新增接口：
+  - `dualarm_interfaces/srv/TaskCommand.srv`
+  - `dualarm_interfaces/srv/SetObjectInteraction.srv`
+- `planning_scene_sync` 已支持：
+  - `free`
+  - `attached_single`
+  - `dual_contact`
+  - `opened_split`
+  - bottle 的 body + cap 复合 collision
+- `execution_adapter` 已接入 `SetObjectInteraction`，用于：
+  - 开盖后 `opened_split`
+  - 球类 `dual_contact` 释放
+- `dualarm_task_manager` 已新增 `/task/command`，RViz 命令不再绕过任务层。
+- `depth_handler` 已新增瓶盖相关 subframe：
+  - `bottle_cap_grasp`
+  - `bottle_twist_axis`
+- `table_surface_detector` 已新增 detection-seeded table component 选择，降低把旁边木色家具/底座误选成桌面的风险。
+- `scene_model_pointcloud` 已新增模型点云：
+  - `/competition/rviz/scene_model_points`
+  - 由 `scene_fusion` 的桌面/水瓶/可乐/杯子/球/筐生成几何采样点云
+
+### 验证证据
+- 增量构建已通过：
+  - `dualarm_interfaces`
+  - `planning_scene_sync`
+  - `grasp_pose_generator`
+  - `execution_adapter`
+  - `dualarm_task_manager`
+  - `depth_handler`
+  - `tools`
+  - `competition_rviz_tools`
+  - `dualarm_bringup`
+  - `fairino_dualarm_description`
+  - `fairino_dualarm_moveit_config`
+  - `fairino_dualarm_planner`
+  - `orbbec_gemini_bridge`
+  - `tf_node`
+- `xacro fairino_dualarm.urdf.xacro left_base_xyz:=... right_base_xyz:=...` 生成通过。
+- RViz 截图证据：
+  - `/tmp/competition_rviz_latest.png`
+  - 截图中 RobotModel 与点云可见，但空间对齐仍不准确。
+- 安全收口后已确认没有残留 ROS/RViz 业务进程。
+
+### 当前阻塞
+- 真实 `left_tcp -> left_camera` 仍未 verified，桌面/物体 world pose 不能作为比赛级最终结果。
+- `right_tcp -> right_camera` 只是 placeholder，右臂相机必须单独标定。
+- 双臂基座安装位姿仍是工程默认值，必须现场测量后通过 launch 参数覆盖。
+- 当前模型点云参数已有统一 YAML，但怡宝/可乐瓶最终尺寸仍需实测或可靠资料确认。
+- 当前“贴桌面显示”的模型点云高度修复只完成 build，尚未重新截图确认。
+
+### 下一步
+1. 先在新窗口启动 `competition_rviz.launch.py`，并按新规则截图确认，不可直接声称 RViz 正常。
+2. 现场量取并设置：
+   - `left_base_xyz`
+   - `left_base_rpy`
+   - `right_base_xyz`
+   - `right_base_rpy`
+3. 使用 `right_camera_*` frame/topic 接右臂相机，不允许复用左相机 frame。
+4. 对 `left_tcp -> left_camera` 和 `right_tcp -> right_camera` 分别做 hand-eye 标定。
+5. 用 RViz 同时检查：
+   - RobotModel 实机姿态
+   - `/competition/rviz/scene_model_points`
+   - `/depth_handler/pointcloud`
+   - `/perception/table_points`
+   - MoveIt PlanningScene collision
