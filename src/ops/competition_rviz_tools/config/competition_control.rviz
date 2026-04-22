@@ -36,10 +36,10 @@ Visualization Manager:
       Value: true
     - Axis: Z
       Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
+      Color: 64; 180; 255
       Color Transformer: FlatColor
       Enabled: true
-      Name: Object Points
+      Name: Left Object Points
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
@@ -50,7 +50,26 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /depth_handler/pointcloud
+        Value: /depth_handler/left/pointcloud
+      Use Fixed Frame: true
+      Value: true
+    - Axis: Z
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: FlatColor
+      Enabled: true
+      Name: Right Object Points
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.005
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /depth_handler/right/pointcloud
       Use Fixed Frame: true
       Value: true
     - Axis: Z

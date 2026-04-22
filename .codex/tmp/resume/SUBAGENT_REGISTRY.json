@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-04-20",
+  "updated_at": "2026-04-22",
   "agents": [
     {
       "role": "perception",
@@ -55,6 +55,21 @@
       "role": "auto_grasp_gate_review_2026_04_20",
       "status": "completed_read_only",
       "summary": "2026-04-20 只读审查确认：右臂 world pose、唯一 `/execution/execute_trajectory` server、`dual_arm_assist` 非伪成功等门禁在全链路缺失；主线程随后把 world-frame 约束前推到 `grasp_pose_generator` / `execution_adapter`，并给 `single_arm_pick_debug`、`pick_assist_auto_grasp.py`、`dualarm_task_manager` 加上比赛级前置门禁。"
+    },
+    {
+      "role": "task_reobserve_minimal_review_2026_04_22",
+      "status": "completed_read_only",
+      "summary": "2026-04-22 只读审查确认：P0-6 单次重观测最小实现应落在 `dualarm_task_manager_node.py` 的 `_require_object`、`_plan_for_object`、`_direct_grasp` 与 `/task/command reobserve_once`，不改接口和 checkpoint schema；主线程已按该边界实现。"
+    },
+    {
+      "role": "single_orbbec_runtime_validation_2026_04_22",
+      "status": "completed_local",
+      "summary": "2026-04-22 主线程已完成当前现场单 Orbbec 运行时核验：重探测到 `color=/dev/video6`、`depth=/dev/video0`，并在 `competition_core.launch.py` 的 `reobserve_only + 仅右相机` 模式下验证 `/right_camera/*` 可正常发布；双相机真机验证仍受单设备阻塞。"
+    },
+    {
+      "role": "dual_camera_runtime_isolation_2026_04_22",
+      "status": "completed_local",
+      "summary": "2026-04-22 主线程已完成双机运行隔离：确认双 Orbbec 已枚举、右桥单独可稳定出图、双桥只开彩色可稳定、双深度并发会触发右桥 `VIDIOC_DQBUF: No such device`；随后已把稳定模式落成正式参数。"
     }
   ]
 }

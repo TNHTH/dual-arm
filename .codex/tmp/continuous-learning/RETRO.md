@@ -514,3 +514,152 @@
 - 测量左右机械臂基座实际位置和 yaw，覆盖 `left_base_xyz/right_base_xyz/right_base_rpy`。
 - 分别做左右相机 hand-eye 标定。
 - 用实测参数更新 `object_geometry.yaml`。
+
+## 2026-04-22 右臂深度相机 P0 软件主链复盘
+
+### Facts
+- 本轮按比赛保底版实现了右臂深度相机 P0 软件主链：
+  - `dual_camera_mode:=reobserve_only|full`
+  - 左右相机 topic/frame/device 命名隔离
+  - 右相机碰撞体进入双臂 robot model
+  - `source_name` 贯穿 adapter/depth/ball estimator
+  - `scene_fusion` 去重、中值融合和有效更新版 `scene_version`
+  - `planning_scene_sync` 避免同 id world REMOVE + attached ADD 同 diff
+  - `dualarm_task_manager` 单次 `reobserve_once`
+- 核心 msg/srv/action 未修改，detector 模型未改。
+- 软件证据已完成：
+  - 全量构建通过
+  - 双相机 scene dedup smoke 通过
+  - 双相机 scene fusion smoke 通过
+  - PlanningScene 单水瓶 world/attached 金样例通过
+
+### Worked
+- 先保留核心接口不变，再用 topic 命名空间和 `source_name` 承载左右来源，避免了 planner/task/execution 的连锁接口回归。
+- 把 `scene_fusion` 的版本推进从定时自增改成 scene signature 变化驱动，能直接降低 task_manager 误判“新证据到了”的风险。
+- 用单水瓶金样例验证 PlanningScene，比只看 service success 更可靠；本轮日志明确看到了 attach diff 中 `world_remove=[]`、`attached_add=['water_bottle_gold']`。
+- 把 P0-6 做成“等待一次 managed scene version 前进再重试一次”，没有引入复杂状态机或主动运动，符合比赛保底版范围。
+- 在 launch 层发现 `output_topic` 串参后，改成 `scene_fusion_*` 专用参数，说明多 include 场景下通用 launch 参数名必须收敛。
+
+### Waste / Risk
+- 首轮构建仍从带 Conda 的 shell 触发，虽然被 guard 挡住，但浪费了一轮。
+- `detector` 旧 build cache 的 symlink 目录污染再次出现，说明 Python 包构建残留仍要优先纳入排查。
+- `right_base_xyz` 负数未加引号导致 xacro 失败，这类问题在带空格的 launch 参数里很隐蔽。
+- `move_group` 停止时仍会段错误；虽然本轮 smoke 运行结果有效，但退出路径还不能算干净。
+- P0 尚未证明真实右相机外参、真实双相机同物体误差和实机抓取，不能宣称比赛级完成。
+
+### New Rules
+- 多实例/多 include launch 文件不要复用 `output_topic/input_topics/node_name/source_name` 这类通用参数名；需要时加模块前缀。
+- xacro 命令中凡是 xyz/rpy 字符串参数，都用 `arg:="..."` 形式传入。
+- `scene_version` 验收不能只看数字递增，要确认递增来自有效 scene signature 变化。
+- PlanningScene attach/detach 验收必须保留至少一个固定对象金样例，并用 `GetPlanningScene` 查 world/attached。
+- P0 重观测只能单次、可退出；如果重观测失败，返回明确失败，不进入 reserve/gripper/execute。
+
+### Next Actions
+- 用真实左右 Orbbec 显式设备号验证 `/left_camera/*` 与 `/right_camera/*`。
+- 完成 `right_tcp -> right_camera` hand-eye 标定并晋级 verified。
+- 在 `reobserve_only` 模式下做遮挡左相机、右相机补观测的真机 smoke。
+- 单独治理 `move_group` Ctrl+C 退出段错误或记录为已知非阻塞退出风险。
+
+## 2026-04-22 单 Orbbec 显式设备号补充验证
+
+### Facts
+- 当前机器此刻只有 1 台 Orbbec Gemini 335 在线，同时还挂着笔记本集成摄像头。
+- 历史记录中的 `color=/dev/video8`、`depth=/dev/video2` 已不再适用：
+  - 当前 Orbbec 的 `Z16` 在 `/dev/video0`
+  - 当前 Orbbec 的 `YUYV/MJPG` 在 `/dev/video6`
+  - `/dev/video8` 已经是集成摄像头
+- 用显式设备号起桥后，`/right_camera/color/image_raw` 与 `/right_camera/depth/image_raw` 都能稳定到约 `15Hz`。
+- 用同一组显式设备号起 `competition_core.launch.py` 的
+  `reobserve_only + enable_left_camera:=false + enable_right_camera:=true`
+  后，右相机集成 bringup 可正常拉起。
+
+### Worked
+- 先做 V4L2 格式探测，再决定显式设备号，比直接沿用旧 `/dev/videoX` 记录可靠得多。
+- 不先碰 `full` 双 detector，而是先走 `reobserve_only` 的右相机最小集成链，能把验证面收在“topic/frame/bringup 契约”这一层。
+- 在当前只有 1 台 Orbbec 的条件下，把验证目标收窄为“右相机单链路基线”是合适的，不需要假装双摄条件已经具备。
+
+### Waste / Risk
+- 如果继续信任 bridge 的 `auto` 逻辑，当前环境很容易把集成摄像头误当成彩色源。
+- 停止时的 `move_group` 段错误和 `VIDIOC_QBUF` 噪声仍在，说明退出路径依然不能算干净。
+- 只验证 `/right_camera/*` 还不等于验证 `/perception/right/*`，更不等于比赛级重观测闭环。
+
+### New Rules
+- 真机相机验证前，先做一次 `/dev/video*` 格式探测；“历史上是哪个 videoX”不能直接当事实。
+- 同机存在多个 USB/集成摄像头时，bridge 默认不用 `auto`；必须显式传 `color_device` 和 `depth_device`。
+- 在只有单台相机的现场，先收右相机单链路基线，再谈双相机补观测。
+
+### Next Actions
+- 补齐第 2 台 Orbbec 后，分别为左右相机重新探测节点并回写状态。
+- 用当前右相机单链路继续推进 `/perception/right/*` 的最小 live 验证。
+- 完成 `right_tcp -> right_camera` 标定后，再回到默认 verified 门禁。
+
+## 2026-04-22 真机姿态与左链 live 复盘
+
+### Facts
+- 右臂真正的问题不是关节零位，而是默认基座 yaw 方向错了；把 `right_base_rpy` 从 `pi` 改到 `0` 后，`right_tcp` 姿态角已经和 `/R/robot_state.tcp_pose` 对齐。
+- 左链在真机条件下已经打通到 `world`：
+  - detector 有 live 输出
+  - `depth_handler` 产出了 `world` 下的 `cup / water_bottle / cola_bottle`
+  - `left_camera` source 可追踪
+  - `PointCloud2` 已真正发布
+- 用户说“两台相机都接上了”，但本机实时枚举只有 1 台 Orbbec；这类“用户口头状态”和“系统事实”不一致时，必须以 USB/V4L2 枚举为准。
+
+### Worked
+- 用 `/robot_state.tcp_pose` 和 `tf2_echo world <arm>_tcp` 做姿态对照，比纯看 RViz 有效得多。
+- 对真机 depth 链来说，future extrapolation 不是“理论小问题”，而是会直接把 `world` 对象全部打空；回退到最新可用 TF 是当前 P0 最务实的做法。
+- 在只有 1 台相机时，先把同一台设备切到左链验证，是比继续空喊“双相机协同”更有推进价值的路径。
+
+### Waste / Risk
+- 之前把 RViz 姿态问题一度混在 fake joints、右臂 yaw、基座平移里一起看，导致定位不够快。
+- RViz 点云配置残留旧 topic 说明可视化配置也必须当成代码契约来验收。
+- 只有 1 台 Orbbec 时继续追“双相机协同”会空转；必须先把第二台设备枚举问题解决。
+
+### New Rules
+- 姿态问题先拆成两层：
+  - TCP 姿态角是否与 `/robot_state` 一致
+  - 基座安装位姿是否与现场实测一致
+- 真机双相机协同的前置门槛不是 launch 能不能写双 topic，而是 USB 上是否有两个独立相机身份。
+- 任一视觉链路进入 `world` 成功后，要同时验：
+  - `SceneObjectArray`
+  - `PointCloud2`
+  - RViz topic 订阅是否对上
+
+## 2026-04-22 双机恢复后的进一步教训
+
+### Facts
+- “第二台相机重新枚举出来”不等于“双相机协同已经恢复”。
+- 当前双机已经同时存在，但右侧 `CP02653000G2` 仍会在运行期掉到 `VIDIOC_DQBUF: No such device`。
+- 左链和 unified scene 当前能跑通到 `world`，证明当前主故障已经缩到右侧 UVC 输入层。
+
+### Worked
+- 先用 serial 把左右身份钉死，再谈 left/right topic，避免“换了线后左右对调”的口径混乱。
+- 用 full 栈和手工低帧率桥各做一轮，足够证明右桥失稳不是单纯 detector 算力问题。
+
+### New Rules
+- 双机问题默认拆成三层验收：
+  1. USB 枚举
+  2. 原始图像持续读帧
+  3. world 对象和 fusion
+- 当某一侧桥已经报 `No such device` 时，不要继续把精力放在 scene_fusion 规则上。
+
+### 新增经验
+- 右桥问题必须再拆成“单桥是否稳定”和“双桥是否稳定”两步。当前已证明：
+  - 右桥单独运行可稳定出图
+  - 右桥进入双机 full 栈后才失稳
+- 这意味着后续排查应优先看：
+  - 双桥并发带宽/总线竞争
+  - 设备重枚举导致的节点漂移
+  - 桥接层对失效设备的恢复策略
+
+### 新增经验 2
+- 还要继续把“双桥并发”拆成：
+  - 双彩色并发
+  - 双深度并发
+- 当前已证明：
+  - 双彩色并发在 `5fps` 下是稳定的
+  - 真正触发右桥失稳的是双 Z16 深度同时打开
+- 所以后续产品化策略不要默认“两路深度常开”，而应优先做“彩色双开 + 深度按需”。
+
+### 新增经验 3
+- 当测试已经把主冲突点收敛到“运行策略”时，不要继续试图在同一轮里强行救回理想态。
+- 更好的做法是先把稳定策略产品化成正式 launch 参数，再保留理想态作为后续专项排查项。

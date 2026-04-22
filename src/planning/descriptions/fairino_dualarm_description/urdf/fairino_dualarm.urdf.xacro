@@ -3,8 +3,56 @@
   <xacro:arg name="left_base_xyz" default="0 0.35 0"/>
   <xacro:arg name="left_base_rpy" default="0 0 0"/>
   <xacro:arg name="right_base_xyz" default="0 -0.35 0"/>
-  <xacro:arg name="right_base_rpy" default="0 0 3.141592653589793"/>
+  <xacro:arg name="right_base_rpy" default="0 0 0"/>
   <xacro:include filename="$(find fairino_dualarm_description)/urdf/fairino3_v6_macro.xacro"/>
+
+  <xacro:macro name="tcp_depth_camera_collision" params="prefix parent xyz rpy">
+    <link name="${prefix}camera_mount">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.045 0.030 0.020"/>
+        </geometry>
+        <material name="${prefix}camera_mount_dark">
+          <color rgba="0.08 0.08 0.08 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.050 0.035 0.025"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}tcp_to_camera_mount" type="fixed">
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <parent link="${parent}"/>
+      <child link="${prefix}camera_mount"/>
+    </joint>
+
+    <link name="${prefix}camera_body">
+      <visual>
+        <origin xyz="0.035 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.070 0.040 0.035"/>
+        </geometry>
+        <material name="${prefix}camera_body_black">
+          <color rgba="0.02 0.02 0.02 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0.035 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.075 0.045 0.040"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}camera_mount_to_body" type="fixed">
+      <origin xyz="0.035 0 0" rpy="0 0 0"/>
+      <parent link="${prefix}camera_mount"/>
+      <child link="${prefix}camera_body"/>
+    </joint>
+  </xacro:macro>
 
   <link name="world"/>
   <link name="table"/>
@@ -30,4 +78,5 @@
 
   <xacro:fairino3_v6_arm prefix="left_" parent="left_base" xyz="0 0 0" rpy="0 0 0"/>
   <xacro:fairino3_v6_arm prefix="right_" parent="right_base" xyz="0 0 0" rpy="0 0 0"/>
+  <xacro:tcp_depth_camera_collision prefix="right_" parent="right_tcp" xyz="0.00 0.00 0.035" rpy="0 0 0"/>
 </robot>

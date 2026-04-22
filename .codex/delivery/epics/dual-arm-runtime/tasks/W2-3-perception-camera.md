@@ -134,3 +134,86 @@
 - 当前活跃窗口：`perception-camera`
 - 当前共享状态版本：`coord_rev=7`
 - 当前下一步：等待协调窗口决定是否把本窗口标为 `maintenance-ready`；若继续留在 active，则下一轮只建议做真机标定/色深对齐专项
+
+## 2026-04-22 P0 双相机保底更新
+
+- 已将感知启动链从单 `/camera/*` 默认推进到左右命名隔离：
+  - `/left_camera/*`
+  - `/right_camera/*`
+  - `/perception/left/*`
+  - `/perception/right/*`
+- `detector_adapter`、`depth_handler`、`ball_basket_pose_estimator` 已支持 `source_name`，P0 用 `left_camera/right_camera` 追踪来源，不改 msg。
+- `orbbec_gemini_bridge.launch.py` 的 mock 分支也透传 topic/frame/node_name，可支持双 mock 实例。
+- 证据：
+  - 全量构建 `27 packages finished`
+  - `competition_core.launch.py --show-args` 可见 `dual_camera_mode` 和左右相机参数
+  - `xacro` 展开可见右相机碰撞体
+- 剩余：
+  - 真实右相机设备号和 `right_tcp -> right_camera` verified 标定仍未完成。
+
+## 2026-04-22 单 Orbbec 显式设备号运行时补充
+
+- 当前 live 条件：
+  - 仅 1 台 `Orbbec Gemini 335`
+  - `/dev/video8` 已是集成摄像头，不能再沿用旧 `color=/dev/video8`
+- 当前实测设备号基线：
+  - `color=/dev/video6`
+  - `depth=/dev/video0`
+  - `depth_backend=v4l2`
+- 运行证据：
+  - 直起 `orbbec_gemini_ros_bridge.py` 后，`/right_camera/color/image_raw` 与 `/right_camera/depth/image_raw` 均约 `15Hz`
+  - header:
+    - `right_camera_color_frame`
+    - `right_camera_depth_frame`
+  - `competition_core.launch.py` 在
+    `dual_camera_mode:=reobserve_only enable_left_camera:=false enable_right_camera:=true`
+    下可正常托管右相机 bridge
+- 当前阻塞：
+  - 双相机真机验证仍受“只接 1 台 Orbbec”限制
+  - bridge `auto` 设备选择在当前机器上不安全，现场必须显式传 `/dev/videoX`
+
+## 2026-04-22 左链真机 world/object/pointcloud 补充
+
+- 在当前仅 1 台 Orbbec 的条件下，已把同一台设备切到左链做真机 live 验证：
+  - `left_camera_color_device=/dev/video6`
+  - `left_camera_depth_device=/dev/video0`
+  - `left_camera_rotate_180=false`
+  - `start_detector=true`
+- `depth_handler` 已补 future extrapolation 回退后，左链不再因时间戳轻微超前把 `world` 对象整帧丢弃。
+- 当前 live 证据：
+  - `/detector/left/detections` 有 publisher
+  - `/perception/left/detection_2d` 有 publisher
+  - `/perception/left/scene_objects` 已输出 `frame_id=world`
+  - `/depth_handler/left/pointcloud` 已输出 `PointCloud2`
+  - 左链对象样例包含：
+    - `cup`
+    - `water_bottle`
+    - `cola_bottle`
+- 新阻塞：
+  - 真正左右协同仍需第二台 Orbbec 被系统枚举成独立设备
+
+## 2026-04-22 双机恢复后的现状
+
+- 当前双机已同时枚举：
+  - `CP1E5420007N`
+  - `CP02653000G2`
+- full 双机栈已能整体起起来，但右侧桥接层仍失稳。
+- 当前 unified 结果仍主要由左侧贡献，右侧尚未稳定进入 `scene_fusion`。
+- 当前更精确的阻塞已经从“第二台未接上”更新为：
+  - “右侧 `CP02653000G2` 彩色流在运行期掉线”
+
+## 2026-04-22 稳定模式修复
+
+- 已完成最小修复：
+  - 双彩色常开
+  - 单侧深度常开
+  - 另一侧深度按需启用
+- 新增正式参数：
+  - `left_camera_enable_depth`
+  - `right_camera_enable_depth`
+  - `left_camera_fps`
+  - `right_camera_fps`
+- 当前稳定模式验证结果：
+  - 左右 detector 可同时工作
+  - 左侧 `world` 对象与点云可继续进入 unified scene
+  - 右侧深度暂不常开，避免把双机栈打挂

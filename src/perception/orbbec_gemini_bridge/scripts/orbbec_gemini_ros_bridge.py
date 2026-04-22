@@ -37,7 +37,7 @@ class V4L2FormatDesc(ctypes.Structure):
 @dataclass
 class StreamState:
     color_cap: cv2.VideoCapture
-    depth_cap: cv2.VideoCapture
+    depth_cap: Optional[cv2.VideoCapture]
     depth_backend: str
     color_device: str
     depth_device: str
@@ -60,6 +60,7 @@ class OrbbecGeminiRosBridge(Node):
         self.declare_parameter("depth_device", "auto")
         self.declare_parameter("depth_backend", "auto")
         self.declare_parameter("depth_obsensor_index", 0)
+        self.declare_parameter("enable_depth", True)
         self.declare_parameter("fps", 15.0)
         self.declare_parameter("rotate_180", True)
         self.declare_parameter("color_topic", "/camera/color/image_raw")
@@ -78,6 +79,7 @@ class OrbbecGeminiRosBridge(Node):
         requested_depth_device = str(self.get_parameter("depth_device").value)
         requested_depth_backend = str(self.get_parameter("depth_backend").value)
         depth_obsensor_index = int(self.get_parameter("depth_obsensor_index").value)
+        self._enable_depth = bool(self.get_parameter("enable_depth").value)
         fps = float(self.get_parameter("fps").value)
         self._color_frame_id = str(self.get_parameter("color_frame_id").value)
         self._depth_frame_id = str(self.get_parameter("depth_frame_id").value)
@@ -93,11 +95,16 @@ class OrbbecGeminiRosBridge(Node):
         if not color_cap.isOpened():
             raise RuntimeError(f"无法打开 Orbbec 彩色设备: {resolved_color_device}")
 
-        depth_cap, depth_backend, resolved_depth_device = self._open_depth_capture(
-            requested_depth_backend,
-            requested_depth_device,
-            depth_obsensor_index,
-        )
+        if self._enable_depth:
+            depth_cap, depth_backend, resolved_depth_device = self._open_depth_capture(
+                requested_depth_backend,
+                requested_depth_device,
+                depth_obsensor_index,
+            )
+        else:
+            depth_cap = None
+            depth_backend = "disabled"
+            resolved_depth_device = "disabled"
 
         self._streams = StreamState(
             color_cap=color_cap,
@@ -133,24 +140,26 @@ class OrbbecGeminiRosBridge(Node):
     def destroy_node(self) -> bool:
         try:
             self._streams.color_cap.release()
-            self._streams.depth_cap.release()
+            if self._streams.depth_cap is not None:
+                self._streams.depth_cap.release()
         finally:
             return super().destroy_node()
 
     def _tick(self) -> None:
         color_ok, color = self._streams.color_cap.read()
-        depth_ok, depth = self._read_depth_frame()
+        depth_ok, depth = self._read_depth_frame() if self._enable_depth else (True, None)
 
         if not color_ok:
             self.get_logger().warn("读取彩色图失败", throttle_duration_sec=2.0)
             return
-        if not depth_ok or depth is None:
+        if self._enable_depth and (not depth_ok or depth is None):
             self.get_logger().warn("读取深度图失败", throttle_duration_sec=2.0)
             return
 
         if self._rotate_180:
             color = cv2.rotate(color, cv2.ROTATE_180)
-            depth = cv2.rotate(depth, cv2.ROTATE_180)
+            if depth is not None:
+                depth = cv2.rotate(depth, cv2.ROTATE_180)
 
         stamp = self.get_clock().now().to_msg()
 
@@ -159,13 +168,14 @@ class OrbbecGeminiRosBridge(Node):
         color_msg.header.frame_id = self._color_frame_id
         self._color_pub.publish(color_msg)
 
-        depth_msg = self._bridge.cv2_to_imgmsg(depth, encoding="16UC1")
-        depth_msg.header.stamp = stamp
-        depth_msg.header.frame_id = self._depth_frame_id
-        self._depth_pub.publish(depth_msg)
+        if self._enable_depth and depth is not None:
+            depth_msg = self._bridge.cv2_to_imgmsg(depth, encoding="16UC1")
+            depth_msg.header.stamp = stamp
+            depth_msg.header.frame_id = self._depth_frame_id
+            self._depth_pub.publish(depth_msg)
 
-        depth_info = self._build_camera_info(depth.shape[1], depth.shape[0], stamp, self._depth_frame_id)
-        self._depth_info_pub.publish(depth_info)
+            depth_info = self._build_camera_info(depth.shape[1], depth.shape[0], stamp, self._depth_frame_id)
+            self._depth_info_pub.publish(depth_info)
 
         if self._publish_color_camera_info:
             color_info = self._build_color_camera_info(color.shape[1], color.shape[0], stamp)
@@ -215,6 +225,8 @@ class OrbbecGeminiRosBridge(Node):
         return depth_cap, "obsensor", f"obsensor:{obsensor_index}"
 
     def _read_depth_frame(self) -> tuple[bool, Optional[object]]:
+        if self._streams.depth_cap is None:
+            return False, None
         if self._streams.depth_backend == "v4l2_z16":
             ok, depth = self._streams.depth_cap.read()
             if not ok or depth is None:

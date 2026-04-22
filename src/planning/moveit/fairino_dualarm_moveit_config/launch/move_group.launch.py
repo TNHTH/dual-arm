@@ -37,10 +37,10 @@ def generate_launch_description():
                     "fairino_dualarm.urdf.xacro",
                 ]
             ),
-            " left_base_xyz:=", left_base_xyz,
-            " left_base_rpy:=", left_base_rpy,
-            " right_base_xyz:=", right_base_xyz,
-            " right_base_rpy:=", right_base_rpy,
+            " left_base_xyz:=\"", left_base_xyz, "\"",
+            " left_base_rpy:=\"", left_base_rpy, "\"",
+            " right_base_xyz:=\"", right_base_xyz, "\"",
+            " right_base_rpy:=\"", right_base_rpy, "\"",
         ]
     )
     robot_description = {"robot_description": robot_description_content}
@@ -122,7 +122,7 @@ def generate_launch_description():
             DeclareLaunchArgument("left_base_xyz", default_value="0 0.35 0"),
             DeclareLaunchArgument("left_base_rpy", default_value="0 0 0"),
             DeclareLaunchArgument("right_base_xyz", default_value="0 -0.35 0"),
-            DeclareLaunchArgument("right_base_rpy", default_value="0 0 3.141592653589793"),
+            DeclareLaunchArgument("right_base_rpy", default_value="0 0 0"),
             robot_state_publisher,
             joint_state_publisher,
             move_group,

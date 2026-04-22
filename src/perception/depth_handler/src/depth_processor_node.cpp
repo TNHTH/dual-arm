@@ -126,6 +126,7 @@ void DepthProcessorNode::declareParameters() {
     declare_parameter("visualization_topic", "/depth_handler/visualization");
     declare_parameter("table_scene_topic", "/perception/table_scene_objects");
     declare_parameter("target_frame", "world");
+    declare_parameter("source_name", "depth_handler");
     declare_parameter("enable_visualization", true);
     declare_parameter("enable_pointcloud", true);
     declare_parameter("allow_source_frame_fallback", false);
@@ -156,6 +157,7 @@ void DepthProcessorNode::loadParameters() {
     visualization_topic_ = get_parameter("visualization_topic").as_string();
     table_scene_topic_ = get_parameter("table_scene_topic").as_string();
     target_frame_ = get_parameter("target_frame").as_string();
+    source_name_ = get_parameter("source_name").as_string();
     enable_visualization_ = get_parameter("enable_visualization").as_bool();
     enable_pointcloud_ = get_parameter("enable_pointcloud").as_bool();
     allow_source_frame_fallback_ = get_parameter("allow_source_frame_fallback").as_bool();
@@ -557,6 +559,24 @@ std::optional<Eigen::Isometry3d> DepthProcessorNode::lookupTransform(
             target_frame, source_frame, rclcpp::Time(stamp), tf2::durationFromSec(0.1));
         return tf2::transformToEigen(transform);
     } catch (const tf2::TransformException& exception) {
+        const std::string error = exception.what();
+        if (error.find("extrapolation into the future") != std::string::npos) {
+            try {
+                const auto latest_transform = tf_buffer_->lookupTransform(
+                    target_frame, source_frame, tf2::TimePointZero, tf2::durationFromSec(0.1));
+                RCLCPP_WARN(
+                    get_logger(),
+                    "TF 精确时间查询失败，改用最新可用变换: %s",
+                    error.c_str());
+                return tf2::transformToEigen(latest_transform);
+            } catch (const tf2::TransformException& latest_exception) {
+                RCLCPP_WARN(
+                    get_logger(),
+                    "TF 最新变换查询也失败，退回源坐标系: %s",
+                    latest_exception.what());
+                return std::nullopt;
+            }
+        }
         RCLCPP_WARN(get_logger(), "TF 查询失败，退回源坐标系: %s", exception.what());
         return std::nullopt;
     }
@@ -598,7 +618,7 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
     object.confidence = geometry.confidence;
     object.graspable = true;
     object.movable = true;
-    object.source = "depth_handler";
+    object.source = source_name_;
     object.last_seen = header.stamp;
     object.scene_version = 0;
     object.lifecycle_state = "observed";

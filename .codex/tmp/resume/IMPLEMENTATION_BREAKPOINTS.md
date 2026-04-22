@@ -382,3 +382,313 @@ curl -s http://127.0.0.1:18080/api/control/state
 5. 再进入真机单臂抓取：
    - 左臂 `water_bottle`
    - 右臂 `cola_bottle`
+
+## 2026-04-20 断电后重拉起接续断点
+
+### 当前已完成
+- 远程安全上传已完成：
+  - 分支：`codex/competition-pick-assist-calibration`
+  - 提交：
+    - `4186a75 Implement competition pick assist calibration gates`
+    - `bbe89f6 Fix detector launch parameter typing`
+- 断电后已重新拉起单套核心链：
+  - `competition_core.launch.py`
+  - `orbbec_gemini_ros_bridge.py`
+  - `depth_processor_node`
+  - `move_group`
+  - `execution_adapter`
+  - `dualarm_task_manager`
+  - 左右 `robo_ctrl_node`
+  - 左右 `epg50_gripper_node`
+  - `table_surface_detector.py`
+- detector 因 launch 参数类型崩过一次，已修复 `competition.launch.py` 中 `allowed_class_ids` 的传参类型，并重建 `dualarm_bringup`。
+- 当前 detector 已手动补起：
+  - `detector_pt_node.py`
+  - 模型：`/home/gwh/下载/best.3.pt`
+  - `device=cuda:0`
+- 可视化窗口已打开：
+  - `/detector/detections/image`
+  - `/perception/pick_assist/rgb_overlay`
+
+### 当前 live 状态
+- 当前关键 PID：
+  - `competition_core.launch.py` -> `13206`
+  - `orbbec_gemini_ros_bridge.py` -> `13238`
+  - `depth_processor_node` -> `13242`
+  - `move_group` -> `13256`
+  - `table_surface_detector.py` -> `13268`
+  - `left_robo_ctrl` -> `13276`
+  - `right_robo_ctrl` -> `13281`
+  - 手动 detector -> `14348/14395`
+  - 检测窗口 -> `14597`
+  - pick-assist overlay 窗口 -> `14606`
+- 当前 `/execution/execute_trajectory`：
+  - `Action servers: 1`
+  - `Action clients: 1`
+- 当前 `/L/robot_state` 与 `/R/robot_state`：
+  - 都是 `motion_done=true`
+  - 都是 `error_code=0`
+
+### 当前 perception 结果
+- `/perception/detection_2d` 已识别：
+  - `cup`
+  - `basket`
+  - `water_bottle`
+  - `cola_bottle`
+  - `soccer_ball`
+- `/perception/table_scene_objects` 已有 `world` 下桌面对象。
+- `/scene_fusion/scene_objects` 已有：
+  - `basket`
+  - `soccer_ball`
+  - `cup`
+  - `water_bottle`
+  - `cola_bottle`
+- `/planning/grasp_targets` 已有：
+  - `water_bottle -> left_arm`
+  - `cup -> left_arm`
+  - `cola_bottle -> right_arm`
+  - `soccer_ball -> dual_arm`
+
+### 当前阻塞
+- 左夹爪阻塞：
+  - `/gripper0/epg50_gripper/status` 对 `slave_id=9` 返回失败
+  - `/gripper0/epg50_gripper/status` 对 `slave_id=10` 也返回失败
+  - 右夹爪 `slave_id=10` 正常
+- `depth_handler` 阻塞：
+  - 当前 `use_table_plane=true` 时瓶/杯几乎全部被桌面剔除
+  - 为验证主链，已临时设置 `use_table_plane=false`
+  - 所以当前瓶/杯 `world` 对象是 debug 级结果，不能直接算比赛级抓取输入
+- 正式 `verified` 外参仍未收口
+
+### 当前关键证据
+- 识别效果图：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/camera_debug/best3_detector_latest.png`
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/camera_debug/pick_assist_overlay_latest.png`
+- 最新桌面结果：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/camera_debug/table_surface_detector/latest_result.json`
+- 当前桌面标定 smoke：
+  - `/home/gwh/dashgo_rl_project/workspaces/dual-arm/.artifacts/calibration/left_camera/live_smoke_v2/summary.json`
+
+### 下一步唯一入口
+1. 不要先重启 core；保持当前 live 图继续。
+2. 先排查左夹爪通信：
+   - 电源
+   - A/B
+   - GND
+   - `/dev/serial/by-id/...A7BI...`
+3. 再收口 `depth_handler`：
+   - 在 `use_table_plane=true` 下保留瓶/杯有效点
+   - 不接受继续长期依赖 `use_table_plane=false`
+4. 之后才推进 verified 标定与真机抓取。
+
+## 2026-04-22 右臂深度相机 P0 软件主链断点
+
+### 当前完成
+- 已实现比赛保底版 P0 软件主链，不改核心 msg/srv/action：
+  - `dual_camera_mode:=reobserve_only|full`
+  - 左右相机 topic/frame/device 参数
+  - 左右 detector/adapter/depth/ball topic 命名隔离
+  - `source_name=left_camera/right_camera`
+  - 右相机 `right_camera_mount/right_camera_body` 碰撞体
+  - `scene_fusion` 去重、中值融合和有效更新 `scene_version`
+  - `planning_scene_sync` 同 id world/attached diff 冲突规避
+  - `dualarm_task_manager` 单次 `reobserve_once`
+- 已新增 smoke：
+  - `src/tools/tools/scripts/smoke_dual_camera_scene_dedup.py`
+  - `src/tools/tools/scripts/smoke_dual_camera_scene_fusion.py`
+  - `smoke_planning_scene_sync.py` 已升级为 `water_bottle_gold` 金样例
+
+### 验证证据
+- 全量构建：`Summary: 27 packages finished`
+- 双相机去重：`dual camera scene dedup smoke passed`
+- 双相机稳定融合：`dual camera scene fusion smoke passed`
+- PlanningScene 金样例：`planning_scene_sync smoke passed`
+- xacro 展开可见：
+  - `right_camera_mount`
+  - `right_camera_body`
+  - `right_tcp_to_camera_mount`
+  - `right_camera_mount_to_body`
+
+### 当前风险
+- `move_group` Ctrl+C 停止时仍可能段错误；运行态 smoke 已通过，但退出路径不干净。
+- 右相机真实设备、真实外参和同物体左右误差尚未验证。
+- 默认应先用 `dual_camera_mode:=reobserve_only`，不要直接把 full 双 detector 当现场默认。
+
+### 下一步入口
+1. 现场明确左右 Orbbec 的 `/dev/videoX` 映射，使用显式设备号启动。
+2. 启动：
+   `ros2 launch dualarm_bringup competition_core.launch.py start_camera_bridge:=true dual_camera_mode:=reobserve_only ...`
+3. 验证：
+   - `/right_camera/color/image_raw`
+   - `/right_camera/depth/image_raw`
+   - `/right_camera/depth/camera_info`
+   - `right_camera_color_frame/right_camera_depth_frame`
+4. 完成 `right_tcp -> right_camera` 标定并更新 `calibration_transforms.yaml` 为 `verified`。
+
+## 2026-04-22 单 Orbbec 显式设备号补充断点
+
+### 当前完成
+- 已确认当前会话的 live 相机条件不是“双 Orbbec”：
+  - 只有 1 台 `Orbbec Gemini 335`
+  - `video8/9` 是集成摄像头
+- 已确认当前 Orbbec 的显式设备号基线：
+  - `color=/dev/video6`
+  - `depth=/dev/video0`
+  - `depth_backend=v4l2`
+- 已完成右相机最小运行时验证：
+  - 直起 bridge 发布 `/right_camera/*`
+  - `competition_core.launch.py` 在 `reobserve_only + 仅右相机 + 显式设备号` 下正常拉起
+
+### 验证证据
+- V4L2 格式：
+  - `/dev/video0: ['Z16']`
+  - `/dev/video6: ['YUYV', 'MJPG']`
+  - `/dev/video8: ['MJPG', 'YUYV']`
+- bridge 证据：
+  - `frame_id=right_camera_color_frame`
+  - `frame_id=right_camera_depth_frame`
+  - color/depth 均约 `15Hz`
+- core 证据：
+  - `right_orbbec_gemini_bridge` 正常启动
+  - `/right_camera/color/image_raw`
+  - `/right_camera/depth/image_raw`
+  - `/right_camera/depth/camera_info`
+
+### 当前风险
+- 只有 1 台 Orbbec，双相机真机补观测还不能做。
+- bridge `auto` 逻辑当前会误命中集成摄像头，现场不能直接用。
+- `move_group` 停止段错误与 `VIDIOC_QBUF` 退出噪声仍存在。
+
+### 下一步入口
+1. 补齐第 2 台 Orbbec 后，重新枚举左右相机的 `color/depth` 节点。
+2. 在当前单相机条件下，继续推进右相机单链路：
+   - `/right_camera/*`
+   - `/perception/right/*`
+3. 完成 `right_tcp -> right_camera` 标定并恢复 verified 门禁。
+
+## 2026-04-22 真机姿态与左链补充断点
+
+### 当前完成
+- 默认 `right_base_rpy` 已从 `pi` 改成 `0`，右臂前向问题已修正。
+- 真实双臂关节状态已验证接入：
+  - `/L/joint_states`
+  - `/R/joint_states`
+  - `/joint_states`
+- `depth_handler` 已补 future extrapolation 回退。
+- 左链真机已打通到：
+  - `/detector/left/detections`
+  - `/perception/left/detection_2d`
+  - `/perception/left/scene_objects`
+  - `/depth_handler/left/pointcloud`
+- RViz 点云配置已切换到左右真实 pointcloud topic。
+
+### 验证证据
+- `/R/robot_state.tcp_pose` 与 `tf2_echo world right_tcp` 姿态角一致。
+- `/perception/left/scene_objects` 已输出 `frame_id=world` 且 `source=left_camera`。
+- 当前对象样例：
+  - `cup`
+  - `water_bottle`
+  - `cola_bottle`
+- `/depth_handler/left/pointcloud` 已输出 `PointCloud2`，频率约 `14~15Hz`。
+- `left_detector_view` 与 RViz 窗口均存在。
+
+### 当前阻塞
+- 当前系统仍只枚举到 1 台 Orbbec，真正的左右双相机协同仍 blocked。
+- 左右基座的 `xyz/yaw` 仍未用现场实测值覆盖，整机位置在 RViz 里还不是正式摆位。
+- `move_group` 与 `ros_image_viewer.py` 的退出路径问题仍在。
+
+### 下一步入口
+1. 先解决第二台 Orbbec 未枚举问题。
+2. 双设备到位后重新探测左右：
+   - `ID_SERIAL_SHORT`
+   - `color_device`
+   - `depth_device`
+3. 在同一批杯/瓶/球目标下同时跑：
+   - `/perception/left/*`
+   - `/perception/right/*`
+   - `/scene_fusion/scene_objects`
+   - `/competition/rviz/scene_model_points`
+4. 现场实测基座安装位姿，覆盖 `left_base_xyz/right_base_xyz/right_base_rpy`。
+
+## 2026-04-22 双机恢复后的最新断点
+
+### 当前完成
+- 两台 Orbbec 已重新枚举：
+  - 左：`CP1E5420007N`
+  - 右：`CP02653000G2`
+- full 双机栈已再次拉起：
+  - 左右 detector
+  - 左右 depth_handler
+  - 左右 ball_basket_pose_estimator
+  - `scene_fusion`
+  - `planning_scene_sync`
+- 左链继续稳定产出 `world` 对象与 unified scene。
+
+### 当前阻塞
+- 右侧桥接层仍不稳定：
+  - `读取彩色图失败`
+  - `VIDIOC_DQBUF: No such device`
+- 当前真正卡住 unified 双机验收的，不是 `scene_fusion`，而是右相机输入流。
+
+### 下一步入口
+1. 继续只排右相机 `CP02653000G2` 的 UVC 输入问题。
+2. 右桥恢复后，立即补验：
+   - `/perception/right/scene_objects`
+   - `/scene_fusion/scene_objects`
+   - `/competition/rviz/scene_model_points`
+
+## 2026-04-22 右桥隔离结论
+
+### 当前完成
+- 已完成“右桥单独运行”隔离实验。
+- 右桥单独运行时：
+  - `color=/dev/video6`
+  - `depth=/dev/video0`
+  - `fps=5.0`
+  - 原始彩色流稳定，约 `5Hz`
+
+### 结论
+- 右相机本体不是“单独运行就坏”。
+- 当前真正的问题是：右桥只在“双机 full 栈”条件下失稳。
+
+### 下一步入口
+1. 后续优先排查双桥并发条件，不再把重点放在右相机单体故障上。
+2. 先尝试：
+   - 两桥都降帧
+   - 只保留双桥，不启动 detector/depth/fusion，验证是否仍掉流
+   - 再逐层加回 detector、depth_handler、scene_fusion
+
+## 2026-04-22 双桥并发隔离结论
+
+### 当前完成
+- 已完成“双桥只开彩色”的并发隔离测试。
+- 当前结论：
+  - 双彩色并发稳定
+  - 双深度并发才会触发右桥失稳
+
+### 下一步入口
+1. 把双机运行策略改成：
+   - 左右彩色常开
+   - 单侧深度常开
+   - 另一侧深度按需启用
+2. 再回到 detector/depth/fusion 全链路验证。
+
+## 2026-04-22 稳定模式断点
+
+### 当前完成
+- `orbbec_gemini_bridge` 已支持 `enable_depth`
+- bringup 已支持：
+  - `left_camera_enable_depth/right_camera_enable_depth`
+  - `left_camera_fps/right_camera_fps`
+- 当前稳定模式已经验证：
+  - 左右彩色常开
+  - 左深度开
+  - 右深度关
+  - 左右 detector 同开
+  - unified scene 与 RViz 点云可工作
+
+### 下一步入口
+1. 下一轮先测试“右深度按需启用”：
+   - `left_camera_enable_depth:=false`
+   - `right_camera_enable_depth:=true`
+2. 若右侧 3D 也能独立跑通，再继续研究如何安全切换左右深度所有权。
