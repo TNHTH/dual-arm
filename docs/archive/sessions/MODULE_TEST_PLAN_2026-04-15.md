@@ -31,7 +31,7 @@
 命令：
 
 ```bash
-cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+cd /home/gwh/dual-arm
 ./build_workspace.sh
 source /opt/ros/humble/setup.bash
 source install/setup.bash
@@ -53,7 +53,7 @@ colcon list --names-only
 
 ```bash
 source /opt/ros/humble/setup.bash
-source /home/gwh/dashgo_rl_project/workspaces/dual-arm/install/setup.bash
+source /home/gwh/dual-arm/install/setup.bash
 
 ros2 interface show dualarm_interfaces/msg/SceneObject
 ros2 interface show dualarm_interfaces/msg/GraspTarget
@@ -84,7 +84,7 @@ ros2 launch tf_node frame_authority.launch.py
 
 ```bash
 source /opt/ros/humble/setup.bash
-source /home/gwh/dashgo_rl_project/workspaces/dual-arm/install/setup.bash
+source /home/gwh/dual-arm/install/setup.bash
 ros2 topic echo /tf_static --once
 ```
 

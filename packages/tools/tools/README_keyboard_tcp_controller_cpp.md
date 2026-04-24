@@ -54,7 +54,8 @@
 ### 编译和安装
 
 ```bash
-./build_workspace.sh --group tools
+cd /home/gwh/dual-arm
+colcon build --packages-select tools
 source install/setup.bash
 ```
 

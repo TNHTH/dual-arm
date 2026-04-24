@@ -1,0 +1,166 @@
+# v4 任务阈值配置。
+# official 字段来自双臂比赛合同；engineering 字段是运行门禁代理。
+schema_version: competition_task_thresholds_v4
+updated_at: "2026-04-20"
+
+units:
+  length: m
+  time: s
+  volume: ml
+  score: point
+
+competition_limits:
+  setup_time_limit_sec:
+    value: 120
+    source: official
+  match_time_limit_sec:
+    value: 900
+    source: official
+  min_initial_tcp_distance_m:
+    value: 0.30
+    source: official
+  allowed_task_order:
+    value: any
+    source: official
+
+perception:
+  required_frame_id: world
+  formal_object_ids:
+    - water_bottle
+    - cola_bottle
+    - cup
+    - basketball
+    - soccer_ball
+    - basket
+  max_scene_age_sec: 0.80
+  max_detection_age_sec: 0.60
+  max_depth_age_sec: 0.60
+  stable_frames:
+    beverage: 3
+    cup: 3
+    ball: 3
+    basket: 3
+  confidence_min:
+    water_bottle: 0.45
+    cola_bottle: 0.45
+    cup: 0.40
+    basketball: 0.45
+    soccer_ball: 0.45
+    basket: 0.45
+  world_position_gate_m:
+    beverage: 0.040
+    cup: 0.035
+    ball: 0.040
+    basket: 0.060
+
+planning:
+  require_world_frame: true
+  max_plan_time_sec: 5.0
+  max_replan_attempts: 2
+  min_table_clearance_m: 0.015
+  min_object_clearance_m: 0.020
+  attached_object_padding_m: 0.010
+  approach_distance_m:
+    bottle: 0.080
+    cup: 0.070
+    ball: 0.090
+  retreat_distance_m:
+    bottle: 0.080
+    cup: 0.070
+    ball: 0.090
+  dual_arm_sync_tolerance_sec: 0.20
+
+execution:
+  require_single_execute_trajectory_server: true
+  require_motion_done: true
+  motion_timeout_sec:
+    pick: 20.0
+    pour: 30.0
+    place: 20.0
+    handover: 25.0
+  gripper:
+    close_timeout_sec: 3.0
+    open_timeout_sec: 3.0
+    object_grasp_confirm_min_sec: 0.30
+  pose_tolerance:
+    position_m: 0.015
+    orientation_rad: 0.0873
+  contact_guard:
+    table_min_clearance_m: 0.010
+    abort_on_unexpected_contact: true
+
+tasks:
+  pouring_service:
+    source: official_with_engineering_thresholds
+    required_objects:
+      beverages: [water_bottle, cola_bottle]
+      cup_count: 2
+    beverage_order: any
+    require_cap_opened_by_robot: true
+    require_one_arm_bottle_one_arm_cup: true
+    require_return_to_table: true
+    lift_leave_table_threshold_m: 0.030
+    spill:
+      table_spill_allowed: false
+      spill_penalty_points_per_beverage: -5
+      engineering_spill_volume_limit_ml: 5
+    fill_thresholds:
+      official_rule: cup_level_over_half
+      modeling_half_volume_ml: 180
+      pass_volume_ml: 190
+      max_target_volume_ml: 230
+    per_beverage:
+      water_bottle:
+        nominal_volume_ml: 350
+        target_cup_volume_ml: 190
+      cola_bottle:
+        nominal_volume_ml: 300
+        target_cup_volume_ml: 190
+    scoring:
+      cup_lift_points_each: 5
+      beverage_lift_points_each: 5
+      pour_over_half_points_each: 10
+      spill_penalty_points_each: -5
+
+  human_handover:
+    source: official_with_engineering_thresholds
+    sequence: [basketball, soccer_ball]
+    require_human_hands_on_ball_before_pick: true
+    require_human_static_during_pick: true
+    human_static_position_gate_m: 0.040
+    dual_arm_hold_min_sec:
+      value: 3.0
+      source: official
+    ball_lift_leave_table_threshold_m: 0.030
+    basket_place:
+      require_ball_inside_basket: true
+      require_detach_before_basket_contact: true
+      detach_before_contact_margin_sec: 0.20
+      ball_center_inside_margin_m: 0.020
+      release_height_above_rim_m: 0.080
+    scoring:
+      hold_over_3s_points_each: 10
+      basket_place_points_each: 10
+      contact_before_detach_penalty_points_each: -5
+
+acceptance:
+  pass_requires_formal_objects_only: true
+  pass_requires_no_unresolved_safety_abort: true
+  task_result_policy: last_automatic_run_counts
+  max_score_without_penalty_points: 80
+  task_score_caps:
+    pouring_service: 40
+    human_handover: 40
+  required_evidence:
+    pouring_service:
+      - cup_lifted
+      - beverage_lifted
+      - cap_opened
+      - cup_level_over_half
+      - no_table_spill
+      - beverage_and_cup_returned_to_table
+    human_handover:
+      - ball_sequence_basketball_then_soccer_ball
+      - dual_arm_hold_over_3s
+      - ball_inside_basket
+      - detached_before_basket_contact

@@ -13,6 +13,8 @@
   <depend>ament_index_python</depend>
   <depend>rclpy</depend>
   <depend>dualarm_interfaces</depend>
+  <depend>epg50_gripper_ros</depend>
+  <depend>robo_ctrl</depend>
   <depend>std_msgs</depend>
 
   <export>

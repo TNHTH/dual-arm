@@ -1,0 +1,313 @@
+# v4 工作空间配置。
+# 几何范围是工程默认值，官方随机摆放规则见 task_thresholds.yaml。
+schema_version: competition_workspace_profiles_v4
+updated_at: "2026-04-20"
+
+units:
+  length: m
+  time: s
+
+active_profile: competition_default
+
+shared_frames:
+  world: world
+  table_surface_object_id: table_surface
+  left_tcp: left_tcp
+  right_tcp: right_tcp
+  left_camera: left_camera
+  left_camera_color: left_camera_color_frame
+  left_camera_depth: left_camera_depth_frame
+  right_camera: right_camera
+  right_camera_color: right_camera_color_frame
+  right_camera_depth: right_camera_depth_frame
+
+profiles:
+  competition_default:
+    description: 真实比赛默认 profile，依赖运行态桌面检测和 world 坐标。
+    frame_id: world
+    robot_mounts:
+      left_base_xyz_m: [0.00, 0.35, 0.00]
+      left_base_rpy_deg: [0.0, 0.0, 0.0]
+      right_base_xyz_m: [0.00, -0.35, 0.00]
+      right_base_rpy_deg: [0.0, 0.0, 180.0]
+    table:
+      source: runtime_table_surface_detector
+      surface_object_id: table_surface
+      fallback_surface_z_m: 0.0
+      thickness_m: 0.04
+      collision_padding_m: 0.015
+      usable_bounds_m:
+        x: [0.20, 0.95]
+        y: [-0.55, 0.55]
+        z: [0.00, 0.45]
+    safety:
+      min_initial_tcp_distance_m: 0.30
+      min_human_handover_tcp_distance_m: 0.30
+      min_object_clearance_m: 0.02
+      planning_keepout_margin_m: 0.03
+      require_world_frame_for_execution: true
+    scene_contract:
+      formal_object_ids:
+        - water_bottle
+        - cola_bottle
+        - cup
+        - basketball
+        - soccer_ball
+        - basket
+      auxiliary_object_ids:
+        - table_surface
+      ignored_for_formal_score:
+        - table_surface
+    regions:
+      beverage_service_zone:
+        purpose: 饮品和水杯随机摆放区
+        random_placement: true
+        allowed_object_ids: [water_bottle, cola_bottle, cup]
+        bounds_m:
+          x: [0.28, 0.82]
+          y: [-0.42, 0.42]
+          z: [0.00, 0.25]
+      basket_zone:
+        purpose: 收纳筐随机摆放区
+        random_placement: true
+        allowed_object_ids: [basket]
+        distance_limited_by_rule: false
+        bounds_m:
+          x: [0.25, 0.88]
+          y: [-0.45, 0.45]
+          z: [0.00, 0.25]
+      human_handover_zone:
+        purpose: 队员双手持球等待区
+        random_placement: true
+        allowed_object_ids: [basketball, soccer_ball]
+        min_tcp_distance_m: 0.30
+        bounds_m:
+          x: [0.35, 0.95]
+          y: [-0.55, 0.55]
+          z: [0.12, 0.55]
+      return_to_table_zone:
+        purpose: 任务结束后饮品和水杯放回台面
+        final_pose_not_fixed_by_rule: true
+        allowed_object_ids: [water_bottle, cola_bottle, cup]
+        bounds_m:
+          x: [0.25, 0.90]
+          y: [-0.50, 0.50]
+          z: [0.00, 0.25]
+    arm_policy:
+      pouring:
+        allow_any_beverage_order: true
+        require_one_arm_bottle_one_arm_cup: true
+        default_pairings:
+          water_bottle:
+            bottle_arm: right_arm
+            cup_arm: left_arm
+          cola_bottle:
+            bottle_arm: right_arm
+            cup_arm: left_arm
+        fallback_reassignment:
+          enabled: true
+          max_attempts: 1
+          swap_pair:
+            bottle_arm: left_arm
+            cup_arm: right_arm
+      handover:
+        required_arm_mode: dual_arm
+        sequence: [basketball, soccer_ball]
+        release_before_basket_contact: true
+        side_assignment:
+          left_arm: plus_y
+          right_arm: minus_y
+    poses:
+      left_scan_table_pose_1:
+        arm: left_arm
+        position_m: [0.52, 0.18, 0.46]
+        rpy_deg: [180.0, 0.0, -55.0]
+      left_scan_table_pose_2:
+        arm: left_arm
+        position_m: [0.60, 0.02, 0.50]
+        rpy_deg: [180.0, 0.0, -35.0]
+      left_scan_handover_pose:
+        arm: left_arm
+        position_m: [0.68, 0.24, 0.52]
+        rpy_deg: [180.0, 0.0, -20.0]
+      left_scan_basket_pose:
+        arm: left_arm
+        position_m: [0.56, 0.08, 0.50]
+        rpy_deg: [180.0, 0.0, -40.0]
+      right_cap_workspace_pose:
+        arm: right_arm
+        position_m: [0.50, -0.06, 0.28]
+        rpy_deg: [180.0, 0.0, 180.0]
+      left_scan_yield_pose:
+        arm: left_arm
+        position_m: [0.24, 0.42, 0.42]
+        rpy_deg: [180.0, 0.0, -90.0]
+      right_scan_yield_pose:
+        arm: right_arm
+        position_m: [0.24, -0.42, 0.42]
+        rpy_deg: [180.0, 0.0, 90.0]
+      left_home_pose:
+        arm: left_arm
+        position_m: [0.20, 0.34, 0.34]
+        rpy_deg: [180.0, 0.0, -90.0]
+      right_home_pose:
+        arm: right_arm
+        position_m: [0.20, -0.34, 0.34]
+        rpy_deg: [180.0, 0.0, 90.0]
+    planner_contract:
+      allowed_goal_frames: [world]
+      table_collision_object_id: table_surface
+      attachable_object_ids:
+        - water_bottle
+        - cola_bottle
+        - cup
+        - basketball
+        - soccer_ball
+      world_only_object_ids:
+        - table_surface
+        - basket
+
+  software_smoke:
+    description: 纯软件联调用 profile，不代表正式比赛验收。
+    frame_id: world
+    robot_mounts:
+      left_base_xyz_m: [0.00, 0.30, 0.00]
+      left_base_rpy_deg: [0.0, 0.0, 0.0]
+      right_base_xyz_m: [0.00, -0.30, 0.00]
+      right_base_rpy_deg: [0.0, 0.0, 180.0]
+    table:
+      source: synthetic_table
+      surface_object_id: table_surface
+      fallback_surface_z_m: 0.0
+      thickness_m: 0.04
+      collision_padding_m: 0.01
+      usable_bounds_m:
+        x: [0.30, 0.80]
+        y: [-0.35, 0.35]
+        z: [0.00, 0.40]
+    safety:
+      min_initial_tcp_distance_m: 0.30
+      min_human_handover_tcp_distance_m: 0.30
+      min_object_clearance_m: 0.02
+      planning_keepout_margin_m: 0.02
+      require_world_frame_for_execution: true
+    scene_contract:
+      formal_object_ids:
+        - water_bottle
+        - cola_bottle
+        - cup
+        - basketball
+        - soccer_ball
+        - basket
+      auxiliary_object_ids:
+        - table_surface
+      ignored_for_formal_score:
+        - table_surface
+    regions:
+      beverage_service_zone:
+        purpose: mock 饮品和水杯区
+        random_placement: false
+        allowed_object_ids: [water_bottle, cola_bottle, cup]
+        bounds_m:
+          x: [0.35, 0.75]
+          y: [-0.30, 0.30]
+          z: [0.00, 0.22]
+      basket_zone:
+        purpose: mock 收纳筐区
+        random_placement: false
+        allowed_object_ids: [basket]
+        distance_limited_by_rule: false
+        bounds_m:
+          x: [0.35, 0.80]
+          y: [-0.30, 0.30]
+          z: [0.00, 0.22]
+      human_handover_zone:
+        purpose: mock 持球区
+        random_placement: false
+        allowed_object_ids: [basketball, soccer_ball]
+        min_tcp_distance_m: 0.30
+        bounds_m:
+          x: [0.45, 0.85]
+          y: [-0.35, 0.35]
+          z: [0.12, 0.45]
+      return_to_table_zone:
+        purpose: mock 放回区
+        final_pose_not_fixed_by_rule: true
+        allowed_object_ids: [water_bottle, cola_bottle, cup]
+        bounds_m:
+          x: [0.35, 0.80]
+          y: [-0.35, 0.35]
+          z: [0.00, 0.22]
+    arm_policy:
+      pouring:
+        allow_any_beverage_order: true
+        require_one_arm_bottle_one_arm_cup: true
+        default_pairings:
+          water_bottle:
+            bottle_arm: right_arm
+            cup_arm: left_arm
+          cola_bottle:
+            bottle_arm: right_arm
+            cup_arm: left_arm
+        fallback_reassignment:
+          enabled: true
+          max_attempts: 1
+          swap_pair:
+            bottle_arm: left_arm
+            cup_arm: right_arm
+      handover:
+        required_arm_mode: dual_arm
+        sequence: [basketball, soccer_ball]
+        release_before_basket_contact: true
+        side_assignment:
+          left_arm: plus_y
+          right_arm: minus_y
+    poses:
+      left_scan_table_pose_1:
+        arm: left_arm
+        position_m: [0.48, 0.18, 0.42]
+        rpy_deg: [180.0, 0.0, -55.0]
+      left_scan_table_pose_2:
+        arm: left_arm
+        position_m: [0.56, 0.02, 0.45]
+        rpy_deg: [180.0, 0.0, -35.0]
+      left_scan_handover_pose:
+        arm: left_arm
+        position_m: [0.62, 0.18, 0.48]
+        rpy_deg: [180.0, 0.0, -20.0]
+      left_scan_basket_pose:
+        arm: left_arm
+        position_m: [0.54, 0.06, 0.44]
+        rpy_deg: [180.0, 0.0, -40.0]
+      right_cap_workspace_pose:
+        arm: right_arm
+        position_m: [0.48, -0.05, 0.26]
+        rpy_deg: [180.0, 0.0, 180.0]
+      left_scan_yield_pose:
+        arm: left_arm
+        position_m: [0.22, 0.36, 0.38]
+        rpy_deg: [180.0, 0.0, -90.0]
+      right_scan_yield_pose:
+        arm: right_arm
+        position_m: [0.22, -0.36, 0.38]
+        rpy_deg: [180.0, 0.0, 90.0]
+      left_home_pose:
+        arm: left_arm
+        position_m: [0.20, 0.30, 0.30]
+        rpy_deg: [180.0, 0.0, -90.0]
+      right_home_pose:
+        arm: right_arm
+        position_m: [0.20, -0.30, 0.30]
+        rpy_deg: [180.0, 0.0, 90.0]
+    planner_contract:
+      allowed_goal_frames: [world]
+      table_collision_object_id: table_surface
+      attachable_object_ids:
+        - water_bottle
+        - cola_bottle
+        - cup
+        - basketball
+        - soccer_ball
+      world_only_object_ids:
+        - table_surface
+        - basket

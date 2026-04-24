@@ -169,6 +169,15 @@ int main(int argc, char** argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
 
+    ret = robot.ResetAllError();
+    if (ret != 0) {
+        std::cerr << "清除机器人错误失败，错误码: " << ret << "（" << explain_robot_error(ret) << "）" << std::endl;
+        robot.CloseRPC();
+        return 1;
+    }
+    std::cout << "已清除机器人错误" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
     if (target_mode != -1) {
         ret = robot.Mode(target_mode);
         if (ret != 0) {

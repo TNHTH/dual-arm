@@ -803,6 +803,7 @@ void RoboCtrlNode::handle_robot_servo_joint(
                 // 如果是增量模式，获取当前关节位置作为基准
                 JointPos current_pose;
                 if (request->use_incremental) {
+                    std::lock_guard<std::mutex> robot_lock(robot_mutex_);
                     int ret = robot_->GetActualJointPosDegree(0, &current_pose);
                     if (ret != 0) {
                         response->success = false;
@@ -875,44 +876,58 @@ void RoboCtrlNode::handle_robot_servo_joint(
 
                 // 启动运动线程，只负责执行预计算的序列
                 servo_thread_ = std::thread([this, target_poses, request]() {
-                    auto cleanup = [&]() {
-                        is_servo_running_.store(false);
-                        RCLCPP_DEBUG(this->get_logger(), "ServoJ路径执行完毕或被中断");
-                    };
-
-                    float acc     = request->acc;
-                    float vel     = request->vel;
-                    float cmdT    = request->cmd_time;
-                    float filterT = request->filter_time;
-                    float gain    = request->gain;
-
-                    // 执行预计算的关节角度序列
-                    for (size_t i = 0; i < target_poses.size() && is_servo_running_; ++i) {
-                        const auto& target_pose = target_poses[i];
-
-                        RCLCPP_DEBUG(
-                            this->get_logger(),
-                            "执行ServoJ路径点[%zu]: [%.2f, %.2f, %.2f, %.2f, %.2f, %.2f]",
-                            i,
-                            target_pose.jPos[0],
-                            target_pose.jPos[1],
-                            target_pose.jPos[2],
-                            target_pose.jPos[3],
-                            target_pose.jPos[4],
-                            target_pose.jPos[5]
-                        );
-
-                        auto ret = robot_->ServoJ(const_cast<JointPos*>(&target_pose), acc, vel, cmdT, filterT, gain);
-                        if (ret != 0) {
-                            RCLCPP_ERROR(this->get_logger(), "ServoJ路径跟踪失败，错误码: %d", ret);
+                    try {
+                        auto cleanup = [&]() {
                             is_servo_running_.store(false);
-                            return;
-                        }
-                        robot_->WaitMs(cmdT * 1100);
-                    }
+                            RCLCPP_DEBUG(this->get_logger(), "ServoJ路径执行完毕或被中断");
+                        };
 
-                    is_servo_running_.store(false);
-                    RCLCPP_DEBUG(this->get_logger(), "ServoJ路径执行完毕或被中断");
+                        float acc     = request->acc;
+                        float vel     = request->vel;
+                        float cmdT    = request->cmd_time;
+                        float filterT = request->filter_time;
+                        float gain    = request->gain;
+
+                        // 执行预计算的关节角度序列
+                        for (size_t i = 0; i < target_poses.size() && is_servo_running_; ++i) {
+                            const auto& target_pose = target_poses[i];
+
+                            RCLCPP_DEBUG(
+                                this->get_logger(),
+                                "执行ServoJ路径点[%zu]: [%.2f, %.2f, %.2f, %.2f, %.2f, %.2f]",
+                                i,
+                                target_pose.jPos[0],
+                                target_pose.jPos[1],
+                                target_pose.jPos[2],
+                                target_pose.jPos[3],
+                                target_pose.jPos[4],
+                                target_pose.jPos[5]
+                            );
+
+                            int ret = 0;
+                            {
+                                std::lock_guard<std::mutex> robot_lock(robot_mutex_);
+                                ret = robot_->ServoJ(const_cast<JointPos*>(&target_pose), acc, vel, cmdT, filterT, gain);
+                            }
+                            if (ret != 0) {
+                                RCLCPP_ERROR(this->get_logger(), "ServoJ路径跟踪失败，错误码: %d", ret);
+                                is_servo_running_.store(false);
+                                return;
+                            }
+                            {
+                                std::lock_guard<std::mutex> robot_lock(robot_mutex_);
+                                robot_->WaitMs(cmdT * 1100);
+                            }
+                        }
+
+                        cleanup();
+                    } catch (const std::exception& e) {
+                        is_servo_running_.store(false);
+                        RCLCPP_ERROR(this->get_logger(), "ServoJ线程异常: %s", e.what());
+                    } catch (...) {
+                        is_servo_running_.store(false);
+                        RCLCPP_ERROR(this->get_logger(), "ServoJ线程异常: 未知异常");
+                    }
                 });
 
                 response->success = true;

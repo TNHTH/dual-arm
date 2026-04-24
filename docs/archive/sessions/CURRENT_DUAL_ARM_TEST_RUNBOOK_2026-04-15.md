@@ -30,7 +30,7 @@
 每个新终端都先执行：
 
 ```bash
-cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+cd /home/gwh/dual-arm
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ```
@@ -97,7 +97,7 @@ ros2 service list | grep '^/R/'
 终端 Scene：
 
 ```bash
-/usr/bin/python3 /home/gwh/dashgo_rl_project/workspaces/dual-arm/tools/scripts/publish_empty_scene.py
+/usr/bin/python3 /home/gwh/dual-arm/tools/scripts/publish_empty_scene.py
 ```
 
 终端 TF：

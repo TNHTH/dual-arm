@@ -5,7 +5,7 @@
 
 ## 结论
 
-`/home/gwh/dashgo_rl_project/workspaces/dual-arm` 是一个独立的 ROS 2 Humble 双臂工作区，目标不是“做一个 MoveIt demo”，而是围绕 Fairino 双臂、夹爪、RGB-D 感知和比赛状态机，搭建一条可运行的双臂比赛执行链。
+`/home/gwh/dual-arm` 是一个独立的 ROS 2 Humble 双臂工作区，目标不是“做一个 MoveIt demo”，而是围绕 Fairino 双臂、夹爪、RGB-D 感知和比赛状态机，搭建一条可运行的双臂比赛执行链。
 
 如果把用户提到的 `dualarms_ws` 映射到当前仓库，最合理的对应就是这个 `dual-arm` 工作区。
 
@@ -79,7 +79,7 @@
 - `dualarm`
 - `detector`
 - `tools`
-- `third_party/fairino_sdk`
+- `vendor/fairino_sdk`
 
 ## 主生产链
 
@@ -482,7 +482,7 @@ MoveIt 双臂配置正是依赖这个统一 joint state。
 
 ## 第三方资产
 
-`third_party/fairino_sdk` 已被纳入工作区。
+`vendor/fairino_sdk` 已被纳入工作区。
 
 已核对到：
 

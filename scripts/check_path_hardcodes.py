@@ -12,7 +12,7 @@ PATTERNS = [
     "/home/phoenix/roboarm/FairinoDualArm",
     "/home/phoenix/tensorrtx",
     "third_party/fairino_sdk",
-    "dual-arm-shared",
+    "/home/gwh/dashgo_rl_project/workspaces/dual-arm-shared",
 ]
 
 ALLOWED_PREFIXES = (

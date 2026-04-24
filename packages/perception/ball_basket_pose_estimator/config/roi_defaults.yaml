@@ -5,9 +5,20 @@ ball_basket_pose_estimator:
     use_roi_fallback: false
     depth_topic: /camera/depth/image_raw
     camera_info_topic: /camera/depth/camera_info
+    require_depth_aligned_detections: true
+    expected_detection_frame: ""
+    require_camera_info_depth_frame: true
     basketball_roi: [220, 120, 120, 120]
     soccer_ball_roi: [380, 120, 120, 120]
     basket_roi: [280, 240, 160, 120]
     basketball_diameter: 0.12
     soccer_ball_diameter: 0.12
     basket_size: [0.32, 0.22, 0.18]
+    max_depth_age_sec: 0.6
+    max_detection_depth_delay_sec: 0.25
+    max_camera_info_depth_delay_sec: 0.5
+    track_timeout_sec: 0.8
+    stable_frames_ball: 3
+    stable_frames_basket: 3
+    ball_position_gate: 0.04
+    basket_position_gate: 0.06
