@@ -9,6 +9,13 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("left_gripper_slave_id", default_value="9"),
             DeclareLaunchArgument("right_gripper_slave_id", default_value="10"),
+            DeclareLaunchArgument("left_gripper_command_service", default_value="/gripper0/epg50_gripper/command"),
+            DeclareLaunchArgument("right_gripper_command_service", default_value="/gripper1/epg50_gripper/command"),
+            DeclareLaunchArgument("left_gripper_status_service", default_value="/gripper0/epg50_gripper/status"),
+            DeclareLaunchArgument("right_gripper_status_service", default_value="/gripper1/epg50_gripper/status"),
+            DeclareLaunchArgument("left_gripper_status_topic", default_value="/gripper0/epg50_gripper/status_stream"),
+            DeclareLaunchArgument("right_gripper_status_topic", default_value="/gripper1/epg50_gripper/status_stream"),
+            DeclareLaunchArgument("gripper_command_timeout_s", default_value="8.0"),
             Node(
                 package="execution_adapter",
                 executable="execution_adapter_node.py",
@@ -17,6 +24,13 @@ def generate_launch_description():
                     {
                         "left_gripper_slave_id": LaunchConfiguration("left_gripper_slave_id"),
                         "right_gripper_slave_id": LaunchConfiguration("right_gripper_slave_id"),
+                        "left_gripper_command_service": LaunchConfiguration("left_gripper_command_service"),
+                        "right_gripper_command_service": LaunchConfiguration("right_gripper_command_service"),
+                        "left_gripper_status_service": LaunchConfiguration("left_gripper_status_service"),
+                        "right_gripper_status_service": LaunchConfiguration("right_gripper_status_service"),
+                        "left_gripper_status_topic": LaunchConfiguration("left_gripper_status_topic"),
+                        "right_gripper_status_topic": LaunchConfiguration("right_gripper_status_topic"),
+                        "gripper_command_timeout_s": LaunchConfiguration("gripper_command_timeout_s"),
                     }
                 ],
                 output="screen",

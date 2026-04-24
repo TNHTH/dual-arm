@@ -1,0 +1,152 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 160
+      Enabled: true
+      Name: Ground Grid
+      Plane: XY
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Value: true
+    - Class: rviz_default_plugins/RobotModel
+      Collision Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Name: Robot Model
+      Visual Enabled: true
+      Value: true
+    - Axis: Z
+      Class: rviz_default_plugins/PointCloud2
+      Color: 64; 180; 255
+      Color Transformer: FlatColor
+      Enabled: true
+      Name: Left Object Points
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.005
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /depth_handler/left/pointcloud
+      Use Fixed Frame: true
+      Value: true
+    - Axis: Z
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: FlatColor
+      Enabled: true
+      Name: Right Object Points
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.005
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /depth_handler/right/pointcloud
+      Use Fixed Frame: true
+      Value: true
+    - Axis: Z
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 180; 0
+      Color Transformer: FlatColor
+      Enabled: true
+      Name: Scene Model Points
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.006
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /competition/rviz/scene_model_points
+      Use Fixed Frame: true
+      Value: true
+    - Axis: Z
+      Class: rviz_default_plugins/PointCloud2
+      Color: 0; 255; 128
+      Color Transformer: FlatColor
+      Enabled: true
+      Name: Table Points
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.004
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /perception/table_points
+      Use Fixed Frame: true
+      Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Enabled: true
+      Name: Competition Interactive Controls
+      Update Topic: /competition_rviz_scene/update
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Marker Topic: /competition/rviz/grasp_debug_markers
+      Name: Grasp Debug Markers
+      Namespaces:
+        {}
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 32; 34; 36
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 1.8
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.35
+      Name: Operator View
+      Pitch: 0.65
+      Target Frame: world
+      Yaw: -0.65
+Window Geometry:
+  Height: 900
+  Width: 1400

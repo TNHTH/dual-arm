@@ -1,0 +1,58 @@
+"""RViz operator tools for the dual-arm competition workspace."""
+
+DEFAULT_COMMAND_TOPIC = "/competition/rviz/operator_command"
+DEFAULT_GRASP_DEBUG_MARKER_TOPIC = "/competition/rviz/grasp_debug_markers"
+DEFAULT_GRASP_TARGET_TOPIC = "/planning/grasp_targets"
+DEFAULT_RUN_ACTION = "/competition/run"
+DEFAULT_SCENE_OBJECT_TOPIC = "/scene_fusion/scene_objects"
+DEFAULT_TASK_EVENT_TOPIC = "/task_manager/events"
+
+COMMAND_RUN_COMPETITION = "run_competition"
+COMMAND_PAUSE_COMPETITION = "pause_competition"
+COMMAND_STOP_COMPETITION = "stop_competition"
+COMMAND_REFRESH_SCENE = "refresh_scene"
+COMMAND_SCAN_TABLE = "scan_table"
+COMMAND_SCAN_BASKET = "scan_basket"
+COMMAND_PREVIEW_PICK = "preview_pick"
+COMMAND_EXECUTE_PICK = "execute_pick"
+COMMAND_MOVE_TO_CAP_WORKSPACE = "move_to_cap_workspace"
+COMMAND_OPEN_CAP = "open_cap"
+COMMAND_PICK_CUP = "pick_cup"
+COMMAND_ALIGN_POUR = "align_pour"
+COMMAND_POUR = "pour"
+COMMAND_PLAN_BALL_PAIR = "plan_ball_pair"
+COMMAND_EXECUTE_BALL_CLOSE = "execute_ball_close"
+COMMAND_RELEASE_BALL = "release_ball"
+COMMAND_YIELD_LEFT = "yield_left"
+COMMAND_YIELD_RIGHT = "yield_right"
+COMMAND_HOME_LEFT = "home_left"
+COMMAND_HOME_RIGHT = "home_right"
+COMMAND_ABORT = "abort"
+COMMAND_SELECT_GRASP_TARGET = "select_grasp_target"
+COMMAND_CLEAR_SELECTION = "clear_selection"
+
+OPERATOR_COMMANDS = (
+    COMMAND_RUN_COMPETITION,
+    COMMAND_PAUSE_COMPETITION,
+    COMMAND_STOP_COMPETITION,
+    COMMAND_REFRESH_SCENE,
+    COMMAND_SCAN_TABLE,
+    COMMAND_SCAN_BASKET,
+    COMMAND_PREVIEW_PICK,
+    COMMAND_EXECUTE_PICK,
+    COMMAND_MOVE_TO_CAP_WORKSPACE,
+    COMMAND_OPEN_CAP,
+    COMMAND_PICK_CUP,
+    COMMAND_ALIGN_POUR,
+    COMMAND_POUR,
+    COMMAND_PLAN_BALL_PAIR,
+    COMMAND_EXECUTE_BALL_CLOSE,
+    COMMAND_RELEASE_BALL,
+    COMMAND_YIELD_LEFT,
+    COMMAND_YIELD_RIGHT,
+    COMMAND_HOME_LEFT,
+    COMMAND_HOME_RIGHT,
+    COMMAND_ABORT,
+    COMMAND_SELECT_GRASP_TARGET,
+    COMMAND_CLEAR_SELECTION,
+)

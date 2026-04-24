@@ -13,6 +13,7 @@
   <depend>ball_basket_pose_estimator</depend>
   <depend>camera_info_interceptor</depend>
   <depend>competition_console_api</depend>
+  <depend>competition_rviz_tools</depend>
   <depend>competition_start_gate</depend>
   <depend>depth_handler</depend>
   <depend>detector</depend>

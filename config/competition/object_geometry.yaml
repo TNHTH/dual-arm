@@ -1,0 +1,275 @@
+# v4 比赛对象几何配置。
+# 单位统一为 SI；体积按 ml 记录，便于倒水任务直接使用。
+schema_version: competition_object_geometry_v4
+updated_at: "2026-04-20"
+
+units:
+  length: m
+  mass: kg
+  volume: ml
+  density: kg_per_l
+
+official_semantics:
+  object_ids:
+    - water_bottle
+    - cola_bottle
+    - cup
+    - basketball
+    - soccer_ball
+    - basket
+  aliases:
+    yibao: water_bottle
+    cestbon: water_bottle
+    water: water_bottle
+    cocacola: cola_bottle
+    coke: cola_bottle
+    cola: cola_bottle
+    football: soccer_ball
+
+common:
+  pose_frame: world
+  object_origin: bottom_center
+  table_contact_epsilon_m: 0.005
+  default_collision_padding_m: 0.01
+
+objects:
+  water_bottle:
+    label_zh: 怡宝饮用水 350ml
+    role: beverage
+    source: official_with_modeling_proxy
+    official:
+      nominal_volume_ml: 350
+      cap_state: previously_opened
+    geometry:
+      bounding_box_m: [0.060, 0.060, 0.175]
+      main_axis: z
+      proxy_shape:
+        type: cylinder
+        radius_m: 0.030
+        height_m: 0.175
+        center_z_m: 0.0875
+      parts:
+        body:
+          type: cylinder
+          radius_m: 0.030
+          height_m: 0.140
+          center_z_m: 0.070
+        shoulder:
+          type: frustum
+          bottom_radius_m: 0.030
+          top_radius_m: 0.015
+          height_m: 0.022
+          center_z_m: 0.151
+        neck_cap:
+          type: cylinder
+          radius_m: 0.016
+          height_m: 0.018
+          center_z_m: 0.166
+    mass:
+      empty_kg: 0.023
+      full_kg: 0.373
+      liquid_density_kg_per_l: 1.00
+    perception:
+      expected_height_m: 0.175
+      expected_diameter_m: 0.060
+      color_hint: clear_pet
+    planning:
+      collision_proxy_shape: cylinder
+      grasp_regions:
+        body_mid_upper:
+          z_range_m: [0.070, 0.120]
+          preferred_gripper_width_m: 0.066
+          approach_axes: [x, y]
+          allowed_arms: [left_arm, right_arm]
+      pour_reference:
+        mouth_z_m: 0.175
+        tilt_axis_candidates: [x, y]
+
+  cola_bottle:
+    label_zh: 可口可乐原味 300ml
+    role: beverage
+    source: official_with_modeling_proxy
+    official:
+      nominal_volume_ml: 300
+      cap_state: previously_opened
+    geometry:
+      bounding_box_m: [0.060, 0.060, 0.145]
+      main_axis: z
+      proxy_shape:
+        type: cylinder
+        radius_m: 0.030
+        height_m: 0.145
+        center_z_m: 0.0725
+      parts:
+        body:
+          type: cylinder
+          radius_m: 0.030
+          height_m: 0.115
+          center_z_m: 0.0575
+        shoulder:
+          type: frustum
+          bottom_radius_m: 0.030
+          top_radius_m: 0.014
+          height_m: 0.017
+          center_z_m: 0.1235
+        neck_cap:
+          type: cylinder
+          radius_m: 0.015
+          height_m: 0.013
+          center_z_m: 0.1385
+    mass:
+      empty_kg: 0.018
+      full_kg: 0.330
+      liquid_density_kg_per_l: 1.04
+    perception:
+      expected_height_m: 0.145
+      expected_diameter_m: 0.060
+      color_hint: red_label_dark_liquid
+    planning:
+      collision_proxy_shape: cylinder
+      grasp_regions:
+        body_mid:
+          z_range_m: [0.050, 0.095]
+          preferred_gripper_width_m: 0.066
+          approach_axes: [x, y]
+          allowed_arms: [left_arm, right_arm]
+      pour_reference:
+        mouth_z_m: 0.145
+        tilt_axis_candidates: [x, y]
+
+  cup:
+    label_zh: 低透明度黑色塑料水杯
+    role: vessel
+    source: official_with_modeling_proxy
+    official:
+      count: 2
+      appearance: low_translucency_black_plastic
+    geometry:
+      bounding_box_m: [0.075, 0.075, 0.115]
+      main_axis: z
+      proxy_shape:
+        type: cylinder
+        radius_m: 0.0375
+        height_m: 0.115
+        center_z_m: 0.0575
+      parts:
+        cup_wall:
+          type: frustum
+          bottom_radius_m: 0.030
+          top_radius_m: 0.0375
+          height_m: 0.115
+          center_z_m: 0.0575
+        inner_volume:
+          type: frustum
+          bottom_radius_m: 0.027
+          top_radius_m: 0.0345
+          height_m: 0.109
+          center_z_m: 0.0575
+    capacity:
+      nominal_ml: 360
+      official_half_rule: over_half
+      modeling_half_ml: 180
+    mass:
+      empty_kg: 0.010
+      with_half_water_kg: 0.190
+      with_half_cola_kg: 0.197
+    perception:
+      expected_height_m: 0.115
+      expected_top_diameter_m: 0.075
+      expected_bottom_diameter_m: 0.060
+      color_hint: translucent_black
+    planning:
+      collision_proxy_shape: cylinder
+      grasp_regions:
+        wall_mid_upper:
+          z_range_m: [0.045, 0.080]
+          preferred_gripper_width_m: 0.102
+          approach_axes: [x, y]
+          allowed_arms: [left_arm, right_arm]
+      fill_reference:
+        rim_z_m: 0.115
+        half_fill_z_m: 0.060
+
+  basketball:
+    label_zh: 小号篮球
+    role: handover_ball
+    source: official_with_engineering_proxy
+    official:
+      sequence_index: 1
+      diameter_m: 0.12
+    geometry:
+      bounding_box_m: [0.120, 0.120, 0.120]
+      object_origin: center
+      proxy_shape:
+        type: sphere
+        radius_m: 0.060
+    mass:
+      proxy_kg: 0.200
+      confidence: low
+    perception:
+      expected_diameter_m: 0.120
+      color_hint: orange_ball
+    planning:
+      collision_proxy_shape: sphere
+      grasp_regions:
+        dual_side_grasp:
+          contact_radius_m: 0.060
+          hand_separation_m: 0.145
+          allowed_arms: [left_arm, right_arm]
+
+  soccer_ball:
+    label_zh: 小号足球
+    role: handover_ball
+    source: official_with_engineering_proxy
+    official:
+      sequence_index: 2
+      diameter_m: 0.12
+    geometry:
+      bounding_box_m: [0.120, 0.120, 0.120]
+      object_origin: center
+      proxy_shape:
+        type: sphere
+        radius_m: 0.060
+    mass:
+      proxy_kg: 0.200
+      confidence: low
+    perception:
+      expected_diameter_m: 0.120
+      color_hint: white_black_ball
+    planning:
+      collision_proxy_shape: sphere
+      grasp_regions:
+        dual_side_grasp:
+          contact_radius_m: 0.060
+          hand_separation_m: 0.145
+          allowed_arms: [left_arm, right_arm]
+
+  basket:
+    label_zh: 收纳筐
+    role: placement_target
+    source: official
+    official:
+      size_m: [0.30, 0.20, 0.12]
+      random_position: true
+      distance_limited: false
+    geometry:
+      bounding_box_m: [0.30, 0.20, 0.12]
+      main_axis: z
+      proxy_shape:
+        type: box
+        size_m: [0.30, 0.20, 0.12]
+        center_z_m: 0.060
+      inner_drop_region_m:
+        size: [0.26, 0.16, 0.10]
+        center_z_m: 0.070
+    mass:
+      proxy_kg: 0.500
+      confidence: low
+    perception:
+      expected_size_m: [0.30, 0.20, 0.12]
+      color_hint: storage_basket
+    planning:
+      collision_proxy_shape: box
+      drop_reference:
+        rim_z_m: 0.12
+        release_height_above_rim_m: 0.08

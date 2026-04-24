@@ -1,13 +1,7 @@
 #!/bin/bash
-set -euo pipefail
 
 # ServiceServerTemplate 重构演示脚本
 # 这个脚本演示了如何使用重构后的机器人控制代码
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
-source "${REPO_ROOT}/scripts/lib/paths.sh"
-dual_arm_export_paths "${REPO_ROOT}"
 
 echo "=========================================="
 echo "ServiceServerTemplate 重构演示"
@@ -15,12 +9,12 @@ echo "=========================================="
 
 # 设置ROS2环境
 source /opt/ros/humble/setup.bash
-cd "${DUAL_ARM_REPO_ROOT}"
+cd /home/gwh/dual-arm
 source install/setup.bash
 
 echo ""
 echo "1. 编译重构后的代码..."
-colcon build --base-paths packages --packages-select dualarm --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+colcon build --packages-select dualarm --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 if [ $? -ne 0 ]; then
     echo "编译失败！请检查代码错误。"

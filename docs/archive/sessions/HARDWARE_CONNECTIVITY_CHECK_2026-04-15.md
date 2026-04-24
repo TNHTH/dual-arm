@@ -22,13 +22,13 @@
 
 ### 代码层
 
-- [robot.h](/home/gwh/dashgo_rl_project/workspaces/dual-arm/robo_ctrl/include/libfairino/robot.h)
+- [robot.h](/home/gwh/dual-arm/robo_ctrl/include/libfairino/robot.h)
   `FRRobot::RPC(const char *ip)` 明确说明 SDK 使用控制器 IP 建立通信。
-- [robo_ctrl_L.launch.py](/home/gwh/dashgo_rl_project/workspaces/dual-arm/robo_ctrl/launch/robo_ctrl_L.launch.py)
+- [robo_ctrl_L.launch.py](/home/gwh/dual-arm/robo_ctrl/launch/robo_ctrl_L.launch.py)
   左臂默认 IP：`10.2.20.201`
-- [robo_ctrl_R.launch.py](/home/gwh/dashgo_rl_project/workspaces/dual-arm/robo_ctrl/launch/robo_ctrl_R.launch.py)
+- [robo_ctrl_R.launch.py](/home/gwh/dual-arm/robo_ctrl/launch/robo_ctrl_R.launch.py)
   右臂默认 IP：`10.2.20.202`
-- [launch.py](/home/gwh/dashgo_rl_project/workspaces/dual-arm/epg50_gripper_ros/launch/launch.py)
+- [launch.py](/home/gwh/dual-arm/epg50_gripper_ros/launch/launch.py)
   夹爪默认串口：`/dev/ttyACM0`
 
 ### 运行时检查
@@ -151,7 +151,7 @@
 1. 启动只读驱动：
 
 ```bash
-cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+cd /home/gwh/dual-arm
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 run robo_ctrl robo_ctrl_node --ros-args -p robot_ip:=192.168.58.2 -p robot_name:=L
@@ -160,7 +160,7 @@ ros2 run robo_ctrl robo_ctrl_node --ros-args -p robot_ip:=192.168.58.2 -p robot_
 2. 另开一个终端只看状态：
 
 ```bash
-cd /home/gwh/dashgo_rl_project/workspaces/dual-arm
+cd /home/gwh/dual-arm
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 topic echo /L/robot_state

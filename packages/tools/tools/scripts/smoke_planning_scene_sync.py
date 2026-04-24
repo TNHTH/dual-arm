@@ -79,7 +79,7 @@ class PlanningSceneSyncSmoke(Node):
         message.header.frame_id = "world"
         message.scene_version = 1
         obj = SceneObject()
-        obj.id = "smoke_bottle"
+        obj.id = "water_bottle_gold"
         obj.semantic_type = "water_bottle"
         obj.pose = PoseStamped()
         obj.pose.header.frame_id = "world"
@@ -152,23 +152,33 @@ def main() -> int:
         node.start_publishing_raw_scene()
         node.publish_raw_scene()
 
+        object_id = "water_bottle_gold"
+
         if not node.wait_for_condition(
             lambda: node._managed_scene is not None
             and node._managed_scene.scene_version > 0
             and node._managed_scene.header.frame_id == "world"
             and any(
-                obj.id == "smoke_bottle"
+                obj.id == object_id
                 and obj.scene_version == node._managed_scene.scene_version
                 and obj.pose.header.frame_id == "world"
                 for obj in node._managed_scene.objects
             )
         ):
-            print("managed scene missing smoke_bottle", file=sys.stderr)
+            print(f"managed scene missing {object_id}", file=sys.stderr)
+            return 3
+
+        if not node.wait_for_condition(lambda: object_id in node.planning_scene_ids()[0]):
+            world_ids, attached_ids = node.planning_scene_ids()
+            print(
+                f"planning scene world ADD mismatch world={sorted(world_ids)} attached={sorted(attached_ids)}",
+                file=sys.stderr,
+            )
             return 3
 
         pre_reserve_version = node._managed_scene.scene_version if node._managed_scene else 0
         reserve_req = ReserveObject.Request()
-        reserve_req.object_id = "smoke_bottle"
+        reserve_req.object_id = object_id
         reserve_req.reserved_by = "smoke"
         reserve_req.arm_mode = "left_arm"
         if not node.call(node._reserve, reserve_req):
@@ -177,7 +187,7 @@ def main() -> int:
 
         if not node.wait_for_condition(
             lambda: any(
-                obj.id == "smoke_bottle"
+                obj.id == object_id
                 and obj.lifecycle_state == "reserved"
                 and obj.reserved_by == "smoke"
                 and obj.attached_link == ""
@@ -192,7 +202,7 @@ def main() -> int:
             return 5
 
         attach_req = AttachObject.Request()
-        attach_req.object_id = "smoke_bottle"
+        attach_req.object_id = object_id
         attach_req.link_name = "left_tcp"
         if not node.call(node._attach, attach_req):
             print("attach failed", file=sys.stderr)
@@ -200,7 +210,7 @@ def main() -> int:
 
         if not node.wait_for_condition(
             lambda: any(
-                obj.id == "smoke_bottle"
+                obj.id == object_id
                 and obj.lifecycle_state == "attached"
                 and obj.attached_link == "left_tcp"
                 for obj in (node._managed_scene.objects if node._managed_scene else [])
@@ -210,8 +220,8 @@ def main() -> int:
             return 11
 
         if not node.wait_for_condition(
-            lambda: "smoke_bottle" not in node.planning_scene_ids()[0]
-            and "smoke_bottle" in node.planning_scene_ids()[1]
+            lambda: object_id not in node.planning_scene_ids()[0]
+            and object_id in node.planning_scene_ids()[1]
         ):
             world_ids, attached_ids = node.planning_scene_ids()
             print(
@@ -221,44 +231,44 @@ def main() -> int:
             return 7
 
         detach_req = DetachObject.Request()
-        detach_req.object_id = "smoke_bottle"
+        detach_req.object_id = object_id
         if not node.call(node._detach, detach_req):
             print("detach failed", file=sys.stderr)
             return 8
-        if not node.wait_for_condition(lambda: "smoke_bottle" not in node.planning_scene_ids()[1]):
-            print("planning scene did not detach smoke_bottle", file=sys.stderr)
+        if not node.wait_for_condition(lambda: object_id not in node.planning_scene_ids()[1] and object_id in node.planning_scene_ids()[0]):
+            print(f"planning scene did not detach {object_id} back to world", file=sys.stderr)
             return 13
 
         release_req = ReleaseObject.Request()
-        release_req.object_id = "smoke_bottle"
+        release_req.object_id = object_id
         if not node.call(node._release, release_req):
             print("release failed", file=sys.stderr)
             return 9
         if not node.wait_for_condition(
             lambda: all(
-                obj.id != "smoke_bottle" or (obj.reserved_by == "none" and obj.attached_link == "")
+                obj.id != object_id or (obj.reserved_by == "none" and obj.attached_link == "")
                 for obj in (node._managed_scene.objects if node._managed_scene else [])
             )
         ):
-            print("managed scene did not release smoke_bottle", file=sys.stderr)
+            print(f"managed scene did not release {object_id}", file=sys.stderr)
             return 14
 
         node.stop_publishing_raw_scene()
         if not node.wait_for_condition(
             lambda: node._managed_scene is not None
-            and all(obj.id != "smoke_bottle" for obj in node._managed_scene.objects),
+            and all(obj.id != object_id for obj in node._managed_scene.objects),
             timeout=3.0,
         ):
-            print("managed scene did not clear smoke_bottle", file=sys.stderr)
+            print(f"managed scene did not clear {object_id}", file=sys.stderr)
             return 15
         if not node.wait_for_condition(
-            lambda: "smoke_bottle" not in node.planning_scene_ids()[0]
-            and "smoke_bottle" not in node.planning_scene_ids()[1],
+            lambda: object_id not in node.planning_scene_ids()[0]
+            and object_id not in node.planning_scene_ids()[1],
             timeout=3.0,
         ):
             world_ids, attached_ids = node.planning_scene_ids()
             print(
-                f"planning scene did not clear smoke_bottle world={sorted(world_ids)} attached={sorted(attached_ids)}",
+                f"planning scene did not clear {object_id} world={sorted(world_ids)} attached={sorted(attached_ids)}",
                 file=sys.stderr,
             )
             return 16

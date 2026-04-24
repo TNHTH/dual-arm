@@ -1,0 +1,9 @@
+string command_id
+string object_id
+string arm_group
+string target_profile
+bool dry_run
+---
+bool success
+string message
+string active_state

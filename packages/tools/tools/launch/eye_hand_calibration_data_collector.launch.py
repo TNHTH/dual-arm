@@ -49,6 +49,12 @@ def generate_launch_description():
         default_value='2000',
         description='自动采集间隔（毫秒）'
     )
+
+    tcp_only_mode_arg = DeclareLaunchArgument(
+        'tcp_only_mode',
+        default_value='false',
+        description='是否只保存 TCP，不保存图像；做手眼标定时应为 false'
+    )
     
     camera_frame_id_arg = DeclareLaunchArgument(
         'camera_frame_id',
@@ -75,6 +81,7 @@ def generate_launch_description():
             'robot_state_topic': LaunchConfiguration('robot_state_topic'),
             'auto_capture': LaunchConfiguration('auto_capture'),
             'auto_capture_interval': LaunchConfiguration('auto_capture_interval'),
+            'tcp_only_mode': LaunchConfiguration('tcp_only_mode'),
             'camera_frame_id': LaunchConfiguration('camera_frame_id'),
             'robot_base_frame_id': LaunchConfiguration('robot_base_frame_id'),
         }],
@@ -90,6 +97,7 @@ def generate_launch_description():
         robot_state_topic_arg,
         auto_capture_arg,
         auto_capture_interval_arg,
+        tcp_only_mode_arg,
         camera_frame_id_arg,
         robot_base_frame_id_arg,
         eye_hand_calibration_node

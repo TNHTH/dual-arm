@@ -50,7 +50,7 @@
 ## Review Gate
 
 - Wave 0-1 已有正式代码审查文档：
-  - `docs/operations/runbooks/wave-0-1-code-review.md`
+  - `/home/gwh/dual-arm/docs/operations/runbooks/wave-0-1-code-review.md`
 - Wave 2-5 当前仍需补正式代码审查文档与 findings 关闭状态
 
 ## 2026-04-16 追加验收结果
@@ -59,7 +59,7 @@
 - 当前状态：通过
 - 通过命令：
   - `ros2 launch dualarm_bringup competition_core.launch.py start_hardware:=false start_detector:=false start_camera_bridge:=false use_mock_camera_stream:=false publish_fake_joint_states:=true`
-  - `/usr/bin/python3 packages/tools/tools/scripts/smoke_planning_scene_sync.py`
+  - `/usr/bin/python3 src/tools/tools/scripts/smoke_planning_scene_sync.py`
 - 通过输出：
   - `planning_scene_sync smoke passed`
 - 当前覆盖的通过条件：

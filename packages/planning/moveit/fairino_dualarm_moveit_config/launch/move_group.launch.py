@@ -20,6 +20,10 @@ def load_yaml(package_name, relative_path):
 def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     publish_fake_joint_states = LaunchConfiguration("publish_fake_joint_states")
+    left_base_xyz = LaunchConfiguration("left_base_xyz")
+    left_base_rpy = LaunchConfiguration("left_base_rpy")
+    right_base_xyz = LaunchConfiguration("right_base_xyz")
+    right_base_rpy = LaunchConfiguration("right_base_rpy")
     description_package = "fairino_dualarm_description"
     config_package = "fairino_dualarm_moveit_config"
 
@@ -33,6 +37,10 @@ def generate_launch_description():
                     "fairino_dualarm.urdf.xacro",
                 ]
             ),
+            " left_base_xyz:=\"", left_base_xyz, "\"",
+            " left_base_rpy:=\"", left_base_rpy, "\"",
+            " right_base_xyz:=\"", right_base_xyz, "\"",
+            " right_base_rpy:=\"", right_base_rpy, "\"",
         ]
     )
     robot_description = {"robot_description": robot_description_content}
@@ -111,6 +119,10 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("publish_fake_joint_states", default_value="false"),
+            DeclareLaunchArgument("left_base_xyz", default_value="0 0.35 0"),
+            DeclareLaunchArgument("left_base_rpy", default_value="0 0 0"),
+            DeclareLaunchArgument("right_base_xyz", default_value="0 -0.35 0"),
+            DeclareLaunchArgument("right_base_rpy", default_value="0 0 0"),
             robot_state_publisher,
             joint_state_publisher,
             move_group,

@@ -9,6 +9,7 @@ from typing import Deque, Dict, Iterable, List, Optional
 
 import math
 import rclpy
+import yaml
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.time import Time
@@ -33,16 +34,17 @@ class SceneFusionNode(Node):
             [
                 "/perception/scene_objects",
                 "/perception/ball_basket_scene_objects",
+                "/perception/table_scene_objects",
             ],
         )
         self.declare_parameter("output_topic", "/scene_fusion/raw_scene_objects")
         self.declare_parameter("stability_count", 5)
         self.declare_parameter("observation_window", 1.5)
         self.declare_parameter("stable_window", 0.3)
-        self.declare_parameter("bottle_position_gate", 0.015)
-        self.declare_parameter("cup_position_gate", 0.015)
-        self.declare_parameter("ball_position_gate", 0.025)
-        self.declare_parameter("basket_position_gate", 0.03)
+        self.declare_parameter("bottle_position_gate", 0.04)
+        self.declare_parameter("cup_position_gate", 0.035)
+        self.declare_parameter("ball_position_gate", 0.04)
+        self.declare_parameter("basket_position_gate", 0.06)
         self.declare_parameter("stale_timeout", 0.4)
         self.declare_parameter("lost_timeout", 1.0)
 
@@ -60,11 +62,12 @@ class SceneFusionNode(Node):
         }
 
         self._scene_version = 0
+        self._last_scene_signature = None
         self._track_counter: Dict[str, int] = defaultdict(int)
         self._tracks: Dict[str, Track] = {}
         self._publisher = self.create_publisher(SceneObjectArray, self._output_topic, 10)
 
-        for topic in self.get_parameter("input_topics").value:
+        for topic in self._input_topics():
             self.create_subscription(SceneObjectArray, topic, self._handle_scene, 10)
 
         self.create_timer(0.1, self._publish_scene)
@@ -81,6 +84,8 @@ class SceneFusionNode(Node):
             track.last_update = now
             observation = deepcopy(scene_object)
             observation.id = track.track_id
+            if not observation.source:
+                observation.source = "unknown"
             observation.last_seen = now.to_msg()
             observation.lifecycle_state = "observed"
             observation.reserved_by = "none"
@@ -114,6 +119,18 @@ class SceneFusionNode(Node):
 
         return best_track
 
+    def _input_topics(self) -> List[str]:
+        value = self.get_parameter("input_topics").value
+        if isinstance(value, str):
+            try:
+                parsed = yaml.safe_load(value)
+            except Exception:  # pylint: disable=broad-except
+                parsed = None
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return [str(item) for item in value]
+
     def _position_gate_for(self, semantic_type: str) -> float:
         if "bottle" in semantic_type:
             return self._position_gates["bottle"]
@@ -121,6 +138,8 @@ class SceneFusionNode(Node):
             return self._position_gates["cup"]
         if "ball" in semantic_type:
             return self._position_gates["ball"]
+        if semantic_type == "table_surface":
+            return 0.08
         return self._position_gates["basket"]
 
     def _distance(self, left: PoseStamped, right: PoseStamped) -> float:
@@ -156,20 +175,59 @@ class SceneFusionNode(Node):
     def _confidence_threshold(self, semantic_type: str) -> float:
         if "ball" in semantic_type or semantic_type == "basket":
             return 0.55
+        if semantic_type == "table_surface":
+            return 0.50
         return 0.60
+
+    def _fused_observation(self, track: Track) -> SceneObject:
+        latest = deepcopy(track.observations[-1])
+        recent = list(track.observations)
+        if len(recent) < 2:
+            return latest
+
+        latest.pose.pose.position.x = self._median([item.pose.pose.position.x for item in recent])
+        latest.pose.pose.position.y = self._median([item.pose.pose.position.y for item in recent])
+        latest.pose.pose.position.z = self._median([item.pose.pose.position.z for item in recent])
+        latest.size.x = self._median([item.size.x for item in recent])
+        latest.size.y = self._median([item.size.y for item in recent])
+        latest.size.z = self._median([item.size.z for item in recent])
+        latest.confidence = max(item.confidence for item in recent)
+        return latest
+
+    def _median(self, values: Iterable[float]) -> float:
+        ordered = sorted(float(value) for value in values)
+        if not ordered:
+            return 0.0
+        middle = len(ordered) // 2
+        if len(ordered) % 2:
+            return ordered[middle]
+        return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+    def _scene_signature(self, objects: List[SceneObject]):
+        signature = []
+        for scene_object in objects:
+            position = scene_object.pose.pose.position
+            signature.append(
+                (
+                    scene_object.id,
+                    scene_object.semantic_type,
+                    scene_object.lifecycle_state,
+                    scene_object.source,
+                    round(float(position.x), 3),
+                    round(float(position.y), 3),
+                    round(float(position.z), 3),
+                    round(float(scene_object.confidence), 3),
+                )
+            )
+        return tuple(sorted(signature))
 
     def _publish_scene(self) -> None:
         now = self.get_clock().now()
-        self._scene_version += 1
-
-        scene = SceneObjectArray()
-        scene.header.frame_id = "world"
-        scene.header.stamp = now.to_msg()
-        scene.scene_version = self._scene_version
 
         stale_ns = int(self._stale_timeout * 1e9)
         lost_ns = int(self._lost_timeout * 1e9)
         expired: List[str] = []
+        objects: List[SceneObject] = []
 
         for track_id, track in self._tracks.items():
             if not track.observations or track.last_update is None:
@@ -177,22 +235,36 @@ class SceneFusionNode(Node):
                 continue
 
             age_ns = (now - track.last_update).nanoseconds
-            latest = deepcopy(track.observations[-1])
-            latest.scene_version = self._scene_version
+            latest = self._fused_observation(track)
             latest.last_seen = track.last_update.to_msg()
             if age_ns > lost_ns:
                 latest.lifecycle_state = "lost"
+            elif age_ns > stale_ns:
+                latest.lifecycle_state = "stale"
             elif track.stable:
                 latest.lifecycle_state = "stable"
             else:
                 latest.lifecycle_state = "observed"
             if age_ns <= lost_ns:
-                scene.objects.append(latest)
+                objects.append(latest)
             else:
                 expired.append(track_id)
 
         for track_id in expired:
             self._tracks.pop(track_id, None)
+
+        signature = self._scene_signature(objects)
+        if signature != self._last_scene_signature:
+            self._scene_version += 1
+            self._last_scene_signature = signature
+
+        scene = SceneObjectArray()
+        scene.header.frame_id = "world"
+        scene.header.stamp = now.to_msg()
+        scene.scene_version = self._scene_version
+        for scene_object in objects:
+            scene_object.scene_version = self._scene_version
+            scene.objects.append(scene_object)
 
         self._publisher.publish(scene)
 

@@ -8,6 +8,16 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(FILES
+  scripts/behavior_contract.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY
+  scripts/behaviors
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(DIRECTORY
   launch
   DESTINATION share/${PROJECT_NAME}
