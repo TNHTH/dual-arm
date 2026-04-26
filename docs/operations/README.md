@@ -6,13 +6,14 @@
 
 ## 包含内容
 
-- `runbooks/`：安全边界、工程流程规范、代码审查和验收 runbook。
+- `runbooks/`：安全边界、subagent 超时治理、工程流程规范、代码审查和验收 runbook。
 
 ## 入口文件或常用命令
 
 ```bash
 sed -n '1,200p' docs/operations/runbooks/engineering-process-standards.md
 sed -n '1,200p' docs/operations/runbooks/safety.md
+sed -n '1,200p' docs/operations/runbooks/subagent-timeout-policy.md
 sed -n '1,200p' docs/operations/runbooks/wave-2-5-acceptance.md
 ```
 

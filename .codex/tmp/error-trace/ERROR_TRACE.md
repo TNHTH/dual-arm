@@ -1,6 +1,6 @@
 # Error Trace
 
-## Incident 20
+## Incident 30
 - Time: 2026-04-26
 - Scope: Wave 0 software-only baseline
 - Symptom: `pytest --collect-only tests` failed with `/bin/bash: pytest: 未找到命令`.
@@ -10,7 +10,7 @@
 - Prevention: 不再把全局 `pytest` 视为隐含前提；CI 脚本必须先检查依赖并输出可操作错误。
 - Remaining: Wave 2 完成前，仓库测试体系仍不能证明核心功能回归。
 
-## Incident 21
+## Incident 31
 - Time: 2026-04-26
 - Scope: Wave 4 task manager test registration
 - Symptom: 同时收集 `tests/unit/test_task_contract.py` 和 `packages/tasks/dualarm_task_manager/test/test_task_contract.py` 时，pytest 报 `ImportMismatchError`。
@@ -19,6 +19,21 @@
 - Evidence: 重跑 `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py` 通过，`17 passed`。
 - Prevention: 后续跨顶层和包内测试目录新增测试时，文件 basename 保持唯一，避免 pytest import mismatch。
 - Remaining: 无。
+
+## Incident 32
+- Time: 2026-04-26
+- Scope: software-only hardening subagent orchestration
+- Symptom: Wave 1 security reviewer、Wave 5 reviewer、Wave 6 final verifier 均在 120-180 秒内未返回有效结果，需要关闭后本地 fallback。
+- Root cause: subagent prompt 粒度偏宽，且把 reviewer/verifier 用作接近最终全量判断的 sidecar；这种任务对上下文、文件扫描和结论综合要求过高，容易超过等待预算。
+- Handling:
+  1. 已关闭所有超时 subagent；
+  2. 已在 `SUBAGENT_REGISTRY.json` 记录生命周期；
+  3. 主线程用 py_compile、pytest、colcon build/test、software_check、git diff --check、敏感信息扫描等本地证据完成 fallback；
+  4. 已新增 `docs/operations/runbooks/subagent-timeout-policy.md`；
+  5. 已更新 `AGENTS.md`、`engineering-process-standards.md`、`auto-pipeline` skill 和 `wave-executor` skill。
+- Evidence: 当前分支已有 Wave 0-6 提交并推送；subagent registry 中 3 个软件 hardening reviewer/verifier 均为 `timed_out_closed_local_fallback`。
+- Prevention: subagent 只做非阻塞、窄范围、短答 sidecar；reviewer/verifier 只等待一次；同一任务两次超时后停用非必要 subagent。
+- Remaining: 平台级 subagent 超时无法在仓库内彻底消除，只能通过任务粒度、等待预算和本地 fallback 降低影响。
 
 ## Incident 1
 - Time: 2026-04-15

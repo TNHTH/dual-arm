@@ -14,12 +14,14 @@
 - Wave 4 把比赛任务序列和对象排序抽成纯 Python helper 后，可以不用启动 ROS graph 就验证关键比赛契约。
 - 在 evidence 不完整时显式失败，比继续返回 motion success 更适合比赛任务链；否则上层会把“动作执行了”误判成“任务成功了”。
 - Wave 5 拆大文件时先抽纯 helper、保留入口兼容，是在时间有限且需要按 Wave 提交时的低风险路径。
+- 发现 subagent 多次超时后，及时关闭并转本地主线程验证，避免最终提交被外部 sidecar 卡死。
 
 ### Waste
 - 当前系统缺少 `pytest` 命令，说明测试入口不能假设全局工具已安装；Wave 2 需要提供明确依赖说明或脚本降级提示。
 - Playwright 第一次失败来自文本断言命中多个元素；API-backed UI 测试应优先断言 mock 调用计数或 role 精确选择器。
 - 包内测试文件名与顶层测试同名会触发 pytest import mismatch；跨目录测试必须用唯一 basename。
 - reviewer subagent 第二次超时说明长只读审查也可能不稳定；必须有本地主线程验证 fallback，不把提交节奏依赖在 subagent 返回上。
+- Wave 1、Wave 5、Wave 6 的 reviewer/verifier prompt 仍偏宽，导致 subagent 难以在短时间内完成；以后不能把“最终全量判断”直接委派给单个 subagent。
 
 ### Trigger Redesign
 - signal：用户要求 review 后直接修复/重构，并要求提交推送。
@@ -31,6 +33,12 @@
 - signal：同一轮 pytest 同时收集顶层 tests 和包内 test 目录。
 - route：测试文件 basename 唯一化。
 - guard：避免 pytest 将同名模块缓存到错误路径。
+- signal：subagent 任务描述包含“完整 review / 最终 verifier / 检查全部 diff”。
+- route：先拆成本地 checklist，再只把单一风险点委派给 subagent。
+- guard：若下一步提交/推送依赖该结论，主线程必须先有本地 fallback 验证路径。
+- signal：同一任务已有两个 subagent 超时。
+- route：停用非必要 subagent，切本地主线程 review/verify。
+- guard：只有更窄且非阻塞的问题才允许再开新 subagent。
 
 ## 结论
 本次对话把 `dual-arm` 从“架构骨架式重构”推进到了“Wave 1 真 MoveIt 双臂规划基线”，方向是对的，但过程里暴露出多类可规避问题：subagent 不稳定、旧 ROS 进程污染验证、安装树残留、Conda 抢 Python、以及验证步骤顺序不严格。不能保证以后绝对不再犯，但这些问题已经被转成仓库规则和执行检查点。
