@@ -6,7 +6,7 @@
 - Wave: software-engineering-hardening / Wave 0-6
 - 分支：`codex/software-engineering-hardening-20260426`
 - 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
-- 状态：Wave 2 已完成；Wave 0、Wave 1、Wave 2 均已提交候选，当前进入 Wave 3 配置化与硬编码收敛。
+- 状态：Wave 3 已完成；Wave 0-3 均已提交候选，当前进入 Wave 4 任务语义与接口契约修复。
 
 ## 2026-04-26 Wave 0 基线
 - 分支与远端：
@@ -57,6 +57,23 @@
   - `bash scripts/ci/software_check.sh`：通过，前端 build 与 Playwright `2 passed`。
 - 待办：
   - Wave 3 统一 profile/YAML，并让测试覆盖 profile 默认值和 canonical 路径。
+
+## 2026-04-26 Wave 3 配置化
+- 已完成：
+  - 新增 `config/profiles/competition_default.yaml` 和 `config/profiles/README.md`。
+  - `competition_core.launch.py` 从 profile 读取 detector、机器人 IP/端口、base transform、gripper 端口默认值。
+  - detector 模型默认路径优先 canonical `packages/...`，保留安装包 fallback。
+  - 右臂 base yaw 默认对齐为 `180.0`。
+  - 左右夹爪端口默认 `auto`，软件-only 默认不再携带真实 by-id 串口路径。
+  - `grasp_pose_generator` 改用 canonical `config/competition/workspace_profiles.yaml`。
+- 验证：
+  - py_compile：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration`：`10 passed`。
+  - `colcon build --base-paths packages --packages-select dualarm_bringup grasp_pose_generator`：通过。
+  - `ros2 launch dualarm_bringup competition_core.launch.py --show-args`：通过，profile 默认值生效。
+  - `bash scripts/ci/software_check.sh`：通过。
+- 待办：
+  - Wave 4 处理 task order、start gate、对象选择、pour/release/handover evidence 和 checkpoint。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：

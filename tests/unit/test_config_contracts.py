@@ -18,6 +18,16 @@ def test_safety_limits_keep_console_local_and_hardware_blocked_by_default():
     assert config["console_api"]["allow_hardware_bringup_default"] is False
 
 
+def test_competition_profile_points_to_canonical_config_paths():
+    config = load_yaml("config/profiles/competition_default.yaml")
+    assert config["paths"]["packages_root"] == "packages"
+    assert config["paths"]["config_root"] == "config"
+    assert config["paths"]["object_geometry"] == "config/competition/object_geometry.yaml"
+    assert config["paths"]["task_thresholds"] == "config/competition/task_thresholds.yaml"
+    assert config["robot"]["right"]["base_rpy"] == [0.0, 0.0, 180.0]
+    assert config["gripper"]["left"]["port"] == "auto"
+
+
 def test_object_geometry_contains_official_dual_arm_semantics():
     config = load_yaml("config/competition/object_geometry.yaml")
     object_ids = set(config["official_semantics"]["object_ids"])

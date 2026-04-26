@@ -20,6 +20,10 @@
   - `competition_console_api` has package-local pytest registered with `colcon test`.
   - `scripts/ci/software_check.sh` passed end-to-end, including frontend build and Playwright mock smoke.
   - README coverage passes after adding `competition_rviz_tools/README.md`.
+- Wave 3 configuration evidence:
+  - Added unified profile at `config/profiles/competition_default.yaml`.
+  - `competition_core.launch.py --show-args` confirms profile defaults for detector path, base transforms, robot ports, and gripper ports.
+  - Runtime code no longer uses `configs` compatibility alias for grasp workspace profile.
 
 2026-04-15 baseline:
 - Current branch `test` is clean.

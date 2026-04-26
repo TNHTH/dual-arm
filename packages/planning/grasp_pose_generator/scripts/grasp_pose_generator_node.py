@@ -21,7 +21,7 @@ class GraspPoseGeneratorNode(Node):
         self.declare_parameter("world_frame", "world")
         self.declare_parameter("require_world_objects", True)
         repo_root = Path(get_package_prefix("grasp_pose_generator")).parent.parent
-        self.declare_parameter("workspace_profiles_file", str(repo_root / "configs" / "competition" / "workspace_profiles.yaml"))
+        self.declare_parameter("workspace_profiles_file", str(repo_root / "config" / "competition" / "workspace_profiles.yaml"))
         self.declare_parameter("pregrasp_offset", 0.10)
         self.declare_parameter("retreat_offset", 0.15)
         self.declare_parameter("release_offset", 0.04)

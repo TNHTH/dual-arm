@@ -10,6 +10,7 @@
 - Wave 1 先从 HTTP 暴露面和 mockable stop 入口入手，能在不碰实机的前提下先降低最直接的软件风险。
 - Wave 2 把安全逻辑抽成无 ROS 依赖 helper 后，测试能同时服务普通 pytest 和 colcon test，避免 ROS graph 成为单元测试前提。
 - Playwright 使用 route mock API 后，前端 smoke 不再依赖手工启动 API。
+- Wave 3 用 profile 先收拢 launch 默认值，比直接重写所有节点读取配置风险更低；show-args 是适合软件-only 的验证证据。
 
 ### Waste
 - 当前系统缺少 `pytest` 命令，说明测试入口不能假设全局工具已安装；Wave 2 需要提供明确依赖说明或脚本降级提示。
