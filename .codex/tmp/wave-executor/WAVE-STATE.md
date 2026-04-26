@@ -9,7 +9,7 @@
 
 - Wave: 6
 - Scope: 文档、仓库卫生、最终验证、提交与推送
-- Status: pending
+- Status: verified_locally_pending_push
 
 ## Completed
 

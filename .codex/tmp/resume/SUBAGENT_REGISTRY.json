@@ -23,8 +23,9 @@
     {
       "role": "software_hardening_final_verifier",
       "agent_type": "verifier",
-      "status": "planned_for_wave_6",
-      "summary": "Wave 6 最终验证前开启，只读检查最终 diff、测试证据和软件-only 边界。"
+      "id": "019dc80c-b7bc-7a80-b3e5-dd13b1dc27fc",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 6 最终 staged diff 后已开启只读 verifier，但 180 秒未返回；已及时关闭。主线程完成 readme/path checks、software_check、colcon test-result、git diff --check 和 staged sensitive scan。"
     },
     {
       "role": "perception",

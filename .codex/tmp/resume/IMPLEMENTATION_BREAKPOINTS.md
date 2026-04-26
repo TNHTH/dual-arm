@@ -12,8 +12,8 @@
   - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
   - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
 - 下一步入口：
-  1. Wave 5 已完成并通过 `bash scripts/ci/software_check.sh`。
-  2. 下一步进入 Wave 6：文档修正、仓库卫生、最终验证、最终 verifier、提交并 push。
+  1. Wave 6 文档、仓库卫生与本地主验证已完成。
+  2. 下一步执行 staged diff 敏感信息扫描、最终 verifier subagent、Wave 6 提交和 push。
 - Wave 1 当前证据：
   - py_compile 通过。
   - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过。
@@ -40,6 +40,11 @@
   - `npm run build`：通过。
   - `bash scripts/ci/software_check.sh`：通过。
   - Wave 5 reviewer subagent 120 秒未返回，已关闭并记录到 `SUBAGENT_REGISTRY.json`。
+- Wave 6 当前证据：
+  - 新增 runtime architecture、safety runbook、API interfaces、artifact manifest。
+  - 根 README、control package README、docs index、stale SETUP 历史标记和 `.gitignore` 已更新。
+  - `bash scripts/ci/software_check.sh`：通过。
+  - `colcon test-result --all`：`11 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 当前波次
 - Wave: 0-5

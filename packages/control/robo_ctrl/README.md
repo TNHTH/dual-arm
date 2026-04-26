@@ -1,13 +1,13 @@
 # Robo Ctrl
 
-这个ROS 2包提供了控制Movecat机器人移动的服务接口。
+这个 ROS 2 Humble 包提供 Fairino 机械臂 ROS service 适配层。它只负责驱动连接、运动服务、servo 服务、状态发布和基础安全校验，不负责比赛任务语义。
 
 ## 功能特性
 
 - 提供RobotMove服务用于控制机器人关节和笛卡尔空间的移动
 - 提供RobotMoveCart服务用于更精确的笛卡尔空间移动控制
 - 提供RobotServo服务用于伺服控制，支持ServoJ、ServoCart、ServoMoveStart和ServoMoveEnd
-- 支持配置机器人IP和端口
+- 支持配置机器人 IP；`robot_port` 当前保留为兼容参数，Fairino SDK RPC 实际只使用 IP。
 - 包含示例客户端代码以演示如何调用服务
 - 实时发布机器人状态信息
 - 支持TF变换广播，便于可视化和坐标转换
@@ -15,15 +15,16 @@
 
 ## 依赖项
 
-- ROS 2 (Foxy或更高版本)
+- ROS 2 Humble
 - libfairino (机器人控制库)
 - tf2_ros (TF变换广播)
 
 ## 编译
 
 ```bash
-cd ~/roboarm/FairinoDualArm
-colcon build --symlink-install --packages-select robo_ctrl
+cd /home/gwh/dual-arm
+source /opt/ros/humble/setup.bash
+colcon build --base-paths packages --packages-select robo_ctrl
 source install/setup.bash
 ```
 
@@ -32,14 +33,17 @@ source install/setup.bash
 ### 启动机器人控制节点
 
 ```bash
-# 使用默认参数启动
-ros2 launch robo_ctrl robo_ctrl.launch.py
+# 左臂
+ros2 launch robo_ctrl robo_ctrl_L.launch.py
 
-# 指定机器人IP和端口
-ros2 launch robo_ctrl robo_ctrl.launch.py robot_ip:=192.168.1.100 robot_port:=8080
+# 右臂
+ros2 launch robo_ctrl robo_ctrl_R.launch.py
+
+# 指定机器人 IP；robot_port 仅兼容保留，SDK 连接仍只使用 IP
+ros2 launch robo_ctrl robo_ctrl_L.launch.py robot_ip:=192.168.58.2 robot_port:=8080
 
 # 指定状态查询间隔(秒)
-ros2 launch robo_ctrl robo_ctrl.launch.py state_query_interval:=0.2
+ros2 launch robo_ctrl robo_ctrl_L.launch.py state_query_interval:=0.2
 ```
 
 ### 运行示例客户端
@@ -53,14 +57,14 @@ ros2 run robo_ctrl robot_move_client
 可以使用ROS 2服务直接调用机器人移动服务：
 
 ```bash
-# 关节空间移动
-ros2 service call /robot_move robo_ctrl/srv/RobotMove "{move_type: 0, joint_positions: [4.365596771240234,-77.84477233886719,-16.82822608947754,-92.0924072265625,82.69158935546875,-60.655428171157837], velocity: 50.0, acceleration: 30.0}"
+# 关节空间移动。服务名由 robot_name 决定，左臂默认 /L/robot_move，右臂默认 /R/robot_move。
+ros2 service call /L/robot_move robo_ctrl/srv/RobotMove "{move_type: 0, joint_positions: [4.36,-77.84,-16.82,-92.09,82.69,-60.65], velocity: 20.0, acceleration: 20.0}"
 
 # 笛卡尔空间移动
-ros2 service call /robot_move robo_ctrl/srv/RobotMove "{move_type: 1, cartesian_pose: [400.0, 0.0, 500.0, 180.0, 0.0, 180.0], velocity: 30.0, acceleration: 20.0}"
+ros2 service call /L/robot_move robo_ctrl/srv/RobotMove "{move_type: 1, cartesian_pose: [400.0, 0.0, 500.0, 180.0, 0.0, 180.0], velocity: 20.0, acceleration: 20.0}"
 
 # 更精确的笛卡尔空间移动
-ros2 service call /robot_move_cart robo_ctrl/srv/RobotMoveCart "{
+ros2 service call /L/robot_move_cart robo_ctrl/srv/RobotMoveCart "{
   tcp_pose: {x: 400.0, y: 0.0, z: 500.0, rx: 180.0, ry: 0.0, rz: 180.0}, 
   velocity: 30.0, 
   acceleration: 20.0, 
@@ -72,6 +76,13 @@ ros2 service call /robot_move_cart robo_ctrl/srv/RobotMoveCart "{
   use_increment: false
 }"
 ```
+
+## 安全默认
+
+- 速度、加速度、`ovl` 和 `blend_time` 在 `robo_ctrl/safety_limits.hpp` 与节点参数中校验。
+- Move/MoveCart 等待运动完成有 `motion_done_timeout_sec`，超时请求 `StopMotion`。
+- `force_auto_mode_before_motion` 默认 `false`，避免软件层默认改变现场手动/自动模式。
+- 软件-only 验证不要启动本包真实 launch；使用 `dualarm_bringup competition_core.launch.py start_hardware:=false`。
 
 ## 服务接口说明
 
