@@ -10,8 +10,8 @@
     {
       "role": "software_hardening_security_reviewer",
       "agent_type": "reviewer",
-      "status": "planned_for_wave_1",
-      "summary": "Wave 1 完成安全入口、鉴权、stop/cancel 和限幅后开启，只读复核 P0/P1 风险。"
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 1 完成后已开启只读 reviewer，但 120 秒未返回；已及时关闭，主线程用 py_compile、colcon build、diff check 和静态搜索完成本地复核。"
     },
     {
       "role": "software_hardening_final_verifier",

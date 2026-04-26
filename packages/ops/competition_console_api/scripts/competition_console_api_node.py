@@ -30,15 +30,23 @@ from robo_ctrl.msg import RobotState
 from robo_ctrl.srv import RobotMove, RobotMoveCart, RobotServoJoint
 
 try:
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Request
     from pydantic import BaseModel
     from fastapi.responses import JSONResponse
     import uvicorn
 except Exception:  # pylint: disable=broad-except
     FastAPI = None
+    Request = None
     BaseModel = object
     JSONResponse = None
     uvicorn = None
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class RunCompetitionRequest(BaseModel):
@@ -142,15 +150,44 @@ class CompetitionConsoleApiNode(Node):
     def __init__(self) -> None:
         super().__init__("competition_console_api")
         self.declare_parameter("profile", "test")
-        self.declare_parameter("host", "0.0.0.0")
+        self.declare_parameter("host", os.environ.get("DUAL_ARM_CONSOLE_API_HOST", "127.0.0.1"))
         self.declare_parameter("port", 18080)
+        self.declare_parameter("api_token", os.environ.get("DUAL_ARM_CONSOLE_API_TOKEN", ""))
+        self.declare_parameter("allow_external_host", _env_bool("DUAL_ARM_CONSOLE_ALLOW_EXTERNAL_HOST", False))
+        self.declare_parameter("allow_unsafe_without_token", _env_bool("DUAL_ARM_CONSOLE_ALLOW_UNSAFE_WITHOUT_TOKEN", False))
+        self.declare_parameter("allow_hardware_bringup", _env_bool("DUAL_ARM_CONSOLE_ALLOW_HARDWARE_BRINGUP", False))
+        self.declare_parameter("max_jog_delta_mm", 10.0)
+        self.declare_parameter("max_jog_cumulative_delta_mm", 50.0)
+        self.declare_parameter("max_jog_duration_sec", 5.0)
+        self.declare_parameter("min_jog_interval_ms", 120)
+        self.declare_parameter("max_jog_velocity", 20.0)
+        self.declare_parameter("max_jog_acceleration", 20.0)
+        self.declare_parameter("max_gripper_speed", 160)
+        self.declare_parameter("max_gripper_torque", 160)
         self._profile = str(self.get_parameter("profile").value)
         self._host = str(self.get_parameter("host").value)
         self._port = int(self.get_parameter("port").value)
+        self._api_token = str(self.get_parameter("api_token").value)
+        self._allow_external_host = bool(self.get_parameter("allow_external_host").value)
+        self._allow_unsafe_without_token = bool(self.get_parameter("allow_unsafe_without_token").value)
+        self._allow_hardware_bringup = bool(self.get_parameter("allow_hardware_bringup").value)
+        self._max_jog_delta_mm = float(self.get_parameter("max_jog_delta_mm").value)
+        self._max_jog_cumulative_delta_mm = float(self.get_parameter("max_jog_cumulative_delta_mm").value)
+        self._max_jog_duration_sec = float(self.get_parameter("max_jog_duration_sec").value)
+        self._min_jog_interval_ms = int(self.get_parameter("min_jog_interval_ms").value)
+        self._max_jog_velocity = float(self.get_parameter("max_jog_velocity").value)
+        self._max_jog_acceleration = float(self.get_parameter("max_jog_acceleration").value)
+        self._max_gripper_speed = int(self.get_parameter("max_gripper_speed").value)
+        self._max_gripper_torque = int(self.get_parameter("max_gripper_torque").value)
+        if self._host not in {"127.0.0.1", "localhost", "::1"} and not self._allow_external_host:
+            raise RuntimeError(
+                "competition_console_api 默认禁止外部监听；如确需开放，请显式设置 allow_external_host=true 并配置 api_token"
+            )
         self._repo_root = Path(get_package_prefix("competition_console_api")).parent.parent
         self._checkpoint_root = self._repo_root / ".artifacts" / "checkpoints" / "competition"
         self._checkpoint_root.mkdir(parents=True, exist_ok=True)
         self._launch_log = self._repo_root / ".artifacts" / "competition_core.log"
+        self._security_log = self._repo_root / ".artifacts" / "competition_console_security.jsonl"
         self._pose_preset_path = self._repo_root / ".artifacts" / "console_pose_presets.json"
         self._action_group_path = self._repo_root / ".artifacts" / "console_action_groups.json"
         self._recording_root = self._repo_root / ".artifacts" / "console_recordings"
@@ -198,11 +235,30 @@ class CompetitionConsoleApiNode(Node):
             raise RuntimeError("competition_console_api 依赖 FastAPI/uvicorn，不允许静默降级")
         self._app = self._create_app()
         self._server_thread = None
-        self.get_logger().info(f"competition_console_api 已启动，profile={self._profile}, port={self._port}")
+        self.get_logger().info(
+            f"competition_console_api 已启动，profile={self._profile}, host={self._host}, port={self._port}"
+        )
         self._start_http_server()
 
     def _create_app(self):
         app = FastAPI(title="dual-arm competition console", version="0.1.0")
+
+        @app.middleware("http")
+        async def dangerous_api_guard(request: Request, call_next):
+            if self._is_dangerous_api_request(request.method, request.url.path):
+                auth_error = self._authorize_dangerous_request(request)
+                if auth_error is not None:
+                    self._audit_security_event(
+                        "dangerous_api_rejected",
+                        {
+                            "method": request.method,
+                            "path": request.url.path,
+                            "client": request.client.host if request.client else None,
+                            "reason": auth_error["error"],
+                        },
+                    )
+                    return JSONResponse(status_code=auth_error["status_code"], content=auth_error)
+            return await call_next(request)
 
         @app.get("/api/health")
         async def health():
@@ -450,8 +506,10 @@ class CompetitionConsoleApiNode(Node):
                 float(request.delta_mm),
                 float(request.velocity),
                 float(request.acceleration),
-                max(int(request.interval_ms), 80),
+                max(int(request.interval_ms), self._min_jog_interval_ms),
             )
+            if not bool(payload.get("started")):
+                return JSONResponse(status_code=HTTPStatus.BAD_REQUEST, content=payload)
             self._recording_add_event("arm_jog_start", {"request": self._model_to_dict(request), "result": payload})
             return payload
 
@@ -661,6 +719,59 @@ class CompetitionConsoleApiNode(Node):
 
         return app
 
+    def _is_dangerous_api_request(self, method: str, path: str) -> bool:
+        normalized_method = method.upper()
+        if normalized_method not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return False
+        dangerous_prefixes = (
+            "/api/bringup",
+            "/api/control",
+            "/api/tasks",
+            "/api/acceptance/run",
+            "/api/presets",
+            "/api/action-groups",
+            "/api/recordings",
+        )
+        return path.startswith(dangerous_prefixes)
+
+    def _authorize_dangerous_request(self, request: Request) -> Optional[dict[str, Any]]:
+        if not self._api_token:
+            if self._allow_unsafe_without_token:
+                self._audit_security_event(
+                    "dangerous_api_allowed_without_token",
+                    {"method": request.method, "path": request.url.path},
+                )
+                return None
+            return {
+                "status_code": HTTPStatus.FORBIDDEN,
+                "error": "api_token_required",
+                "message": "dangerous API requires api_token; set DUAL_ARM_CONSOLE_API_TOKEN or api_token parameter",
+            }
+        provided = request.headers.get("x-dual-arm-token", "")
+        authorization = request.headers.get("authorization", "")
+        if authorization.lower().startswith("bearer "):
+            provided = authorization.split(" ", 1)[1].strip()
+        if provided != self._api_token:
+            return {
+                "status_code": HTTPStatus.UNAUTHORIZED,
+                "error": "invalid_api_token",
+                "message": "dangerous API token missing or invalid",
+            }
+        return None
+
+    def _audit_security_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        event = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "event": event_type,
+            "payload": payload,
+        }
+        try:
+            self._security_log.parent.mkdir(parents=True, exist_ok=True)
+            with self._security_log.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+        except Exception as exc:  # pylint: disable=broad-except
+            self.get_logger().warning(f"写入控制台安全审计日志失败: {exc}")
+
     def _start_http_server(self) -> None:
         config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
         server = uvicorn.Server(config)
@@ -730,6 +841,8 @@ class CompetitionConsoleApiNode(Node):
             "stopped_at": None,
             "stop_reason": None,
             "last_result": None,
+            "cumulative_delta_mm": 0.0,
+            "max_duration_sec": self._max_jog_duration_sec,
             "thread": None,
             "stop_event": None,
         }
@@ -749,6 +862,8 @@ class CompetitionConsoleApiNode(Node):
                     "stopped_at": session.get("stopped_at"),
                     "stop_reason": session.get("stop_reason"),
                     "last_result": session.get("last_result"),
+                    "cumulative_delta_mm": float(session.get("cumulative_delta_mm", 0.0)),
+                    "max_duration_sec": float(session.get("max_duration_sec", self._max_jog_duration_sec)),
                 }
                 for arm_name, session in self._jog_sessions.items()
             }
@@ -1108,12 +1223,14 @@ class CompetitionConsoleApiNode(Node):
     ) -> tuple[int, dict[str, Any]]:
         if not self._set_gripper_client.wait_for_service(timeout_sec=1.0):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"success": False, "error": "set_gripper service unavailable"}
+        safe_speed = min(max(int(speed), 1), self._max_gripper_speed)
+        safe_torque = min(max(int(torque), 1), self._max_gripper_torque)
         command_request = SetGripper.Request()
         command_request.arm_name = arm_name
         command_request.command = command
-        command_request.position = int(position)
-        command_request.speed = max(int(speed), 1)
-        command_request.torque = max(int(torque), 1)
+        command_request.position = min(max(int(position), 0), 255)
+        command_request.speed = safe_speed
+        command_request.torque = safe_torque
         command_request.attach_on_success = attach_on_success
         command_request.detach_on_success = detach_on_success
         future = self._set_gripper_client.call_async(command_request)
@@ -1124,6 +1241,8 @@ class CompetitionConsoleApiNode(Node):
             "arm": arm_name,
             "success": bool(response.success),
             "message": response.message,
+            "speed": safe_speed,
+            "torque": safe_torque,
         }
 
     def _apply_gripper_snapshot(self, arm_name: str, snapshot: Optional[dict[str, Any]]) -> tuple[bool, dict[str, Any]]:
@@ -1164,6 +1283,9 @@ class CompetitionConsoleApiNode(Node):
         normalized_axis = self._normalize_jog_axis(axis)
         if normalized_axis is None:
             return HTTPStatus.BAD_REQUEST, {"success": False, "error": f"unknown axis: {axis}"}
+        validation_error = self._validate_jog_command(delta_mm, velocity, acceleration)
+        if validation_error:
+            return HTTPStatus.BAD_REQUEST, {"success": False, "error": validation_error}
         client = self._left_robot_move_cart_client if arm_name == "left_arm" else self._right_robot_move_cart_client
         if not client.wait_for_service(timeout_sec=1.0):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"success": False, "error": "robot_move_cart service unavailable"}
@@ -1181,11 +1303,53 @@ class CompetitionConsoleApiNode(Node):
         future = client.call_async(jog)
         response = self._wait_for_future_result(future, 10.0)
         if response is None:
-            return HTTPStatus.GATEWAY_TIMEOUT, {"success": False, "error": "robot_move_cart timeout"}
+            stop_payload = self._request_arm_stop(arm_name, "robot_move_cart_timeout")
+            return HTTPStatus.GATEWAY_TIMEOUT, {
+                "success": False,
+                "error": "robot_move_cart timeout",
+                "stop": stop_payload,
+            }
         return HTTPStatus.OK, {
             "arm": arm_name,
             "axis": normalized_axis,
             "delta_mm": float(delta_mm),
+            "success": bool(response.success),
+            "message": response.message,
+        }
+
+    def _validate_jog_command(self, delta_mm: float, velocity: float, acceleration: float) -> Optional[str]:
+        values = {
+            "delta_mm": float(delta_mm),
+            "velocity": float(velocity),
+            "acceleration": float(acceleration),
+        }
+        for name, value in values.items():
+            if not math.isfinite(value):
+                return f"{name} must be finite"
+        if math.isclose(values["delta_mm"], 0.0, abs_tol=1e-9):
+            return "delta_mm must be non-zero"
+        if abs(values["delta_mm"]) > self._max_jog_delta_mm:
+            return f"delta_mm exceeds max_jog_delta_mm={self._max_jog_delta_mm}"
+        if values["velocity"] <= 0.0 or values["velocity"] > self._max_jog_velocity:
+            return f"velocity must be in (0, {self._max_jog_velocity}]"
+        if values["acceleration"] <= 0.0 or values["acceleration"] > self._max_jog_acceleration:
+            return f"acceleration must be in (0, {self._max_jog_acceleration}]"
+        return None
+
+    def _request_arm_stop(self, arm_name: str, reason: str) -> dict[str, Any]:
+        client = self._left_robot_servo_joint_client if arm_name == "left_arm" else self._right_robot_servo_joint_client
+        if not client.wait_for_service(timeout_sec=0.2):
+            return {"requested": False, "arm": arm_name, "reason": reason, "message": "robot_servo_joint service unavailable"}
+        request = RobotServoJoint.Request()
+        request.command_type = 1
+        future = client.call_async(request)
+        response = self._wait_for_future_result(future, 1.0)
+        if response is None:
+            return {"requested": True, "arm": arm_name, "reason": reason, "success": False, "message": "stop request timeout"}
+        return {
+            "requested": True,
+            "arm": arm_name,
+            "reason": reason,
             "success": bool(response.success),
             "message": response.message,
         }
@@ -1201,7 +1365,29 @@ class CompetitionConsoleApiNode(Node):
         acceleration: float,
         interval_ms: int,
     ) -> None:
+        started_at = time.monotonic()
         while not stop_event.is_set():
+            with self._jog_session_lock:
+                session = self._jog_sessions.get(arm_name)
+                if session is None or session.get("session_id") != session_id:
+                    return
+                cumulative_delta = float(session.get("cumulative_delta_mm", 0.0))
+                if cumulative_delta + abs(float(delta_mm)) > self._max_jog_cumulative_delta_mm:
+                    session["active"] = False
+                    session["stopped_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                    session["stop_reason"] = "cumulative_limit"
+                    session["thread"] = None
+                    session["stop_event"] = None
+                    session["last_result"] = self._request_arm_stop(arm_name, "cumulative_limit")
+                    return
+                if time.monotonic() - started_at > self._max_jog_duration_sec:
+                    session["active"] = False
+                    session["stopped_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                    session["stop_reason"] = "duration_limit"
+                    session["thread"] = None
+                    session["stop_event"] = None
+                    session["last_result"] = self._request_arm_stop(arm_name, "duration_limit")
+                    return
             _, payload = self._execute_arm_jog_once(arm_name, axis, delta_mm, velocity, acceleration)
             with self._jog_session_lock:
                 session = self._jog_sessions.get(arm_name)
@@ -1215,6 +1401,7 @@ class CompetitionConsoleApiNode(Node):
                     session["thread"] = None
                     session["stop_event"] = None
                     return
+                session["cumulative_delta_mm"] = float(session.get("cumulative_delta_mm", 0.0)) + abs(float(delta_mm))
             if stop_event.wait(interval_ms / 1000.0):
                 break
         with self._jog_session_lock:
@@ -1237,6 +1424,9 @@ class CompetitionConsoleApiNode(Node):
         interval_ms: int,
     ) -> dict[str, Any]:
         self._stop_jog_session(arm_name, "replaced")
+        validation_error = self._validate_jog_command(delta_mm, velocity, acceleration)
+        if validation_error:
+            return {"started": False, "arm": arm_name, "error": validation_error}
         session_id = f"{arm_name}-{int(time.time() * 1000)}"
         stop_event = threading.Event()
         thread = threading.Thread(
@@ -1259,6 +1449,8 @@ class CompetitionConsoleApiNode(Node):
                     "stopped_at": None,
                     "stop_reason": None,
                     "last_result": None,
+                    "cumulative_delta_mm": 0.0,
+                    "max_duration_sec": self._max_jog_duration_sec,
                     "thread": thread,
                     "stop_event": stop_event,
                 }
@@ -1271,6 +1463,8 @@ class CompetitionConsoleApiNode(Node):
             "delta_mm": float(delta_mm),
             "interval_ms": int(interval_ms),
             "session_id": session_id,
+            "max_duration_sec": self._max_jog_duration_sec,
+            "max_cumulative_delta_mm": self._max_jog_cumulative_delta_mm,
         }
 
     def _stop_jog_session(self, arm_name: str, reason: str) -> dict[str, Any]:
@@ -1287,6 +1481,7 @@ class CompetitionConsoleApiNode(Node):
             last_result = session.get("last_result")
         if stop_event is not None:
             stop_event.set()
+        stop_payload = self._request_arm_stop(arm_name, reason)
         if thread is not None and thread.is_alive():
             thread.join(timeout=2.0)
         with self._jog_session_lock:
@@ -1296,7 +1491,7 @@ class CompetitionConsoleApiNode(Node):
                 session["stopped_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
                 session["thread"] = None
                 session["stop_event"] = None
-        return {"stopped": True, "arm": arm_name, "status": "stopped", "last_result": last_result}
+        return {"stopped": True, "arm": arm_name, "status": "stopped", "last_result": last_result, "stop": stop_payload}
 
     def _stop_all_jog_sessions(self, reason: str) -> None:
         for arm_name in ("left_arm", "right_arm"):
@@ -1504,6 +1699,16 @@ class CompetitionConsoleApiNode(Node):
         ]
 
     def _start_core_process(self, request: BringupRequest) -> dict[str, Any]:
+        if bool(request.start_hardware) and not self._allow_hardware_bringup:
+            self._audit_security_event(
+                "hardware_bringup_rejected",
+                {"request": request.model_dump() if hasattr(request, "model_dump") else request.dict()},
+            )
+            return {
+                "started": False,
+                "status": "hardware_bringup_blocked",
+                "message": "software-only default blocks start_hardware=true; set allow_hardware_bringup=true explicitly",
+            }
         env = os.environ.copy()
         self._cleanup_stale_core_processes()
         cmd = self._build_core_launch_cmd(request)

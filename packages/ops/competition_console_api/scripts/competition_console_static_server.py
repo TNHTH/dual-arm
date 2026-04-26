@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import logging
 import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -13,6 +14,7 @@ from ament_index_python.packages import get_package_prefix
 
 API_HOST = "127.0.0.1"
 API_PORT = 18080
+LOGGER = logging.getLogger("competition_console_static_server")
 
 
 class CompetitionConsoleStaticHandler(SimpleHTTPRequestHandler):
@@ -68,13 +70,16 @@ class CompetitionConsoleStaticHandler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     repo_root = Path(get_package_prefix("competition_console_api")).parent.parent
-    web_root = repo_root / "src" / "ops" / "competition_console_web"
+    web_root = repo_root / "packages" / "ops" / "competition_console_web"
     dist_root = web_root / "dist"
     serve_root = dist_root if dist_root.exists() else web_root
     os.chdir(serve_root)
-    server = ThreadingHTTPServer(("0.0.0.0", 18081), CompetitionConsoleStaticHandler)
-    print(f"competition_console_web static server serving {serve_root} on :18081")
+    host = os.environ.get("DUAL_ARM_CONSOLE_WEB_HOST", "127.0.0.1")
+    port = int(os.environ.get("DUAL_ARM_CONSOLE_WEB_PORT", "18081"))
+    server = ThreadingHTTPServer((host, port), CompetitionConsoleStaticHandler)
+    LOGGER.info("competition_console_web static server serving %s on %s:%s", serve_root, host, port)
     server.serve_forever()
 
 
