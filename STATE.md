@@ -6,7 +6,7 @@
 - Wave: software-engineering-hardening / Wave 0-6
 - 分支：`codex/software-engineering-hardening-20260426`
 - 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
-- 状态：Wave 5 已完成；Wave 0-5 均已提交候选，当前进入 Wave 6 文档、仓库卫生、最终验证与推送。
+- 状态：Wave 6 已完成本地实现与主验证；最终 verifier 超时已关闭并记录，等待提交和 push。
 
 ## 2026-04-26 Wave 0 基线
 - 分支与远端：
@@ -112,6 +112,27 @@
   - Wave 5 reviewer `019dc803-c68d-74b1-97b1-c345c8bf088b` 120 秒未返回，已关闭并记录，主线程使用本地验证证据完成复核。
 - 待办：
   - Wave 6 补齐 README、架构、安全、接口、artifact 文档，更新仓库卫生规则，做最终验证、最终 verifier、提交并 push。
+
+## 2026-04-26 Wave 6 文档、仓库卫生与最终验证
+- 已完成：
+  - 根 README 补项目输入输出、成功标准、软件-only mock 启动、测试命令、配置方式、文档索引和常见问题。
+  - 新增 `docs/architecture/runtime-architecture.md`，说明模块职责、数据流、topic/service/action 和配置流。
+  - 新增 `docs/operations/runbooks/safety.md`，说明 API 暴露、token、stop/cancel、限幅和 mock/real 切换。
+  - 新增 `docs/api/interfaces.md`，说明关键 msg/srv/action 字段单位、范围和错误码。
+  - 新增 `docs/artifacts/model-and-vendor-manifest.md`，说明模型权重、YOLO runs、vendor SDK、backup 和运行证据治理。
+  - 补 `docs/api/README.md`、`docs/artifacts/README.md` 并更新 docs 目录索引。
+  - 修正 `robo_ctrl` README 中旧 ROS 版本、旧工作区路径、旧 launch 名和未说明的 `robot_port` 语义。
+  - 修正 `epg50_gripper_ros` README 中旧串口默认值误导，明确 ROS 2 launch 默认 `port:=auto`。
+  - 标记 `docs/archive/sessions/SETUP_2026-04-15.md` 为历史文档。
+  - 更新 `.gitignore`，阻止新增训练 run、临时模型导出、vendor backup 和临时 artifact。
+- 验证：
+  - `python3 scripts/check_readme_coverage.py`：通过。
+  - `python3 scripts/check_path_hardcodes.py`：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration`：`17 passed`。
+  - `bash scripts/ci/software_check.sh`：通过，含 20 个 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+  - `colcon test-result --all`：`11 tests, 0 errors, 0 failures, 0 skipped`。
+- 待办：
+  - Wave 6 提交和 push。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：

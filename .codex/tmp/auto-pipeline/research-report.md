@@ -35,6 +35,12 @@
   - Preserved original node executable, launch, service, and action names.
   - Added helper tests and static integration assertions for split modules.
   - Full `scripts/ci/software_check.sh` passed after the split.
+- Wave 6 documentation and hygiene evidence:
+  - Root README now covers project goal, inputs, outputs, mock startup, config, tests, structure, and FAQ.
+  - Added runtime architecture, safety runbook, API interface contract, and model/vendor manifest docs.
+  - Updated control package README files to remove stale ROS/path/serial guidance.
+  - `.gitignore` now blocks future model run, backup, and temporary artifact churn.
+  - Final local `scripts/ci/software_check.sh` and `colcon test-result --all` passed.
 
 2026-04-15 baseline:
 - Current branch `test` is clean.

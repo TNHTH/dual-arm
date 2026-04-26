@@ -19,6 +19,8 @@
 ros2 launch competition_rviz_tools competition_rviz.launch.py
 ```
 
+软件-only 验证时只启动 RViz 和 mock/fake 数据，不在本包内绕过 `execution_adapter` 直接发硬件动作。
+
 ## 上下游依赖
 
 - 上游：`scene_fusion`、`planning_scene_sync`、任务状态和 TF。
