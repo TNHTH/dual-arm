@@ -10,6 +10,16 @@
 - Prevention: 不再把全局 `pytest` 视为隐含前提；CI 脚本必须先检查依赖并输出可操作错误。
 - Remaining: Wave 2 完成前，仓库测试体系仍不能证明核心功能回归。
 
+## Incident 21
+- Time: 2026-04-26
+- Scope: Wave 4 task manager test registration
+- Symptom: 同时收集 `tests/unit/test_task_contract.py` 和 `packages/tasks/dualarm_task_manager/test/test_task_contract.py` 时，pytest 报 `ImportMismatchError`。
+- Root cause: 两个测试文件 basename 相同，pytest 模块缓存把包内测试解析到顶层测试路径。
+- Handling: 将包内测试重命名为 `test_dualarm_task_contract.py`，并同步更新 `dualarm_task_manager/CMakeLists.txt`。
+- Evidence: 重跑 `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py` 通过，`17 passed`。
+- Prevention: 后续跨顶层和包内测试目录新增测试时，文件 basename 保持唯一，避免 pytest import mismatch。
+- Remaining: 无。
+
 ## Incident 1
 - Time: 2026-04-15
 - Scope: Wave 1 MoveIt bringup

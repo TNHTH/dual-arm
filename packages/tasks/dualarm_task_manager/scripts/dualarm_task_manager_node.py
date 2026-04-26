@@ -25,6 +25,7 @@ from behaviors.handover_boundary import HANDOVER_BEHAVIOR_STATES, build_handover
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory, RunCompetition
 from dualarm_interfaces.msg import GraspTarget, SceneObject, SceneObjectArray, TaskEvent
 from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGripper, SetObjectInteraction, TaskCommand
+from task_contract import normalize_task_sequence, parse_task_sequence, rank_scene_objects
 
 
 class DualArmTaskManagerNode(Node):
@@ -33,7 +34,7 @@ class DualArmTaskManagerNode(Node):
         self.declare_parameter("task_sequence", "handover,pouring")
         repo_root = Path(get_package_prefix("dualarm_task_manager")).parent.parent
         self.declare_parameter("checkpoint_dir", str(repo_root / ".artifacts" / "checkpoints" / "competition"))
-        self.declare_parameter("workspace_profiles_file", str(repo_root / "configs" / "competition" / "workspace_profiles.yaml"))
+        self.declare_parameter("workspace_profiles_file", str(repo_root / "config" / "competition" / "workspace_profiles.yaml"))
         self.declare_parameter("reobserve_once_enabled", True)
         self.declare_parameter("reobserve_once_timeout_sec", 1.5)
         self.declare_parameter("reobserve_once_interval_sec", 0.05)
@@ -48,10 +49,12 @@ class DualArmTaskManagerNode(Node):
         self._last_behavior_call = None
         self._start_immediately = False
         self._start_gate_source = ""
+        self._config_fingerprint = ""
         self._checkpoint_dir = Path(str(self.get_parameter("checkpoint_dir").value))
         self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
         (self._checkpoint_dir / "runs").mkdir(parents=True, exist_ok=True)
         workspace_profiles_file = Path(str(self.get_parameter("workspace_profiles_file").value)).expanduser().resolve()
+        self._config_fingerprint = self._file_sha256(workspace_profiles_file)
         workspace_profiles = yaml.safe_load(workspace_profiles_file.read_text(encoding="utf-8"))
         active_profile_name = str(workspace_profiles.get("active_profile", "competition_default"))
         self._active_workspace_profile = workspace_profiles.get("profiles", {}).get(active_profile_name, {})
@@ -183,7 +186,7 @@ class DualArmTaskManagerNode(Node):
         self._last_plan_digest = ""
         self._last_behavior_call = None
         self._start_immediately = goal_handle.request.start_immediately
-        self._start_gate_source = "auto_start" if goal_handle.request.start_immediately else "action_goal"
+        self._start_gate_source = "start_gate_action" if goal_handle.request.start_immediately else "direct_action_goal"
         if goal_handle.request.resume_from_checkpoint:
             checkpoint_state = self._load_checkpoint(goal_handle.request.checkpoint_id)
             if checkpoint_state is None:
@@ -197,8 +200,17 @@ class DualArmTaskManagerNode(Node):
             run_id = checkpoint_state["run_id"]
             self._assignments = dict(checkpoint_state.get("assignments", {}))
 
-        sequence = self._normalize_task_sequence(goal_handle.request.requested_order or self.get_parameter("task_sequence").value)
-        checkpoint_sequence = self._normalize_task_sequence(str(checkpoint_state.get("task_sequence", ""))) if checkpoint_state else ""
+        try:
+            sequence = self._normalize_task_sequence(goal_handle.request.requested_order or self.get_parameter("task_sequence").value)
+            checkpoint_sequence = self._normalize_task_sequence(str(checkpoint_state.get("task_sequence", ""))) if checkpoint_state else ""
+        except ValueError as exc:
+            result = RunCompetition.Result()
+            result.success = False
+            result.message = f"task_sequence 非法: {exc}"
+            result.final_checkpoint_id = goal_handle.request.checkpoint_id
+            result.resume_hint = "请按双臂比赛合同设置 task_sequence，例如 handover,pouring"
+            goal_handle.abort()
+            return result
         if checkpoint_sequence and checkpoint_sequence != sequence:
             if goal_handle.request.allow_reconcile:
                 self.get_logger().warn(
@@ -422,10 +434,10 @@ class DualArmTaskManagerNode(Node):
             return self._verify_no_live_allocations("HOME_ARMS")
 
         if state == "WAIT_START":
-            if self._start_gate_source == "auto_start":
-                return True, "WAIT_START 通过：start_immediately=true"
-            if self._start_gate_source == "action_goal":
-                return True, "WAIT_START 通过：已收到显式 RunCompetition goal，视为外部开赛 gate 已满足"
+            if self._start_gate_source == "start_gate_action":
+                return True, "WAIT_START 通过：start gate 已发送授权 RunCompetition goal"
+            if self._start_gate_source == "direct_action_goal":
+                return False, "WAIT_START 拒绝直接 action goal；请通过 /competition/start_signal 或 mock/dev 显式 start gate"
             return False, "WAIT_START 缺少合法开赛来源"
 
         if state in {"PARK", "DONE"}:
@@ -452,9 +464,10 @@ class DualArmTaskManagerNode(Node):
             return False, "桌面对象不完整，正式流程要求两只杯子"
         self._assignments["water_bottle"] = water.id
         self._assignments["cola_bottle"] = cola.id
-        self._assignments["cup_water"] = cups[0].id
-        self._assignments["cup_cola"] = cups[1].id
-        return True, f"water={water.id}, cola={cola.id}, cups={[cup.id for cup in cups]}"
+        ranked_cups = self._rank_scene_objects(cups)
+        self._assignments["cup_water"] = ranked_cups[0].id
+        self._assignments["cup_cola"] = ranked_cups[1].id
+        return True, f"water={water.id}, cola={cola.id}, cups={[cup.id for cup in ranked_cups]}"
 
     def _plan_for_object(self, semantic_type: str, target_field: str, reserved_by: str) -> Tuple[bool, str]:
         scene_object = self._find_object(semantic_type, allowed_states=("stable",))
@@ -613,7 +626,8 @@ class DualArmTaskManagerNode(Node):
         ]
         if allowed_states is not None:
             candidates = [obj for obj in candidates if obj.lifecycle_state in allowed_states]
-        return candidates[0] if candidates else None
+        ranked = self._rank_scene_objects(candidates)
+        return ranked[0] if ranked else None
 
     def _objects_by_prefix(self, prefix: str, allowed_states: Optional[Tuple[str, ...]] = None) -> List[SceneObject]:
         candidates = [
@@ -622,7 +636,10 @@ class DualArmTaskManagerNode(Node):
         ]
         if allowed_states is not None:
             candidates = [obj for obj in candidates if obj.lifecycle_state in allowed_states]
-        return candidates
+        return self._rank_scene_objects(candidates)
+
+    def _rank_scene_objects(self, objects: List[SceneObject]) -> List[SceneObject]:
+        return rank_scene_objects(objects)
 
     def _find_object_by_id_or_semantic(self, key: str) -> Optional[SceneObject]:
         for scene_object in self._scene_cache.objects:
@@ -797,6 +814,9 @@ class DualArmTaskManagerNode(Node):
             "next_state_owner": self._state_owner(next_state),
             "next_behavior_group": self._behavior_group_for_state(next_state),
             "scene_version": int(getattr(self._scene_cache, "scene_version", 0)),
+            "config_fingerprint": self._config_fingerprint,
+            "start_gate_source": self._start_gate_source,
+            "selected_objects": dict(self._assignments),
             "assignments": self._assignments,
             "reserved_objects": [
                 {"id": obj.id, "reserved_by": obj.reserved_by}
@@ -1125,10 +1145,15 @@ class DualArmTaskManagerNode(Node):
         return ""
 
     def _normalize_task_sequence(self, raw_sequence: str) -> str:
-        return ",".join(self._parse_task_sequence(raw_sequence))
+        return normalize_task_sequence(raw_sequence)
 
     def _parse_task_sequence(self, raw_sequence: str) -> List[str]:
-        return [item.strip() for item in raw_sequence.split(",") if item.strip()]
+        return parse_task_sequence(raw_sequence)
+
+    def _file_sha256(self, path: Path) -> str:
+        if not path.exists():
+            return ""
+        return hashlib.sha256(path.read_bytes()).hexdigest()
 
     def _validate_checkpoint_state(self, checkpoint_state, states: List[str], allow_reconcile: bool) -> Optional[str]:
         schema_version = int(checkpoint_state.get("checkpoint_schema_version", 0))

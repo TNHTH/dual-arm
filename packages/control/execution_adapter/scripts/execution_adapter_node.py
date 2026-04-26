@@ -405,7 +405,12 @@ class ExecutionAdapterNode(Node):
             )
         elif goal.primitive_id == "pour_tilt":
             outcome = self._execute_dual_or_single_cartesian(goal)
-            outcome.result_code = self._primitive_motion_result_code(outcome)
+            if outcome.success and goal.stop_condition_id != "simulated_fill_spill_verified":
+                outcome.success = False
+                outcome.message = "pour_tilt 运动完成，但缺少 fill/spill evidence，不能判定成功"
+                outcome.result_code = "unverified_evidence"
+            else:
+                outcome.result_code = self._primitive_motion_result_code(outcome)
         elif goal.primitive_id == "hold_verify":
             outcome.success, outcome.contact_verified = self._hold_verify(
                 primary_arm_group(goal.arm_group),
@@ -731,7 +736,7 @@ class ExecutionAdapterNode(Node):
         for scene_object in self._scene_cache.objects:
             if scene_object.id == object_id:
                 return scene_object.attached_link == ""
-        return True
+        return False
 
     def _check_gripper_contact(self, arm_name: str) -> bool:
         status = self._get_gripper_status(arm_name)
@@ -763,15 +768,15 @@ class ExecutionAdapterNode(Node):
         for scene_object in self._scene_cache.objects:
             if scene_object.id == object_id:
                 return scene_object.lifecycle_state not in {"held_dual_contact", "attached", "opened_split_active"}
-        return True
+        return False
 
     def _verify_object_attached_or_hidden(self, object_id: str) -> bool:
         if not object_id:
             return False
         for scene_object in self._scene_cache.objects:
             if scene_object.id == object_id:
-                return scene_object.attached_link != "" or scene_object.lifecycle_state in {"lost", "opened_split_active", "opened_split"}
-        return True
+                return scene_object.attached_link != "" or scene_object.lifecycle_state in {"opened_split_active", "opened_split"}
+        return False
 
     def _set_object_interaction(
         self,

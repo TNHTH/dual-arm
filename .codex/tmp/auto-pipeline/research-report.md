@@ -24,6 +24,12 @@
   - Added unified profile at `config/profiles/competition_default.yaml`.
   - `competition_core.launch.py --show-args` confirms profile defaults for detector path, base transforms, robot ports, and gripper ports.
   - Runtime code no longer uses `configs` compatibility alias for grasp workspace profile.
+- Wave 4 task contract evidence:
+  - Added a testable `task_contract.py` for allowed competition tasks and deterministic scene object ranking.
+  - `dualarm_task_manager` rejects unknown/duplicate/empty task orders and records config/start gate/object selection evidence in checkpoints.
+  - Direct `RunCompetition` goals no longer satisfy `WAIT_START`; `competition_start_gate` is the authorized path after external/mock/dev start conditions.
+  - `execution_adapter` no longer treats missing objects as release/detach/hold success, and `pour_tilt` requires fill/spill evidence.
+  - `scripts/ci/software_check.sh` now covers Wave 4 package build and task manager colcon pytest.
 
 2026-04-15 baseline:
 - Current branch `test` is clean.

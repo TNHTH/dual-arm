@@ -11,10 +11,13 @@
 - Wave 2 把安全逻辑抽成无 ROS 依赖 helper 后，测试能同时服务普通 pytest 和 colcon test，避免 ROS graph 成为单元测试前提。
 - Playwright 使用 route mock API 后，前端 smoke 不再依赖手工启动 API。
 - Wave 3 用 profile 先收拢 launch 默认值，比直接重写所有节点读取配置风险更低；show-args 是适合软件-only 的验证证据。
+- Wave 4 把比赛任务序列和对象排序抽成纯 Python helper 后，可以不用启动 ROS graph 就验证关键比赛契约。
+- 在 evidence 不完整时显式失败，比继续返回 motion success 更适合比赛任务链；否则上层会把“动作执行了”误判成“任务成功了”。
 
 ### Waste
 - 当前系统缺少 `pytest` 命令，说明测试入口不能假设全局工具已安装；Wave 2 需要提供明确依赖说明或脚本降级提示。
 - Playwright 第一次失败来自文本断言命中多个元素；API-backed UI 测试应优先断言 mock 调用计数或 role 精确选择器。
+- 包内测试文件名与顶层测试同名会触发 pytest import mismatch；跨目录测试必须用唯一 basename。
 
 ### Trigger Redesign
 - signal：用户要求 review 后直接修复/重构，并要求提交推送。
@@ -23,6 +26,9 @@
 - signal：控制台 API 暴露 motion、gripper、recover、delete 或 process control。
 - route：默认本机监听 + token 鉴权 + 审计日志。
 - guard：无 token 时危险 API 默认拒绝，而不是依赖网络隔离。
+- signal：同一轮 pytest 同时收集顶层 tests 和包内 test 目录。
+- route：测试文件 basename 唯一化。
+- guard：避免 pytest 将同名模块缓存到错误路径。
 
 ## 结论
 本次对话把 `dual-arm` 从“架构骨架式重构”推进到了“Wave 1 真 MoveIt 双臂规划基线”，方向是对的，但过程里暴露出多类可规避问题：subagent 不稳定、旧 ROS 进程污染验证、安装树残留、Conda 抢 Python、以及验证步骤顺序不严格。不能保证以后绝对不再犯，但这些问题已经被转成仓库规则和执行检查点。
