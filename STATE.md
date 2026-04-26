@@ -1,11 +1,31 @@
 # dual-arm STATE
 
-更新时间：2026-04-16
+更新时间：2026-04-26
 
 ## Current Wave
-- Wave: repo-reorg / README / path-governance
-- 目标：在隔离 worktree 中把正式源码根升级为 `packages/`，补齐 README 体系，收口路径治理与兼容入口，并完成验证、提交和推送
-- 状态：reviewer / verifier 已完成，待单提交推送到远程 `test`，并执行阶段二部署到 `/home/gwh/dual-arm`
+- Wave: software-engineering-hardening / Wave 0-6
+- 分支：`codex/software-engineering-hardening-20260426`
+- 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
+- 状态：Wave 0 进行中；已完成分支创建和基线检查，正在把 review 发现转成可执行整改与后续验证入口。
+
+## 2026-04-26 Wave 0 基线
+- 分支与远端：
+  - 当前分支：`codex/software-engineering-hardening-20260426`
+  - 远端：`git@github.com:TNHTH/dual-arm.git`
+- 软件-only 约束：
+  - 禁止连接真实机械臂 IP。
+  - 禁止打开真实串口或 `/dev/serial/by-id/*` 设备。
+  - 禁止运行真实硬件 launch 或发送真实运动/夹爪命令。
+  - 所有验证默认使用静态检查、单元测试、mock、dry-run、launch 参数检查。
+- 基线检查：
+  - `python3 scripts/check_path_hardcodes.py`：通过，输出 `路径硬编码检查通过。`
+  - `python3 scripts/check_readme_coverage.py`：失败，缺少 `packages/ops/competition_rviz_tools/README.md`。
+  - `pytest --collect-only tests`：失败，当前 shell 找不到 `pytest` 命令。
+  - `colcon list --base-paths packages --names-only | sort`：发现 27 个 ROS 包。
+- 当前主要整改方向：
+  - P0：默认网络暴露、危险 API 鉴权、stop/cancel/timeout 语义、速度/范围校验。
+  - P1：测试从 0 tests 升级为可重复软件回归；配置从硬编码迁到 profile/YAML；任务成功标准不能无证据默认为成功。
+  - P2：大文件职责拆分、README/runbook/API/artifact 文档补齐、旧路径与旧说明清理。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：

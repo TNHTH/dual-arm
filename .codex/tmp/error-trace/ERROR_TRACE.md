@@ -1,5 +1,15 @@
 # Error Trace
 
+## Incident 20
+- Time: 2026-04-26
+- Scope: Wave 0 software-only baseline
+- Symptom: `pytest --collect-only tests` failed with `/bin/bash: pytest: 未找到命令`.
+- Root cause: 当前 shell 环境没有可执行的 `pytest` 命令；测试入口依赖没有被仓库脚本显式治理。
+- Handling: 将该问题记录为 Wave 2 必修项，后续通过 `scripts/ci/software_check.sh` 给出明确依赖检查和降级提示，并补真实软件-only 测试。
+- Evidence: Wave 0 基线命令返回 exit code 127。
+- Prevention: 不再把全局 `pytest` 视为隐含前提；CI 脚本必须先检查依赖并输出可操作错误。
+- Remaining: Wave 2 完成前，仓库测试体系仍不能证明核心功能回归。
+
 ## Incident 1
 - Time: 2026-04-15
 - Scope: Wave 1 MoveIt bringup

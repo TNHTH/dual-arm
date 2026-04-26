@@ -1,6 +1,20 @@
 # dual-arm 任务复盘
 
-更新时间：2026-04-16
+更新时间：2026-04-26
+
+## 2026-04-26 Software-only Hardening 复盘入口
+
+### Worked
+- 先建立软件-only 护栏再做安全和控制相关修改，可以避免 review 后的修复误触实机。
+- Wave 0 基线把 README 覆盖和 pytest 缺失直接转成后续可执行任务，避免只停留在报告。
+
+### Waste
+- 当前系统缺少 `pytest` 命令，说明测试入口不能假设全局工具已安装；Wave 2 需要提供明确依赖说明或脚本降级提示。
+
+### Trigger Redesign
+- signal：用户要求 review 后直接修复/重构，并要求提交推送。
+- route：进入 auto-pipeline 多 Wave 执行，按 Wave 提交。
+- guard：先写软件-only 护栏，所有验证默认 mock/dry-run。
 
 ## 结论
 本次对话把 `dual-arm` 从“架构骨架式重构”推进到了“Wave 1 真 MoveIt 双臂规划基线”，方向是对的，但过程里暴露出多类可规避问题：subagent 不稳定、旧 ROS 进程污染验证、安装树残留、Conda 抢 Python、以及验证步骤顺序不严格。不能保证以后绝对不再犯，但这些问题已经被转成仓库规则和执行检查点。

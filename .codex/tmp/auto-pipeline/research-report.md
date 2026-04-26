@@ -1,5 +1,14 @@
 # Research Report
 
+2026-04-26 software engineering hardening baseline:
+- Current branch: `codex/software-engineering-hardening-20260426`.
+- Scope is software-only: no real robot IP, no real serial devices, no hardware launch, no real motion.
+- `python3 scripts/check_path_hardcodes.py` passed.
+- `python3 scripts/check_readme_coverage.py` failed because `packages/ops/competition_rviz_tools/README.md` is missing.
+- `pytest --collect-only tests` failed because the current shell has no `pytest` executable.
+- `colcon list --base-paths packages --names-only | sort` found 27 ROS packages.
+- The repair plan is execution-first: Wave 1 safety gates, Wave 2 tests/CI, Wave 3 configuration, Wave 4 task semantics, Wave 5 module split, Wave 6 docs/repo hygiene/final push.
+
 2026-04-15 baseline:
 - Current branch `test` is clean.
 - `./build_workspace.sh` passed with 24 packages.
