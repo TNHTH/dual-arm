@@ -6,7 +6,7 @@
 - Wave: software-engineering-hardening / Wave 0-6
 - 分支：`codex/software-engineering-hardening-20260426`
 - 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
-- 状态：Wave 3 已完成；Wave 0-3 均已提交候选，当前进入 Wave 4 任务语义与接口契约修复。
+- 状态：Wave 4 已完成；Wave 0-4 均已提交候选，当前进入 Wave 5 模块职责拆分。
 
 ## 2026-04-26 Wave 0 基线
 - 分支与远端：
@@ -74,6 +74,25 @@
   - `bash scripts/ci/software_check.sh`：通过。
 - 待办：
   - Wave 4 处理 task order、start gate、对象选择、pour/release/handover evidence 和 checkpoint。
+
+## 2026-04-26 Wave 4 任务语义与接口契约
+- 已完成：
+  - 新增 `dualarm_task_manager/scripts/task_contract.py`，集中定义比赛任务白名单、任务序列解析和场景对象排序策略。
+  - `dualarm_task_manager` 现在拒绝未知/重复/空任务序列，避免未知状态静默进入状态机。
+  - `WAIT_START` 不再把直接 action goal 当作外部开赛 gate；直接 goal 会被拒绝并提示走 `/competition/start_signal` 或显式 mock/dev gate。
+  - `competition_start_gate` 只在外部信号或显式 auto/dev 模式满足后发送 `start_immediately=true` goal。
+  - 对象选择从“列表前两个”改为稳定性、置信度、scene_version、id 的确定性排序。
+  - checkpoint 增加 `config_fingerprint`、`start_gate_source`、`selected_objects`。
+  - `execution_adapter` 不再把目标对象丢失视作 release/detach/hold 成功；`pour_tilt` 缺少 fill/spill evidence 时返回 `unverified_evidence`。
+  - `scripts/ci/software_check.sh` 已纳入 task manager 包内 pytest，并构建 Wave 4 相关包。
+- 验证：
+  - py_compile：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`17 passed`。
+  - `colcon build --base-paths packages --packages-select dualarm_task_manager execution_adapter competition_start_gate`：通过。
+  - `colcon test --base-paths packages --packages-select dualarm_task_manager --event-handlers console_direct+`：通过，包内 `3 passed`。
+  - `bash scripts/ci/software_check.sh`：通过，含 17 个 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+- 待办：
+  - Wave 5 做第一轮模块职责拆分，同时保持原 node executable、launch、service/action 名称兼容。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：

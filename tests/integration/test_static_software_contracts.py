@@ -33,3 +33,20 @@ def test_runtime_code_does_not_use_configs_compat_alias_for_workspace_profile():
     ).read_text(encoding="utf-8")
     assert '"config"' in source
     assert '"configs"' not in source
+
+
+def test_task_manager_rejects_direct_action_goal_at_start_gate():
+    source = (
+        REPO_ROOT / "packages/tasks/dualarm_task_manager/scripts/dualarm_task_manager_node.py"
+    ).read_text(encoding="utf-8")
+    assert "direct_action_goal" in source
+    assert "WAIT_START 拒绝直接 action goal" in source
+
+
+def test_execution_adapter_does_not_treat_missing_objects_as_success():
+    source = (
+        REPO_ROOT / "packages/control/execution_adapter/scripts/execution_adapter_node.py"
+    ).read_text(encoding="utf-8")
+    assert 'outcome.result_code = "unverified_evidence"' in source
+    assert "return True" not in source[source.index("def _verify_detached") : source.index("def _check_gripper_contact")]
+    assert "lost" not in source[source.index("def _verify_object_attached_or_hidden") : source.index("def _set_object_interaction")]

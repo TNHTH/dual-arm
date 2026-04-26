@@ -14,10 +14,10 @@ fi
 python3 scripts/check_path_hardcodes.py
 python3 scripts/check_readme_coverage.py
 
-"$PYTHON_BIN" -m pytest -q tests/unit tests/integration
+"$PYTHON_BIN" -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py
 
-colcon build --base-paths packages --packages-select competition_console_api robo_ctrl
-colcon test --base-paths packages --packages-select competition_console_api
+colcon build --base-paths packages --packages-select competition_console_api robo_ctrl dualarm_task_manager execution_adapter competition_start_gate
+colcon test --base-paths packages --packages-select competition_console_api dualarm_task_manager
 colcon test-result --all --verbose
 
 if command -v npm >/dev/null 2>&1 && [ -f packages/ops/competition_console_web/package-lock.json ]; then

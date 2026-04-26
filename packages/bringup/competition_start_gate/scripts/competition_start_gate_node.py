@@ -43,7 +43,8 @@ class CompetitionStartGateNode(Node):
             self.get_logger().warn("RunCompetition action 尚未就绪")
             return
         goal = RunCompetition.Goal()
-        goal.start_immediately = False
+        # start gate 只在外部信号或显式 auto/dev 模式满足后发送 goal。
+        goal.start_immediately = True
         goal.requested_order = self._task_sequence
         goal.resume_from_checkpoint = False
         goal.checkpoint_id = ""

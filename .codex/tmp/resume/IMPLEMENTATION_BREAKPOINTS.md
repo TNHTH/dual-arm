@@ -12,8 +12,8 @@
   - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
   - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
 - 下一步入口：
-  1. Wave 3 已完成并通过 `bash scripts/ci/software_check.sh`。
-  2. 下一步进入 Wave 4：task order 校验、start gate 分离、对象选择策略、evidence 和 checkpoint。
+  1. Wave 4 已完成并通过 `bash scripts/ci/software_check.sh`。
+  2. 下一步进入 Wave 5：模块职责拆分，保持原 node executable、launch、service/action 名称兼容。
 - Wave 1 当前证据：
   - py_compile 通过。
   - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过。
@@ -25,6 +25,13 @@
 - Wave 3 当前证据：
   - `competition_core.launch.py --show-args` 显示 profile 默认值：右臂 yaw `180.0`，gripper port `auto`。
   - `colcon build --base-paths packages --packages-select dualarm_bringup grasp_pose_generator`：通过。
+  - `bash scripts/ci/software_check.sh`：通过。
+- Wave 4 当前证据：
+  - 新增 `task_contract.py`，任务序列只允许 `handover,pouring`，对象选择排序可单测。
+  - `WAIT_START` 默认拒绝直接 action goal，start gate 负责在外部条件满足后发送授权 goal。
+  - `execution_adapter` 对 missing object 不再返回成功，`pour_tilt` 缺 evidence 返回 `unverified_evidence`。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`17 passed`。
+  - `colcon test --base-paths packages --packages-select dualarm_task_manager --event-handlers console_direct+`：通过。
   - `bash scripts/ci/software_check.sh`：通过。
 
 ## 当前波次
