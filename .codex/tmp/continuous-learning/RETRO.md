@@ -8,9 +8,12 @@
 - 先建立软件-only 护栏再做安全和控制相关修改，可以避免 review 后的修复误触实机。
 - Wave 0 基线把 README 覆盖和 pytest 缺失直接转成后续可执行任务，避免只停留在报告。
 - Wave 1 先从 HTTP 暴露面和 mockable stop 入口入手，能在不碰实机的前提下先降低最直接的软件风险。
+- Wave 2 把安全逻辑抽成无 ROS 依赖 helper 后，测试能同时服务普通 pytest 和 colcon test，避免 ROS graph 成为单元测试前提。
+- Playwright 使用 route mock API 后，前端 smoke 不再依赖手工启动 API。
 
 ### Waste
 - 当前系统缺少 `pytest` 命令，说明测试入口不能假设全局工具已安装；Wave 2 需要提供明确依赖说明或脚本降级提示。
+- Playwright 第一次失败来自文本断言命中多个元素；API-backed UI 测试应优先断言 mock 调用计数或 role 精确选择器。
 
 ### Trigger Redesign
 - signal：用户要求 review 后直接修复/重构，并要求提交推送。

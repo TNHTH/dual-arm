@@ -12,13 +12,16 @@
   - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
   - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
 - 下一步入口：
-  1. 等待并关闭 Wave 1 安全 reviewer subagent。
-  2. Wave 1 无 P0/P1 后提交 `fix: harden software-only safety gates`。
-  3. Wave 2 建立软件-only pytest/CI 入口，避免测试继续空跑。
+  1. Wave 2 已完成并通过 `bash scripts/ci/software_check.sh`。
+  2. 下一步进入 Wave 3：新增 `config/profiles/competition_default.yaml`，让 launch、console API、detector/model path 和安全限幅逐步读 profile/canonical config。
 - Wave 1 当前证据：
   - py_compile 通过。
   - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过。
   - console API / static server / robo_ctrl_node.cpp 中已无 `0.0.0.0`、`std::cout`、`print(` 匹配。
+- Wave 2 当前证据：
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/ops/competition_console_api/test/test_console_security.py`：`14 passed`。
+  - `colcon test --base-paths packages --packages-select competition_console_api --event-handlers console_direct+`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，含前端 Playwright `2 passed`。
 
 ## 当前波次
 - Wave: 0-5

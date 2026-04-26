@@ -6,7 +6,7 @@
 - Wave: software-engineering-hardening / Wave 0-6
 - 分支：`codex/software-engineering-hardening-20260426`
 - 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
-- 状态：Wave 1 进行中；Wave 0 已提交，安全入口、限幅、stop/timeout 和 driver 参数校验已完成本地构建验证，正在等待只读安全 reviewer 复核。
+- 状态：Wave 2 已完成；Wave 0、Wave 1、Wave 2 均已提交候选，当前进入 Wave 3 配置化与硬编码收敛。
 
 ## 2026-04-26 Wave 0 基线
 - 分支与远端：
@@ -41,8 +41,22 @@
   - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过，`2 packages finished`。
   - `rg -n "0\\.0\\.0\\.0|std::cout|print\\(" packages/ops/competition_console_api/scripts packages/control/robo_ctrl/src/robo_ctrl_node.cpp` 无匹配。
 - 待办：
-  - Wave 1 reviewer 复核后提交。
   - Wave 2 为危险 API 鉴权、jog 限幅、stop timeout 补可重复测试。
+
+## 2026-04-26 Wave 2 测试与 CI
+- 已完成：
+  - 抽出 `competition_console_security.py`，让鉴权、危险路由分类、jog limit 和 gripper clamp 可被纯测试覆盖。
+  - `competition_console_api` 包内 pytest 已接入 `colcon test`。
+  - 顶层 `tests/unit` 和 `tests/integration` 已有真实测试，不再只是 README 占位。
+  - 新增 `scripts/ci/software_check.sh` 和 `.github/workflows/software-check.yml`。
+  - Playwright smoke 改为自启动 Vite + mock API，不依赖手工后端。
+  - 补齐 `packages/ops/competition_rviz_tools/README.md`。
+- 验证：
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/ops/competition_console_api/test/test_console_security.py`：`14 passed`。
+  - `colcon test --base-paths packages --packages-select competition_console_api --event-handlers console_direct+`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，前端 build 与 Playwright `2 passed`。
+- 待办：
+  - Wave 3 统一 profile/YAML，并让测试覆盖 profile 默认值和 canonical 路径。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：

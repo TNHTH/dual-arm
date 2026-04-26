@@ -15,6 +15,11 @@
   - Jog stop/timeout requests a mockable servo stop path.
   - `robo_ctrl` validates motion percentages and requests `StopMotion` on motion-done timeout.
   - Affected packages `competition_console_api` and `robo_ctrl` build successfully.
+- Wave 2 test/CI evidence:
+  - Top-level pytest now has real tests under `tests/unit` and `tests/integration`.
+  - `competition_console_api` has package-local pytest registered with `colcon test`.
+  - `scripts/ci/software_check.sh` passed end-to-end, including frontend build and Playwright mock smoke.
+  - README coverage passes after adding `competition_rviz_tools/README.md`.
 
 2026-04-15 baseline:
 - Current branch `test` is clean.
