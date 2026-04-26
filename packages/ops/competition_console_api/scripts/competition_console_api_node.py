@@ -29,6 +29,15 @@ from epg50_gripper_ros.srv import GripperStatus as GripperStatusSrv
 from robo_ctrl.msg import RobotState
 from robo_ctrl.srv import RobotMove, RobotMoveCart, RobotServoJoint
 
+from competition_console_security import (
+    authorize_dangerous_request,
+    clamp_gripper_value,
+    env_bool,
+    is_dangerous_api_request,
+    is_loopback_host,
+    validate_jog_command,
+)
+
 try:
     from fastapi import FastAPI, Request
     from pydantic import BaseModel
@@ -40,14 +49,6 @@ except Exception:  # pylint: disable=broad-except
     BaseModel = object
     JSONResponse = None
     uvicorn = None
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
 
 class RunCompetitionRequest(BaseModel):
     requested_order: str = "handover,pouring"
@@ -153,9 +154,9 @@ class CompetitionConsoleApiNode(Node):
         self.declare_parameter("host", os.environ.get("DUAL_ARM_CONSOLE_API_HOST", "127.0.0.1"))
         self.declare_parameter("port", 18080)
         self.declare_parameter("api_token", os.environ.get("DUAL_ARM_CONSOLE_API_TOKEN", ""))
-        self.declare_parameter("allow_external_host", _env_bool("DUAL_ARM_CONSOLE_ALLOW_EXTERNAL_HOST", False))
-        self.declare_parameter("allow_unsafe_without_token", _env_bool("DUAL_ARM_CONSOLE_ALLOW_UNSAFE_WITHOUT_TOKEN", False))
-        self.declare_parameter("allow_hardware_bringup", _env_bool("DUAL_ARM_CONSOLE_ALLOW_HARDWARE_BRINGUP", False))
+        self.declare_parameter("allow_external_host", env_bool("DUAL_ARM_CONSOLE_ALLOW_EXTERNAL_HOST", False))
+        self.declare_parameter("allow_unsafe_without_token", env_bool("DUAL_ARM_CONSOLE_ALLOW_UNSAFE_WITHOUT_TOKEN", False))
+        self.declare_parameter("allow_hardware_bringup", env_bool("DUAL_ARM_CONSOLE_ALLOW_HARDWARE_BRINGUP", False))
         self.declare_parameter("max_jog_delta_mm", 10.0)
         self.declare_parameter("max_jog_cumulative_delta_mm", 50.0)
         self.declare_parameter("max_jog_duration_sec", 5.0)
@@ -179,7 +180,7 @@ class CompetitionConsoleApiNode(Node):
         self._max_jog_acceleration = float(self.get_parameter("max_jog_acceleration").value)
         self._max_gripper_speed = int(self.get_parameter("max_gripper_speed").value)
         self._max_gripper_torque = int(self.get_parameter("max_gripper_torque").value)
-        if self._host not in {"127.0.0.1", "localhost", "::1"} and not self._allow_external_host:
+        if not is_loopback_host(self._host) and not self._allow_external_host:
             raise RuntimeError(
                 "competition_console_api 默认禁止外部监听；如确需开放，请显式设置 allow_external_host=true 并配置 api_token"
             )
@@ -720,44 +721,20 @@ class CompetitionConsoleApiNode(Node):
         return app
 
     def _is_dangerous_api_request(self, method: str, path: str) -> bool:
-        normalized_method = method.upper()
-        if normalized_method not in {"POST", "PUT", "PATCH", "DELETE"}:
-            return False
-        dangerous_prefixes = (
-            "/api/bringup",
-            "/api/control",
-            "/api/tasks",
-            "/api/acceptance/run",
-            "/api/presets",
-            "/api/action-groups",
-            "/api/recordings",
-        )
-        return path.startswith(dangerous_prefixes)
+        return is_dangerous_api_request(method, path)
 
     def _authorize_dangerous_request(self, request: Request) -> Optional[dict[str, Any]]:
-        if not self._api_token:
-            if self._allow_unsafe_without_token:
-                self._audit_security_event(
-                    "dangerous_api_allowed_without_token",
-                    {"method": request.method, "path": request.url.path},
-                )
-                return None
-            return {
-                "status_code": HTTPStatus.FORBIDDEN,
-                "error": "api_token_required",
-                "message": "dangerous API requires api_token; set DUAL_ARM_CONSOLE_API_TOKEN or api_token parameter",
-            }
-        provided = request.headers.get("x-dual-arm-token", "")
-        authorization = request.headers.get("authorization", "")
-        if authorization.lower().startswith("bearer "):
-            provided = authorization.split(" ", 1)[1].strip()
-        if provided != self._api_token:
-            return {
-                "status_code": HTTPStatus.UNAUTHORIZED,
-                "error": "invalid_api_token",
-                "message": "dangerous API token missing or invalid",
-            }
-        return None
+        auth_error = authorize_dangerous_request(
+            request.headers,
+            api_token=self._api_token,
+            allow_unsafe_without_token=self._allow_unsafe_without_token,
+        )
+        if auth_error is None and not self._api_token and self._allow_unsafe_without_token:
+            self._audit_security_event(
+                "dangerous_api_allowed_without_token",
+                {"method": request.method, "path": request.url.path},
+            )
+        return auth_error
 
     def _audit_security_event(self, event_type: str, payload: dict[str, Any]) -> None:
         event = {
@@ -1223,12 +1200,12 @@ class CompetitionConsoleApiNode(Node):
     ) -> tuple[int, dict[str, Any]]:
         if not self._set_gripper_client.wait_for_service(timeout_sec=1.0):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"success": False, "error": "set_gripper service unavailable"}
-        safe_speed = min(max(int(speed), 1), self._max_gripper_speed)
-        safe_torque = min(max(int(torque), 1), self._max_gripper_torque)
+        safe_speed = clamp_gripper_value(speed, 1, self._max_gripper_speed)
+        safe_torque = clamp_gripper_value(torque, 1, self._max_gripper_torque)
         command_request = SetGripper.Request()
         command_request.arm_name = arm_name
         command_request.command = command
-        command_request.position = min(max(int(position), 0), 255)
+        command_request.position = clamp_gripper_value(position, 0, 255)
         command_request.speed = safe_speed
         command_request.torque = safe_torque
         command_request.attach_on_success = attach_on_success
@@ -1318,23 +1295,14 @@ class CompetitionConsoleApiNode(Node):
         }
 
     def _validate_jog_command(self, delta_mm: float, velocity: float, acceleration: float) -> Optional[str]:
-        values = {
-            "delta_mm": float(delta_mm),
-            "velocity": float(velocity),
-            "acceleration": float(acceleration),
-        }
-        for name, value in values.items():
-            if not math.isfinite(value):
-                return f"{name} must be finite"
-        if math.isclose(values["delta_mm"], 0.0, abs_tol=1e-9):
-            return "delta_mm must be non-zero"
-        if abs(values["delta_mm"]) > self._max_jog_delta_mm:
-            return f"delta_mm exceeds max_jog_delta_mm={self._max_jog_delta_mm}"
-        if values["velocity"] <= 0.0 or values["velocity"] > self._max_jog_velocity:
-            return f"velocity must be in (0, {self._max_jog_velocity}]"
-        if values["acceleration"] <= 0.0 or values["acceleration"] > self._max_jog_acceleration:
-            return f"acceleration must be in (0, {self._max_jog_acceleration}]"
-        return None
+        return validate_jog_command(
+            delta_mm,
+            velocity,
+            acceleration,
+            max_delta_mm=self._max_jog_delta_mm,
+            max_velocity=self._max_jog_velocity,
+            max_acceleration=self._max_jog_acceleration,
+        )
 
     def _request_arm_stop(self, arm_name: str, reason: str) -> dict[str, Any]:
         client = self._left_robot_servo_joint_client if arm_name == "left_arm" else self._right_robot_servo_joint_client
