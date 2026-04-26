@@ -30,6 +30,11 @@
   - Direct `RunCompetition` goals no longer satisfy `WAIT_START`; `competition_start_gate` is the authorized path after external/mock/dev start conditions.
   - `execution_adapter` no longer treats missing objects as release/detach/hold success, and `pour_tilt` requires fill/spill evidence.
   - `scripts/ci/software_check.sh` now covers Wave 4 package build and task manager colcon pytest.
+- Wave 5 module split evidence:
+  - Extracted focused helpers for console process state, execution primitive evidence, robo_ctrl safety validation, and frontend API transport.
+  - Preserved original node executable, launch, service, and action names.
+  - Added helper tests and static integration assertions for split modules.
+  - Full `scripts/ci/software_check.sh` passed after the split.
 
 2026-04-15 baseline:
 - Current branch `test` is clean.

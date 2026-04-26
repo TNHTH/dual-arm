@@ -47,6 +47,25 @@ def test_execution_adapter_does_not_treat_missing_objects_as_success():
     source = (
         REPO_ROOT / "packages/control/execution_adapter/scripts/execution_adapter_node.py"
     ).read_text(encoding="utf-8")
-    assert 'outcome.result_code = "unverified_evidence"' in source
+    assert "RESULT_UNVERIFIED_EVIDENCE" in source
+    assert "has_pour_evidence" in source
     assert "return True" not in source[source.index("def _verify_detached") : source.index("def _check_gripper_contact")]
     assert "lost" not in source[source.index("def _verify_object_attached_or_hidden") : source.index("def _set_object_interaction")]
+
+
+def test_wave5_runtime_modules_are_split_without_renaming_entrypoints():
+    expected_files = [
+        "packages/ops/competition_console_api/scripts/process_manager.py",
+        "packages/control/execution_adapter/scripts/primitive_evidence.py",
+        "packages/control/robo_ctrl/include/robo_ctrl/safety_limits.hpp",
+        "packages/ops/competition_console_web/src/apiClient.ts",
+    ]
+    for relative_path in expected_files:
+        assert (REPO_ROOT / relative_path).exists(), relative_path
+
+    assert "competition_console_api_node.py" in (
+        REPO_ROOT / "packages/ops/competition_console_api/CMakeLists.txt"
+    ).read_text(encoding="utf-8")
+    assert "execution_adapter_node.py" in (
+        REPO_ROOT / "packages/control/execution_adapter/CMakeLists.txt"
+    ).read_text(encoding="utf-8")

@@ -14,6 +14,13 @@
       "summary": "Wave 1 完成后已开启只读 reviewer，但 120 秒未返回；已及时关闭，主线程用 py_compile、colcon build、diff check 和静态搜索完成本地复核。"
     },
     {
+      "id": "019dc803-c68d-74b1-97b1-c345c8bf088b",
+      "role": "software_hardening_wave5_reviewer",
+      "agent_type": "reviewer",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 5 完成第一轮模块拆分后开启只读 reviewer，但 120 秒未返回；已及时关闭。主线程用 py_compile、pytest、npm build、colcon build 和 software_check 完成本地复核。"
+    },
+    {
       "role": "software_hardening_final_verifier",
       "agent_type": "verifier",
       "status": "planned_for_wave_6",

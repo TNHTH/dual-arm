@@ -35,6 +35,7 @@ from primitive_contract import (
     supported_primitive_ids,
     validate_primitive_goal,
 )
+from primitive_evidence import RESULT_UNVERIFIED_EVIDENCE, has_pour_evidence
 from robo_ctrl.msg import RobotState
 from robo_ctrl.srv import RobotMove, RobotMoveCart, RobotServoJoint
 
@@ -405,10 +406,10 @@ class ExecutionAdapterNode(Node):
             )
         elif goal.primitive_id == "pour_tilt":
             outcome = self._execute_dual_or_single_cartesian(goal)
-            if outcome.success and goal.stop_condition_id != "simulated_fill_spill_verified":
+            if outcome.success and not has_pour_evidence(goal.stop_condition_id):
                 outcome.success = False
                 outcome.message = "pour_tilt 运动完成，但缺少 fill/spill evidence，不能判定成功"
-                outcome.result_code = "unverified_evidence"
+                outcome.result_code = RESULT_UNVERIFIED_EVIDENCE
             else:
                 outcome.result_code = self._primitive_motion_result_code(outcome)
         elif goal.primitive_id == "hold_verify":

@@ -12,8 +12,8 @@
   - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
   - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
 - 下一步入口：
-  1. Wave 4 已完成并通过 `bash scripts/ci/software_check.sh`。
-  2. 下一步进入 Wave 5：模块职责拆分，保持原 node executable、launch、service/action 名称兼容。
+  1. Wave 5 已完成并通过 `bash scripts/ci/software_check.sh`。
+  2. 下一步进入 Wave 6：文档修正、仓库卫生、最终验证、最终 verifier、提交并 push。
 - Wave 1 当前证据：
   - py_compile 通过。
   - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过。
@@ -33,6 +33,13 @@
   - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`17 passed`。
   - `colcon test --base-paths packages --packages-select dualarm_task_manager --event-handlers console_direct+`：通过。
   - `bash scripts/ci/software_check.sh`：通过。
+- Wave 5 当前证据：
+  - 新增 `process_manager.py`、`primitive_evidence.py`、`safety_limits.hpp`、`apiClient.ts`，原入口和 ROS 名称保持不变。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py packages/ops/competition_console_api/test/test_console_security.py`：`26 passed`。
+  - `colcon build --base-paths packages --packages-select competition_console_api execution_adapter robo_ctrl`：通过。
+  - `npm run build`：通过。
+  - `bash scripts/ci/software_check.sh`：通过。
+  - Wave 5 reviewer subagent 120 秒未返回，已关闭并记录到 `SUBAGENT_REGISTRY.json`。
 
 ## 当前波次
 - Wave: 0-5

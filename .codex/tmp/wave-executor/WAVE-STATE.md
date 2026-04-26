@@ -7,8 +7,8 @@
 
 ## Current Wave
 
-- Wave: 5
-- Scope: 模块职责拆分，保持原 node executable、launch、service/action 名称兼容
+- Wave: 6
+- Scope: 文档、仓库卫生、最终验证、提交与推送
 - Status: pending
 
 ## Completed
@@ -18,3 +18,4 @@
 - Wave 2: tests / CI
 - Wave 3: configuration profile
 - Wave 4: task semantics / interface contracts
+- Wave 5: module responsibility split

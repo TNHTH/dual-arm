@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useRef, useState } from "react";
+import { deleteJson, fetchJson, postJson } from "./apiClient";
 
 type Health = {
   status: string;
@@ -184,35 +185,6 @@ const jogAxes = [
   { key: "ry", label: "RY" },
   { key: "rz", label: "RZ" },
 ] as const;
-
-async function fetchJson<T>(path: string): Promise<T | null> {
-  try {
-    const response = await fetch(path);
-    if (!response.ok) {
-      return null;
-    }
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function postJson<T>(path: string, body?: unknown): Promise<T | null> {
-  try {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const payload = (await response.json().catch(() => null)) as T | null;
-    if (!response.ok) {
-      return payload;
-    }
-    return payload;
-  } catch {
-    return null;
-  }
-}
 
 function isActionSuccess(payload: unknown): boolean {
   if (payload === null || payload === undefined) {
@@ -573,11 +545,7 @@ export function App() {
   }
 
   async function deleteRecording(recordingId: string) {
-    await performAction("删除录制", () =>
-      fetch(`/api/recordings/${recordingId}`, { method: "DELETE" }).then(async (response) =>
-        response.ok ? ((await response.json()) as unknown) : null,
-      ),
-    );
+    await performAction("删除录制", () => deleteJson(`/api/recordings/${recordingId}`));
   }
 
   async function startJogHold(arm: "left_arm" | "right_arm", axis: string, direction: 1 | -1) {
@@ -707,11 +675,7 @@ export function App() {
   }
 
   async function deleteActionGroup(groupId: string) {
-    await performAction("删除动作组", () =>
-      fetch(`/api/action-groups/${groupId}`, { method: "DELETE" }).then(async (response) =>
-        response.ok ? ((await response.json()) as unknown) : null,
-      ),
-    );
+    await performAction("删除动作组", () => deleteJson(`/api/action-groups/${groupId}`));
   }
 
   async function moveToPreset(arm: "left_arm" | "right_arm", presetId: string) {
@@ -726,11 +690,7 @@ export function App() {
   }
 
   async function deletePreset(arm: "left_arm" | "right_arm", presetId: string) {
-    await performAction(`${arm} 删除姿态`, () =>
-      fetch(`/api/presets/${arm}/${presetId}`, { method: "DELETE" }).then(async (response) =>
-        response.ok ? ((await response.json()) as unknown) : null,
-      ),
-    );
+    await performAction(`${arm} 删除姿态`, () => deleteJson(`/api/presets/${arm}/${presetId}`));
   }
 
   return (

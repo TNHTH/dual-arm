@@ -6,7 +6,7 @@
 - Wave: software-engineering-hardening / Wave 0-6
 - 分支：`codex/software-engineering-hardening-20260426`
 - 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
-- 状态：Wave 4 已完成；Wave 0-4 均已提交候选，当前进入 Wave 5 模块职责拆分。
+- 状态：Wave 5 已完成；Wave 0-5 均已提交候选，当前进入 Wave 6 文档、仓库卫生、最终验证与推送。
 
 ## 2026-04-26 Wave 0 基线
 - 分支与远端：
@@ -93,6 +93,25 @@
   - `bash scripts/ci/software_check.sh`：通过，含 17 个 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
 - 待办：
   - Wave 5 做第一轮模块职责拆分，同时保持原 node executable、launch、service/action 名称兼容。
+
+## 2026-04-26 Wave 5 模块职责拆分
+- 已完成：
+  - `competition_console_api_node.py` 抽出 `process_manager.py`，统一 core process running/pid 判断。
+  - `execution_adapter_node.py` 抽出 `primitive_evidence.py`，集中管理 `pour_tilt` 证据 gate 与 `unverified_evidence` 结果码。
+  - `robo_ctrl_node.cpp` 抽出 `include/robo_ctrl/safety_limits.hpp`，集中 percent/blend 校验。
+  - `competition_console_web/src/App.tsx` 抽出 `src/apiClient.ts`，统一 GET/POST/DELETE JSON 调用。
+  - 原 node executable、launch、service/action 名称均保持不变。
+  - 新增 helper 单元测试和静态集成测试，验证拆分文件存在且入口名称保留。
+- 验证：
+  - py_compile：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py packages/ops/competition_console_api/test/test_console_security.py`：`26 passed`。
+  - `npm run build`：通过。
+  - `colcon build --base-paths packages --packages-select competition_console_api execution_adapter robo_ctrl`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，含 20 个顶层 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+- Subagent：
+  - Wave 5 reviewer `019dc803-c68d-74b1-97b1-c345c8bf088b` 120 秒未返回，已关闭并记录，主线程使用本地验证证据完成复核。
+- 待办：
+  - Wave 6 补齐 README、架构、安全、接口、artifact 文档，更新仓库卫生规则，做最终验证、最终 verifier、提交并 push。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：
