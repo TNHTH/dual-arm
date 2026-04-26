@@ -25,3 +25,11 @@ def test_robo_ctrl_timeout_requests_stop_motion():
     source = (REPO_ROOT / "packages/control/robo_ctrl/src/robo_ctrl_node.cpp").read_text(encoding="utf-8")
     assert "motion_done_timeout_sec" in source
     assert "StopMotion" in source
+
+
+def test_runtime_code_does_not_use_configs_compat_alias_for_workspace_profile():
+    source = (
+        REPO_ROOT / "packages/planning/grasp_pose_generator/scripts/grasp_pose_generator_node.py"
+    ).read_text(encoding="utf-8")
+    assert '"config"' in source
+    assert '"configs"' not in source

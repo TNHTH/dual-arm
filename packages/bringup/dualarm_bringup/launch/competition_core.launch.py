@@ -4,19 +4,78 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 import os
+from pathlib import Path
+
+import yaml
+
+
+def _find_repo_root() -> Path:
+    env_root = os.environ.get("DUAL_ARM_REPO_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    current = Path(__file__).resolve()
+    for parent in [current.parent, *current.parents]:
+        if (parent / "STATE.md").exists() and (parent / "packages").is_dir():
+            return parent
+    return Path.cwd()
+
+
+def _load_profile() -> dict:
+    repo_root = _find_repo_root()
+    profile_path = Path(os.environ.get("DUAL_ARM_COMPETITION_PROFILE", repo_root / "config" / "profiles" / "competition_default.yaml"))
+    if not profile_path.exists():
+        return {}
+    return yaml.safe_load(profile_path.read_text(encoding="utf-8")) or {}
+
+
+def _profile_get(profile: dict, dotted_key: str, default):
+    value = profile
+    for part in dotted_key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return default
+        value = value[part]
+    return value
+
+
+def _space_join(values, default: str) -> str:
+    if not isinstance(values, list):
+        return default
+    return " ".join(str(item) for item in values)
 
 
 def generate_launch_description():
+    profile = _load_profile()
     detector_share = get_package_share_directory("detector")
-    default_detector_model = os.environ.get("DUALARM_DETECTOR_MODEL_PATH") or os.path.join(
-        detector_share,
-        "models",
-        "yolov8",
-        "yolo_runs",
-        "final_dataset_v1",
-        "weights",
-        "best.pt",
+    detector_model_from_profile = _profile_get(
+        profile,
+        "perception.detector.model_path",
+        os.path.join(
+            "packages",
+            "perception",
+            "detector",
+            "models",
+            "yolov8",
+            "yolo_runs",
+            "final_dataset_v1",
+            "weights",
+            "best.pt",
+        ),
     )
+    default_detector_model = os.environ.get("DUALARM_DETECTOR_MODEL_PATH") or (
+        str(_find_repo_root() / detector_model_from_profile)
+        if not os.path.isabs(str(detector_model_from_profile))
+        else str(detector_model_from_profile)
+    )
+    if not Path(default_detector_model).exists():
+        default_detector_model = os.path.join(
+            detector_share,
+            "models",
+            "yolov8",
+            "yolo_runs",
+            "final_dataset_v1",
+            "weights",
+            "best.pt",
+        )
     competition_launch = os.path.join(
         get_package_share_directory("dualarm_bringup"),
         "launch",
@@ -50,9 +109,9 @@ def generate_launch_description():
             DeclareLaunchArgument("right_camera_fps", default_value="5.0"),
             DeclareLaunchArgument("right_camera_rotate_180", default_value="false"),
             DeclareLaunchArgument("publish_fake_joint_states", default_value="false"),
-            DeclareLaunchArgument("detector_executable", default_value="detector_pt_node.py"),
+            DeclareLaunchArgument("detector_executable", default_value=str(_profile_get(profile, "perception.detector.executable", "detector_pt_node.py"))),
             DeclareLaunchArgument("detector_model_path", default_value=default_detector_model),
-            DeclareLaunchArgument("detector_image_topic", default_value="/left_camera/color/image_raw"),
+            DeclareLaunchArgument("detector_image_topic", default_value=str(_profile_get(profile, "perception.detector.image_topic", "/left_camera/color/image_raw"))),
             DeclareLaunchArgument("detector_allowed_class_ids", default_value="[0,1,2,3,4,5]"),
             DeclareLaunchArgument("depth_require_depth_aligned_detections", default_value="false"),
             DeclareLaunchArgument("depth_require_camera_info_depth_frame", default_value="true"),
@@ -68,22 +127,22 @@ def generate_launch_description():
             DeclareLaunchArgument("table_min_inlier_ratio", default_value="0.45"),
             DeclareLaunchArgument("table_min_inliers", default_value="500"),
             DeclareLaunchArgument("pick_assist_rgb_overlay_topic", default_value="/perception/pick_assist/rgb_overlay"),
-            DeclareLaunchArgument("left_robot_ip", default_value="192.168.58.2"),
-            DeclareLaunchArgument("right_robot_ip", default_value="192.168.58.3"),
-            DeclareLaunchArgument("left_base_xyz", default_value="0 0.35 0"),
-            DeclareLaunchArgument("left_base_rpy", default_value="0 0 0"),
-            DeclareLaunchArgument("right_base_xyz", default_value="0 -0.35 0"),
-            DeclareLaunchArgument("right_base_rpy", default_value="0 0 0"),
-            DeclareLaunchArgument("left_robot_port", default_value="8080"),
-            DeclareLaunchArgument("right_robot_port", default_value="8080"),
-            DeclareLaunchArgument("robot_state_query_interval", default_value="0.05"),
+            DeclareLaunchArgument("left_robot_ip", default_value=str(_profile_get(profile, "robot.left.ip", "192.168.58.2"))),
+            DeclareLaunchArgument("right_robot_ip", default_value=str(_profile_get(profile, "robot.right.ip", "192.168.58.3"))),
+            DeclareLaunchArgument("left_base_xyz", default_value=_space_join(_profile_get(profile, "robot.left.base_xyz", []), "0 0.35 0")),
+            DeclareLaunchArgument("left_base_rpy", default_value=_space_join(_profile_get(profile, "robot.left.base_rpy", []), "0 0 0")),
+            DeclareLaunchArgument("right_base_xyz", default_value=_space_join(_profile_get(profile, "robot.right.base_xyz", []), "0 -0.35 0")),
+            DeclareLaunchArgument("right_base_rpy", default_value=_space_join(_profile_get(profile, "robot.right.base_rpy", []), "0 0 180")),
+            DeclareLaunchArgument("left_robot_port", default_value=str(_profile_get(profile, "robot.left.port", 8080))),
+            DeclareLaunchArgument("right_robot_port", default_value=str(_profile_get(profile, "robot.right.port", 8080))),
+            DeclareLaunchArgument("robot_state_query_interval", default_value=str(_profile_get(profile, "robot.state_query_interval_sec", 0.05))),
             DeclareLaunchArgument(
                 "left_gripper_port",
-                default_value="/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A7BIb114J19-if00-port0",
+                default_value=str(_profile_get(profile, "gripper.left.port", "auto")),
             ),
             DeclareLaunchArgument(
                 "right_gripper_port",
-                default_value="/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0",
+                default_value=str(_profile_get(profile, "gripper.right.port", "auto")),
             ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(competition_launch),

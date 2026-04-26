@@ -12,8 +12,8 @@
   - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
   - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
 - 下一步入口：
-  1. Wave 2 已完成并通过 `bash scripts/ci/software_check.sh`。
-  2. 下一步进入 Wave 3：新增 `config/profiles/competition_default.yaml`，让 launch、console API、detector/model path 和安全限幅逐步读 profile/canonical config。
+  1. Wave 3 已完成并通过 `bash scripts/ci/software_check.sh`。
+  2. 下一步进入 Wave 4：task order 校验、start gate 分离、对象选择策略、evidence 和 checkpoint。
 - Wave 1 当前证据：
   - py_compile 通过。
   - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过。
@@ -22,6 +22,10 @@
   - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/ops/competition_console_api/test/test_console_security.py`：`14 passed`。
   - `colcon test --base-paths packages --packages-select competition_console_api --event-handlers console_direct+`：通过。
   - `bash scripts/ci/software_check.sh`：通过，含前端 Playwright `2 passed`。
+- Wave 3 当前证据：
+  - `competition_core.launch.py --show-args` 显示 profile 默认值：右臂 yaw `180.0`，gripper port `auto`。
+  - `colcon build --base-paths packages --packages-select dualarm_bringup grasp_pose_generator`：通过。
+  - `bash scripts/ci/software_check.sh`：通过。
 
 ## 当前波次
 - Wave: 0-5
