@@ -1,6 +1,20 @@
 # Implementation Breakpoints
 
-更新时间: 2026-04-16
+更新时间: 2026-04-26
+
+## 2026-04-26 Software Engineering Hardening
+- 当前分支：`codex/software-engineering-hardening-20260426`
+- 当前波次：Wave 0-6 软件-only 工程化整改
+- 软件-only 护栏：`docs/operations/runbooks/software-only-refactor-guard.md`
+- 当前基线：
+  - 路径硬编码检查通过。
+  - README 覆盖检查缺 `packages/ops/competition_rviz_tools/README.md`。
+  - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
+  - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
+- 下一步入口：
+  1. 完成 Wave 0 提交。
+  2. Wave 1 修改 console API 默认监听、危险 API 鉴权、jog 限幅、stop/cancel mockable 入口。
+  3. Wave 2 建立软件-only pytest/CI 入口，避免测试继续空跑。
 
 ## 当前波次
 - Wave: 0-5

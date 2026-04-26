@@ -1,7 +1,24 @@
 {
-  "updated_at": "2026-04-16",
-  "task": "dual-arm repo reorg / README / path governance",
+  "updated_at": "2026-04-26",
+  "task": "dual-arm software engineering hardening / software-only Wave 0-6",
   "agents": [
+    {
+      "role": "software_hardening_orchestrator",
+      "status": "local_main_thread_active",
+      "summary": "主线程负责 Wave 0-6 实施、验证、提交和推送；subagent 仅用于只读 reviewer/verifier，使用后立即关闭。"
+    },
+    {
+      "role": "software_hardening_security_reviewer",
+      "agent_type": "reviewer",
+      "status": "planned_for_wave_1",
+      "summary": "Wave 1 完成安全入口、鉴权、stop/cancel 和限幅后开启，只读复核 P0/P1 风险。"
+    },
+    {
+      "role": "software_hardening_final_verifier",
+      "agent_type": "verifier",
+      "status": "planned_for_wave_6",
+      "summary": "Wave 6 最终验证前开启，只读检查最终 diff、测试证据和软件-only 边界。"
+    },
     {
       "role": "perception",
       "status": "resumable",
