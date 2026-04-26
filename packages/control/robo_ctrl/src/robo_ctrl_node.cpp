@@ -3,6 +3,7 @@
 #include "libfairino/robot_error.h"
 #include <thread>
 #include <chrono>
+#include <cmath>
 #include <Eigen/Dense>
 namespace robo_ctrl {
 
@@ -37,6 +38,29 @@ const char* explain_robot_error(int error_code) {
     }
 }
 
+bool validate_percent_value(double value, double max_value, const char* name, std::string& error_message) {
+    if (!std::isfinite(value)) {
+        error_message = std::string(name) + " 必须是有限数值";
+        return false;
+    }
+    if (value < 0.0 || value > max_value) {
+        error_message = std::string(name) + " 超出范围 [0, " + std::to_string(max_value) + "]";
+        return false;
+    }
+    return true;
+}
+
+bool validate_positive_percent_value(double value, double max_value, const char* name, std::string& error_message) {
+    if (!validate_percent_value(value, max_value, name, error_message)) {
+        return false;
+    }
+    if (value <= 0.0) {
+        error_message = std::string(name) + " 必须大于 0";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 // 修改构造函数，启动状态读取线程
@@ -50,12 +74,20 @@ RoboCtrlNode::RoboCtrlNode(const rclcpp::NodeOptions& options):
     this->declare_parameter<double>("state_query_interval", 0.01); // 状态查询间隔，默认10ms
     this->declare_parameter<std::string>("robot_name", "FRRobot");
     this->declare_parameter<bool>("force_auto_mode_before_motion", false);
+    this->declare_parameter<double>("motion_done_timeout_sec", 30.0);
+    this->declare_parameter<double>("max_velocity_percent", 100.0);
+    this->declare_parameter<double>("max_acceleration_percent", 100.0);
+    this->declare_parameter<double>("max_ovl_percent", 100.0);
 
     robot_ip_             = this->get_parameter("robot_ip").as_string();
     robot_port_           = this->get_parameter("robot_port").as_int();
     state_query_interval_ = this->get_parameter("state_query_interval").as_double();
     robot_name_           = this->get_parameter("robot_name").as_string();
     force_auto_mode_before_motion_ = this->get_parameter("force_auto_mode_before_motion").as_bool();
+    motion_done_timeout_sec_ = this->get_parameter("motion_done_timeout_sec").as_double();
+    max_velocity_percent_ = this->get_parameter("max_velocity_percent").as_double();
+    max_acceleration_percent_ = this->get_parameter("max_acceleration_percent").as_double();
+    max_ovl_percent_ = this->get_parameter("max_ovl_percent").as_double();
 
     // 初始化机器人连接
     if (!init_robot_connection()) {
@@ -139,7 +171,15 @@ bool RoboCtrlNode::init_robot_connection() {
         // 创建机器人对象
         robot_ = std::make_unique<FRRobot>();
 
-        // 连接到机器人 - RPC方法只接受IP地址参数
+        // Fairino SDK RPC 当前只接受 IP；robot_port 保留为 ROS 参数兼容入口。
+        if (robot_port_ != 8080) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "robot_port=%d 当前不会传入 Fairino RPC；SDK 连接仍只使用 IP: %s",
+                robot_port_,
+                robot_ip_.c_str()
+            );
+        }
         RCLCPP_INFO(this->get_logger(), "正在连接机器人，IP: %s", robot_ip_.c_str());
 
         int ret = robot_->RPC(robot_ip_.c_str());
@@ -206,6 +246,15 @@ void RoboCtrlNode::handle_robot_move(
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
+        return;
+    }
+
+    std::string validation_error;
+    if (!validate_positive_percent_value(request->velocity, max_velocity_percent_, "velocity", validation_error)
+        || !validate_positive_percent_value(
+            request->acceleration, max_acceleration_percent_, "acceleration", validation_error)) {
+        response->success = false;
+        response->message = validation_error;
         return;
     }
 
@@ -302,11 +351,21 @@ void RoboCtrlNode::handle_robot_move(
 
         // 等待机器人运动完成
         uint8_t motion_done = 0;
+        auto start_time = std::chrono::steady_clock::now();
+        const auto timeout_duration =
+            std::chrono::milliseconds(static_cast<int>(motion_done_timeout_sec_ * 1000.0));
         while (motion_done == 0) {
             ret = robot_->GetRobotMotionDone(&motion_done);
             if (ret != 0) {
                 response->success = false;
                 response->message = "获取机器人运动状态失败，错误码: " + std::to_string(ret);
+                return;
+            }
+
+            if (std::chrono::steady_clock::now() - start_time > timeout_duration) {
+                robot_->StopMotion();
+                response->success = false;
+                response->message = "等待机器人运动完成超时，已请求 StopMotion";
                 return;
             }
 
@@ -331,6 +390,21 @@ void RoboCtrlNode::handle_robot_move_cart(
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
+        return;
+    }
+
+    std::string validation_error;
+    if (!validate_positive_percent_value(request->velocity, max_velocity_percent_, "velocity", validation_error)
+        || !validate_positive_percent_value(
+            request->acceleration, max_acceleration_percent_, "acceleration", validation_error)
+        || !validate_positive_percent_value(request->ovl, max_ovl_percent_, "ovl", validation_error)) {
+        response->success = false;
+        response->message = validation_error;
+        return;
+    }
+    if (!std::isfinite(request->blend_time) || request->blend_time < -1.0 || request->blend_time > 500.0) {
+        response->success = false;
+        response->message = "blend_time 超出范围 [-1, 500]";
         return;
     }
 
@@ -446,11 +520,11 @@ void RoboCtrlNode::handle_robot_move_cart(
         // 等待机器人运动完成，带超时机制
         uint8_t motion_done         = 0;
         auto start_time             = std::chrono::steady_clock::now();
-        const auto timeout_duration = std::chrono::seconds(5); // 5秒超时
+        const auto timeout_duration =
+            std::chrono::milliseconds(static_cast<int>(motion_done_timeout_sec_ * 1000.0));
 
         while (motion_done == 0) {
             ret = robot_->GetRobotMotionDone(&motion_done);
-            // std::cout << (motion_done == 0) << std::endl;
             if (ret != 0) {
                 response->success = false;
                 response->message = "获取机器人运动状态失败，错误码: " + std::to_string(ret);
@@ -460,9 +534,10 @@ void RoboCtrlNode::handle_robot_move_cart(
             // 检查超时
             auto current_time = std::chrono::steady_clock::now();
             if (current_time - start_time > timeout_duration) {
-                RCLCPP_WARN(this->get_logger(), "等待机器人运动完成超时，返回失败");
+                robot_->StopMotion();
+                RCLCPP_WARN(this->get_logger(), "等待机器人运动完成超时，已请求 StopMotion");
                 response->success = false;
-                response->message = "等待机器人运动完成超时";
+                response->message = "等待机器人运动完成超时，已请求 StopMotion";
                 return;
             }
 
@@ -1011,8 +1086,6 @@ void RoboCtrlNode::robot_state_timer_callback() {
         // 2. 获取TCP位姿
         DescPose tcp_pose;
         ret = robot_->GetActualTCPPose(1, &tcp_pose); // 0表示阻塞调用
-        std::cout << "tcp_pose: " << tcp_pose.tran.x << ", " << tcp_pose.tran.y << ", " << tcp_pose.tran.z << std::endl;
-        std::cout << "tcp_pose: " << tcp_pose.rpy.rx << ", " << tcp_pose.rpy.ry << ", " << tcp_pose.rpy.rz << std::endl;
 
         if (ret == 0) {
             robot_state_msg->tcp_pose.x  = static_cast<double>(tcp_pose.tran.x);
@@ -1062,7 +1135,6 @@ void RoboCtrlNode::robot_state_timer_callback() {
         // 发布机器人状态
         if (has_data) {
             rclcpp::Time now = this->now();
-            std::cout << now.nanoseconds() << std::endl;
             robot_state_msg->header.stamp = now;
             robot_state_pub_->publish(std::move(robot_state_msg));
             joint_state_pub_->publish(std::move(joint_state_msg));
@@ -1509,10 +1581,20 @@ void RoboCtrlNode::handle_robot_set_speed(
     }
 
     try {
-        // 设置速度和加速度
-        robot_->SetSpeed(request->speed);
+        std::string validation_error;
+        if (!validate_percent_value(static_cast<double>(request->speed), max_velocity_percent_, "speed", validation_error)) {
+            response->success = false;
+            response->message = validation_error;
+            return;
+        }
+        int ret = robot_->SetSpeed(request->speed);
+        if (ret != 0) {
+            response->success = false;
+            response->message = "设置速度失败，错误码: " + std::to_string(ret) + "（" + explain_robot_error(ret) + "）";
+            return;
+        }
         response->success = true;
-        response->message = "设置速度和加速度成功";
+        response->message = "设置速度成功";
     } catch (const std::exception& e) {
         response->success = false;
         response->message = std::string("设置速度时发生异常: ") + e.what();

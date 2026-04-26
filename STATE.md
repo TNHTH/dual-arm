@@ -6,7 +6,7 @@
 - Wave: software-engineering-hardening / Wave 0-6
 - 分支：`codex/software-engineering-hardening-20260426`
 - 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
-- 状态：Wave 0 进行中；已完成分支创建和基线检查，正在把 review 发现转成可执行整改与后续验证入口。
+- 状态：Wave 1 进行中；Wave 0 已提交，安全入口、限幅、stop/timeout 和 driver 参数校验已完成本地构建验证，正在等待只读安全 reviewer 复核。
 
 ## 2026-04-26 Wave 0 基线
 - 分支与远端：
@@ -26,6 +26,23 @@
   - P0：默认网络暴露、危险 API 鉴权、stop/cancel/timeout 语义、速度/范围校验。
   - P1：测试从 0 tests 升级为可重复软件回归；配置从硬编码迁到 profile/YAML；任务成功标准不能无证据默认为成功。
   - P2：大文件职责拆分、README/runbook/API/artifact 文档补齐、旧路径与旧说明清理。
+
+## 2026-04-26 Wave 1 安全基线
+- 已完成：
+  - `competition_console_api` 默认监听 `127.0.0.1`，外部监听需要显式 `allow_external_host=true`。
+  - 危险 HTTP API 增加 token 中间件，覆盖 bringup、control、tasks、acceptance run、presets、action groups、recordings。
+  - 默认拒绝 `start_hardware=true`，除非显式设置 `allow_hardware_bringup=true`。
+  - jog 增加单步、累计、持续时间、周期、速度、加速度限制。
+  - jog timeout/stop 请求 `RobotServoJoint(command_type=1)`，形成 mockable stop 入口。
+  - `robo_ctrl` 增加 velocity/acceleration/ovl/blend/SetSpeed 校验和 motion_done timeout；timeout 时请求 `StopMotion`。
+  - 清理 `robo_ctrl_node.cpp` 高频 `std::cout`。
+- 验证：
+  - `/usr/bin/python3 -m py_compile ...competition_console_api_node.py ...competition_console_static_server.py` 通过。
+  - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过，`2 packages finished`。
+  - `rg -n "0\\.0\\.0\\.0|std::cout|print\\(" packages/ops/competition_console_api/scripts packages/control/robo_ctrl/src/robo_ctrl_node.cpp` 无匹配。
+- 待办：
+  - Wave 1 reviewer 复核后提交。
+  - Wave 2 为危险 API 鉴权、jog 限幅、stop timeout 补可重复测试。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：

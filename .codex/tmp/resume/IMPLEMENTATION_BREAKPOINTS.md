@@ -12,9 +12,13 @@
   - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
   - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
 - 下一步入口：
-  1. 完成 Wave 0 提交。
-  2. Wave 1 修改 console API 默认监听、危险 API 鉴权、jog 限幅、stop/cancel mockable 入口。
+  1. 等待并关闭 Wave 1 安全 reviewer subagent。
+  2. Wave 1 无 P0/P1 后提交 `fix: harden software-only safety gates`。
   3. Wave 2 建立软件-only pytest/CI 入口，避免测试继续空跑。
+- Wave 1 当前证据：
+  - py_compile 通过。
+  - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过。
+  - console API / static server / robo_ctrl_node.cpp 中已无 `0.0.0.0`、`std::cout`、`print(` 匹配。
 
 ## 当前波次
 - Wave: 0-5

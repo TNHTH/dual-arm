@@ -8,6 +8,13 @@
 - `pytest --collect-only tests` failed because the current shell has no `pytest` executable.
 - `colcon list --base-paths packages --names-only | sort` found 27 ROS packages.
 - The repair plan is execution-first: Wave 1 safety gates, Wave 2 tests/CI, Wave 3 configuration, Wave 4 task semantics, Wave 5 module split, Wave 6 docs/repo hygiene/final push.
+- Wave 1 implementation evidence:
+  - Console API default host is local-only and dangerous routes are guarded by token middleware.
+  - Hardware bringup is blocked by default in software-only mode.
+  - Jog commands have single-step, cumulative, duration, interval, velocity, and acceleration limits.
+  - Jog stop/timeout requests a mockable servo stop path.
+  - `robo_ctrl` validates motion percentages and requests `StopMotion` on motion-done timeout.
+  - Affected packages `competition_console_api` and `robo_ctrl` build successfully.
 
 2026-04-15 baseline:
 - Current branch `test` is clean.
