@@ -1,5 +1,6 @@
 #include "libfairino/robot.h"
 #include "robo_ctrl/robo_ctrl_node.hpp"
+#include "robo_ctrl/safety_limits.hpp"
 #include "libfairino/robot_error.h"
 #include <thread>
 #include <chrono>
@@ -36,29 +37,6 @@ const char* explain_robot_error(int error_code) {
         default:
             return "未分类错误";
     }
-}
-
-bool validate_percent_value(double value, double max_value, const char* name, std::string& error_message) {
-    if (!std::isfinite(value)) {
-        error_message = std::string(name) + " 必须是有限数值";
-        return false;
-    }
-    if (value < 0.0 || value > max_value) {
-        error_message = std::string(name) + " 超出范围 [0, " + std::to_string(max_value) + "]";
-        return false;
-    }
-    return true;
-}
-
-bool validate_positive_percent_value(double value, double max_value, const char* name, std::string& error_message) {
-    if (!validate_percent_value(value, max_value, name, error_message)) {
-        return false;
-    }
-    if (value <= 0.0) {
-        error_message = std::string(name) + " 必须大于 0";
-        return false;
-    }
-    return true;
 }
 
 }  // namespace
@@ -250,8 +228,8 @@ void RoboCtrlNode::handle_robot_move(
     }
 
     std::string validation_error;
-    if (!validate_positive_percent_value(request->velocity, max_velocity_percent_, "velocity", validation_error)
-        || !validate_positive_percent_value(
+    if (!safety::validate_positive_percent_value(request->velocity, max_velocity_percent_, "velocity", validation_error)
+        || !safety::validate_positive_percent_value(
             request->acceleration, max_acceleration_percent_, "acceleration", validation_error)) {
         response->success = false;
         response->message = validation_error;
@@ -394,17 +372,17 @@ void RoboCtrlNode::handle_robot_move_cart(
     }
 
     std::string validation_error;
-    if (!validate_positive_percent_value(request->velocity, max_velocity_percent_, "velocity", validation_error)
-        || !validate_positive_percent_value(
+    if (!safety::validate_positive_percent_value(request->velocity, max_velocity_percent_, "velocity", validation_error)
+        || !safety::validate_positive_percent_value(
             request->acceleration, max_acceleration_percent_, "acceleration", validation_error)
-        || !validate_positive_percent_value(request->ovl, max_ovl_percent_, "ovl", validation_error)) {
+        || !safety::validate_positive_percent_value(request->ovl, max_ovl_percent_, "ovl", validation_error)) {
         response->success = false;
         response->message = validation_error;
         return;
     }
-    if (!std::isfinite(request->blend_time) || request->blend_time < -1.0 || request->blend_time > 500.0) {
+    if (!safety::validate_blend_time(request->blend_time, validation_error)) {
         response->success = false;
-        response->message = "blend_time 超出范围 [-1, 500]";
+        response->message = validation_error;
         return;
     }
 
@@ -1582,7 +1560,7 @@ void RoboCtrlNode::handle_robot_set_speed(
 
     try {
         std::string validation_error;
-        if (!validate_percent_value(static_cast<double>(request->speed), max_velocity_percent_, "speed", validation_error)) {
+        if (!safety::validate_percent_value(static_cast<double>(request->speed), max_velocity_percent_, "speed", validation_error)) {
             response->success = false;
             response->message = validation_error;
             return;

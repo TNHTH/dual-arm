@@ -11,6 +11,7 @@ install(PROGRAMS
 
 install(FILES
   scripts/competition_console_security.py
+  scripts/process_manager.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

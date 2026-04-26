@@ -37,6 +37,7 @@ from competition_console_security import (
     is_loopback_host,
     validate_jog_command,
 )
+from process_manager import is_process_running, running_process_pid
 
 try:
     from fastapi import FastAPI, Request
@@ -271,16 +272,16 @@ class CompetitionConsoleApiNode(Node):
                 "profile": self._profile,
                 "checkpoint_root": str(self._checkpoint_root),
                 "latest_checkpoint_exists": (self._checkpoint_root / "latest.json").exists(),
-                "core_running": self._core_process is not None and self._core_process.poll() is None,
-                "core_pid": self._core_process.pid if self._core_process and self._core_process.poll() is None else None,
+                "core_running": is_process_running(self._core_process),
+                "core_pid": running_process_pid(self._core_process),
                 "launch_log": str(self._launch_log),
                 "last_bringup_request": self._last_bringup_request,
             }
 
         @app.post("/api/bringup/start")
         async def bringup_start(request: BringupRequest):
-            if self._core_process is not None and self._core_process.poll() is None:
-                return {"started": False, "status": "already_running", "pid": self._core_process.pid}
+            if is_process_running(self._core_process):
+                return {"started": False, "status": "already_running", "pid": running_process_pid(self._core_process)}
             return self._start_core_process(request)
 
         @app.post("/api/bringup/restart")
@@ -290,7 +291,7 @@ class CompetitionConsoleApiNode(Node):
 
         @app.post("/api/bringup/stop")
         async def bringup_stop():
-            if self._core_process is None or self._core_process.poll() is not None:
+            if not is_process_running(self._core_process):
                 return {"stopped": False, "status": "not_running"}
             self._stop_core_process()
             return {"stopped": True, "status": "stopped"}
@@ -300,7 +301,7 @@ class CompetitionConsoleApiNode(Node):
             return {
                 "left_robot": self._robot_state_to_dict(self._left_robot_state),
                 "right_robot": self._robot_state_to_dict(self._right_robot_state),
-                "core_running": self._core_process is not None and self._core_process.poll() is None,
+                "core_running": is_process_running(self._core_process),
                 "jog_state": self._snapshot_jog_sessions(),
             }
 

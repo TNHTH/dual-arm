@@ -11,6 +11,7 @@ install(PROGRAMS
 
 install(FILES
   scripts/primitive_contract.py
+  scripts/primitive_evidence.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

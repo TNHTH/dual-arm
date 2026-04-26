@@ -13,11 +13,13 @@
 - Wave 3 用 profile 先收拢 launch 默认值，比直接重写所有节点读取配置风险更低；show-args 是适合软件-only 的验证证据。
 - Wave 4 把比赛任务序列和对象排序抽成纯 Python helper 后，可以不用启动 ROS graph 就验证关键比赛契约。
 - 在 evidence 不完整时显式失败，比继续返回 motion success 更适合比赛任务链；否则上层会把“动作执行了”误判成“任务成功了”。
+- Wave 5 拆大文件时先抽纯 helper、保留入口兼容，是在时间有限且需要按 Wave 提交时的低风险路径。
 
 ### Waste
 - 当前系统缺少 `pytest` 命令，说明测试入口不能假设全局工具已安装；Wave 2 需要提供明确依赖说明或脚本降级提示。
 - Playwright 第一次失败来自文本断言命中多个元素；API-backed UI 测试应优先断言 mock 调用计数或 role 精确选择器。
 - 包内测试文件名与顶层测试同名会触发 pytest import mismatch；跨目录测试必须用唯一 basename。
+- reviewer subagent 第二次超时说明长只读审查也可能不稳定；必须有本地主线程验证 fallback，不把提交节奏依赖在 subagent 返回上。
 
 ### Trigger Redesign
 - signal：用户要求 review 后直接修复/重构，并要求提交推送。
