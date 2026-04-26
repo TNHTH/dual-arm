@@ -5,7 +5,12 @@
     {
       "role": "software_hardening_orchestrator",
       "status": "local_main_thread_active",
-      "summary": "主线程负责 Wave 0-6 实施、验证、提交和推送；subagent 仅用于只读 reviewer/verifier，使用后立即关闭。"
+      "summary": "主线程负责 Wave 0-6 实施、验证、提交和推送；subagent 仅用于非阻塞、窄范围、只读 reviewer/verifier，使用后立即关闭。宽泛 final review 改走本地 checklist。"
+    },
+    {
+      "role": "subagent_timeout_policy",
+      "status": "implemented",
+      "summary": "已新增 docs/operations/runbooks/subagent-timeout-policy.md，并更新 AGENTS.md、engineering-process-standards.md、auto-pipeline skill、wave-executor skill；同一任务两次超时后停用非必要 subagent。"
     },
     {
       "role": "software_hardening_security_reviewer",

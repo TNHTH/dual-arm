@@ -134,6 +134,21 @@
 - 待办：
   - Wave 6 提交和 push。
 
+## 2026-04-26 Subagent Timeout 复盘优化
+- 事实：
+  - Wave 1 security reviewer、Wave 5 reviewer、Wave 6 final verifier 均超时，且均已关闭。
+  - 超时没有造成未关闭 subagent，但等待时间浪费明显，说明宽泛 reviewer/verifier 不适合直接委派。
+- 已完成治理：
+  - 新增 `docs/operations/runbooks/subagent-timeout-policy.md`。
+  - 更新 `AGENTS.md`，规定 subagent 只能作为非阻塞 sidecar，超时即关闭并执行本地 fallback。
+  - 更新 `docs/operations/runbooks/engineering-process-standards.md`，加入等待预算、两次超时停用非必要 subagent、本地 checklist 规则。
+  - 更新 shared skills：`auto-pipeline` 与 `wave-executor` 增加 subagent timeout control。
+  - 更新 `.codex/tmp/error-trace/ERROR_TRACE.md` Incident 32 和复盘记录。
+- 后续规则：
+  - reviewer/verifier subagent 不再接“完整最终审查”宽泛任务；先拆成本地 checklist，再委派单一风险点。
+  - reviewer/verifier 只等待一次，预算 120-180 秒；窄范围检查 60-90 秒。
+  - 同一任务两次 subagent 超时后，停止使用非必要 subagent。
+
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：
   - 已在隔离 worktree `codex/dual-arm-reorg` 中完成结构重构，不直接改当前脏的 `test` 工作树
