@@ -13,7 +13,11 @@
   <depend>ament_index_python</depend>
   <depend>rclpy</depend>
   <depend>dualarm_interfaces</depend>
+  <depend>epg50_gripper_ros</depend>
+  <depend>robo_ctrl</depend>
   <depend>std_msgs</depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

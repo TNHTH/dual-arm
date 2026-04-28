@@ -1,7 +1,7 @@
 # Engineering Process Standards
 
 创建时间：2026-04-16
-更新时间：2026-04-16
+更新时间：2026-04-26
 
 ## 适用范围
 
@@ -89,6 +89,13 @@ pgrep -af 'ros2 launch|move_group|fairino_dualarm_planner|competition_console_ap
 - 写任务 502 时立即降级主线程，不阻塞 Wave
 - subagent 只读审查结果必须回写到 `SUBAGENT_REGISTRY.json`
 - 不允许用 subagent 的“建议”替代实际验收
+- subagent 只能承担非阻塞 sidecar；不要把整仓最终审查或最终验收交给一个宽泛 subagent
+- reviewer/verifier subagent 默认只等待一次，预算 120-180 秒；窄范围检查预算 60-90 秒
+- subagent 超时后必须立即关闭，并记录 agent id、角色、scope、timeout、关闭结果和本地 fallback 证据
+- 同一 Wave 同一角色超时后，不再重复开启同类宽泛 subagent
+- 同一任务出现两次 subagent 超时后，后续非必要 subagent 全部停用，改走本地主线程 review/verify checklist
+
+详细策略见 `docs/operations/runbooks/subagent-timeout-policy.md`。
 
 ## 7. 目录迁移规范
 

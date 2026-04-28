@@ -1,6 +1,75 @@
 # Implementation Breakpoints
 
-更新时间: 2026-04-16
+更新时间: 2026-04-28
+
+## 2026-04-28 v1 Hardware-Interface Hardening
+- 当前波次：v1-hardware-interface-hardening
+- 状态：implemented_and_verified_software_only
+- 代码范围：
+  - interfaces: `Detection2D` / `SceneObject` / `ExecutePrimitive`
+  - launch: `competition.launch.py` / core / integrated
+  - perception: detector_adapter, depth_handler, ball_basket_pose_estimator, table_surface_detector, scene_fusion
+  - planning: planning_scene_sync subframes, fairino_dualarm_planner launch/default freshness
+  - control: execution_adapter planner-first Cartesian, vendor direct double gate, guarded_grasp
+  - tasks: direct_grasp -> guarded_grasp, pouring table gate
+  - ops: new evidence_manager package
+  - docs/tests: v1 runbook and `tests/unit/test_v1_hardening_contracts.py`
+- 验证证据：
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py` -> `28 passed`
+  - `colcon build --base-paths packages --packages-select dualarm_interfaces dualarm_bringup detector_adapter depth_handler scene_fusion planning_scene_sync fairino_dualarm_planner execution_adapter dualarm_task_manager evidence_manager` -> `10 packages finished`
+  - `ros2 interface show` 三个接口确认新字段
+  - `ros2 launch dualarm_bringup competition_core.launch.py --show-args` 通过
+  - 非法 depth：`active_depth_camera:=right right_camera_enable_depth:=false` fail-fast
+  - `bash scripts/ci/software_check.sh` 通过
+- 未计入通过证据：
+  - `smoke_depth_handler_future_tf.py` 本轮未正常退出，已 kill 残留并记录到 ERROR_TRACE Incident 31。
+- 下一步：
+  - 硬件联调前先 clean launch smoke，保持 `start_hardware=false`，再由操作员明确切换。
+  - v2 单独处理人体安全、真实 fill/spill、dense occupancy、标定验收、6D pose refine。
+
+## 2026-04-26 Software Engineering Hardening
+- 当前分支：`codex/software-engineering-hardening-20260426`
+- 当前波次：Wave 0-6 软件-only 工程化整改
+- 软件-only 护栏：`docs/operations/runbooks/software-only-refactor-guard.md`
+- 当前基线：
+  - 路径硬编码检查通过。
+  - README 覆盖检查缺 `packages/ops/competition_rviz_tools/README.md`。
+  - `pytest --collect-only tests` 在当前 shell 中失败，原因是 `pytest` 命令不存在。
+  - `colcon list --base-paths packages --names-only | sort` 发现 27 个包。
+- 下一步入口：
+  1. Wave 6 文档、仓库卫生与本地主验证已完成。
+  2. 下一步执行 staged diff 敏感信息扫描、最终 verifier subagent、Wave 6 提交和 push。
+- Wave 1 当前证据：
+  - py_compile 通过。
+  - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过。
+  - console API / static server / robo_ctrl_node.cpp 中已无 `0.0.0.0`、`std::cout`、`print(` 匹配。
+- Wave 2 当前证据：
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/ops/competition_console_api/test/test_console_security.py`：`14 passed`。
+  - `colcon test --base-paths packages --packages-select competition_console_api --event-handlers console_direct+`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，含前端 Playwright `2 passed`。
+- Wave 3 当前证据：
+  - `competition_core.launch.py --show-args` 显示 profile 默认值：右臂 yaw `180.0`，gripper port `auto`。
+  - `colcon build --base-paths packages --packages-select dualarm_bringup grasp_pose_generator`：通过。
+  - `bash scripts/ci/software_check.sh`：通过。
+- Wave 4 当前证据：
+  - 新增 `task_contract.py`，任务序列只允许 `handover,pouring`，对象选择排序可单测。
+  - `WAIT_START` 默认拒绝直接 action goal，start gate 负责在外部条件满足后发送授权 goal。
+  - `execution_adapter` 对 missing object 不再返回成功，`pour_tilt` 缺 evidence 返回 `unverified_evidence`。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`17 passed`。
+  - `colcon test --base-paths packages --packages-select dualarm_task_manager --event-handlers console_direct+`：通过。
+  - `bash scripts/ci/software_check.sh`：通过。
+- Wave 5 当前证据：
+  - 新增 `process_manager.py`、`primitive_evidence.py`、`safety_limits.hpp`、`apiClient.ts`，原入口和 ROS 名称保持不变。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py packages/ops/competition_console_api/test/test_console_security.py`：`26 passed`。
+  - `colcon build --base-paths packages --packages-select competition_console_api execution_adapter robo_ctrl`：通过。
+  - `npm run build`：通过。
+  - `bash scripts/ci/software_check.sh`：通过。
+  - Wave 5 reviewer subagent 120 秒未返回，已关闭并记录到 `SUBAGENT_REGISTRY.json`。
+- Wave 6 当前证据：
+  - 新增 runtime architecture、safety runbook、API interfaces、artifact manifest。
+  - 根 README、control package README、docs index、stale SETUP 历史标记和 `.gitignore` 已更新。
+  - `bash scripts/ci/software_check.sh`：通过。
+  - `colcon test-result --all`：`11 tests, 0 errors, 0 failures, 0 skipped`。
 
 ## 当前波次
 - Wave: 0-5

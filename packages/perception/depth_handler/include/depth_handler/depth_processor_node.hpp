@@ -110,6 +110,7 @@ private:
     std::string visualization_topic_;
     std::string table_scene_topic_;
     std::string target_frame_;
+    std::string source_name_;
     bool enable_visualization_ {true};
     bool enable_pointcloud_ {true};
     bool allow_source_frame_fallback_ {false};

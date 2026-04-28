@@ -1,7 +1,42 @@
 {
-  "updated_at": "2026-04-16",
-  "task": "dual-arm repo reorg / README / path governance",
+  "updated_at": "2026-04-28",
+  "task": "dual-arm v1 hardware-interface hardening",
   "agents": [
+    {
+      "role": "v1_hardware_interface_hardening",
+      "status": "local_main_thread_completed",
+      "summary": "未开启 subagent；主线程完成接口、launch、感知字段、PlanningScene subframes、planner 参数、execution_adapter、task_manager、evidence_manager、测试与验证。"
+    },
+    {
+      "role": "software_hardening_orchestrator",
+      "status": "local_main_thread_active",
+      "summary": "主线程负责 Wave 0-6 实施、验证、提交和推送；subagent 仅用于非阻塞、窄范围、只读 reviewer/verifier，使用后立即关闭。宽泛 final review 改走本地 checklist。"
+    },
+    {
+      "role": "subagent_timeout_policy",
+      "status": "implemented",
+      "summary": "已新增 docs/operations/runbooks/subagent-timeout-policy.md，并更新 AGENTS.md、engineering-process-standards.md、auto-pipeline skill、wave-executor skill；同一任务两次超时后停用非必要 subagent。"
+    },
+    {
+      "role": "software_hardening_security_reviewer",
+      "agent_type": "reviewer",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 1 完成后已开启只读 reviewer，但 120 秒未返回；已及时关闭，主线程用 py_compile、colcon build、diff check 和静态搜索完成本地复核。"
+    },
+    {
+      "id": "019dc803-c68d-74b1-97b1-c345c8bf088b",
+      "role": "software_hardening_wave5_reviewer",
+      "agent_type": "reviewer",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 5 完成第一轮模块拆分后开启只读 reviewer，但 120 秒未返回；已及时关闭。主线程用 py_compile、pytest、npm build、colcon build 和 software_check 完成本地复核。"
+    },
+    {
+      "role": "software_hardening_final_verifier",
+      "agent_type": "verifier",
+      "id": "019dc80c-b7bc-7a80-b3e5-dd13b1dc27fc",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 6 最终 staged diff 后已开启只读 verifier，但 180 秒未返回；已及时关闭。主线程完成 readme/path checks、software_check、colcon test-result、git diff --check 和 staged sensitive scan。"
+    },
     {
       "role": "perception",
       "status": "resumable",

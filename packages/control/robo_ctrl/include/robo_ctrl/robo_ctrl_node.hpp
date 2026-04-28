@@ -95,6 +95,10 @@ private:
     bool is_connected_;
     std::string robot_name_;
     bool force_auto_mode_before_motion_ = false;
+    double motion_done_timeout_sec_ = 30.0;
+    double max_velocity_percent_ = 100.0;
+    double max_acceleration_percent_ = 100.0;
+    double max_ovl_percent_ = 100.0;
 
     // 服务
     rclcpp::Service<robo_ctrl::srv::RobotMove>::SharedPtr robot_move_service_;

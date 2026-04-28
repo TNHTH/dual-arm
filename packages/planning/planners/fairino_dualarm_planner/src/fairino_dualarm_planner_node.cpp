@@ -61,9 +61,11 @@ public:
     declare_parameter("scene_topic", "/scene_fusion/scene_objects");
     declare_parameter("planning_time", 5.0);
     declare_parameter("planning_attempts", 10);
-    declare_parameter("scene_age_limit_ms", 200);
+    declare_parameter("scene_age_limit_ms", 800);
     declare_parameter("robot_state_age_limit_ms", 100);
     declare_parameter("dual_arm_half_span", 0.08);
+
+    planner_service_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
     scene_sub_ = create_subscription<dualarm_interfaces::msg::SceneObjectArray>(
       get_parameter("scene_topic").as_string(),
@@ -78,19 +80,29 @@ public:
 
     plan_pose_srv_ = create_service<PlanPose>(
       "/planning/plan_pose",
-      std::bind(&FairinoDualArmPlannerNode::handle_plan_pose, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&FairinoDualArmPlannerNode::handle_plan_pose, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default,
+      planner_service_group_);
     plan_cartesian_srv_ = create_service<PlanCartesian>(
       "/planning/plan_cartesian",
-      std::bind(&FairinoDualArmPlannerNode::handle_plan_cartesian, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&FairinoDualArmPlannerNode::handle_plan_cartesian, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default,
+      planner_service_group_);
     plan_joint_srv_ = create_service<PlanJoint>(
       "/planning/plan_joint",
-      std::bind(&FairinoDualArmPlannerNode::handle_plan_joint, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&FairinoDualArmPlannerNode::handle_plan_joint, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default,
+      planner_service_group_);
     plan_dual_pose_srv_ = create_service<PlanDualPose>(
       "/planning/plan_dual_pose",
-      std::bind(&FairinoDualArmPlannerNode::handle_plan_dual_pose, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&FairinoDualArmPlannerNode::handle_plan_dual_pose, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default,
+      planner_service_group_);
     plan_dual_joint_srv_ = create_service<PlanDualJoint>(
       "/planning/plan_dual_joint",
-      std::bind(&FairinoDualArmPlannerNode::handle_plan_dual_joint, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&FairinoDualArmPlannerNode::handle_plan_dual_joint, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default,
+      planner_service_group_);
 
     RCLCPP_INFO(get_logger(), "fairino_dualarm_planner C++ MoveIt 节点已启动");
   }
@@ -472,6 +484,7 @@ private:
   rclcpp::Subscription<dualarm_interfaces::msg::SceneObjectArray>::SharedPtr scene_sub_;
   rclcpp::Subscription<robo_ctrl::msg::RobotState>::SharedPtr left_state_sub_;
   rclcpp::Subscription<robo_ctrl::msg::RobotState>::SharedPtr right_state_sub_;
+  rclcpp::CallbackGroup::SharedPtr planner_service_group_;
   rclcpp::Service<PlanPose>::SharedPtr plan_pose_srv_;
   rclcpp::Service<PlanCartesian>::SharedPtr plan_cartesian_srv_;
   rclcpp::Service<PlanJoint>::SharedPtr plan_joint_srv_;

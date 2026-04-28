@@ -84,7 +84,7 @@
   - 结果：增量构建恢复通过。
 
 ### Actions Taken
-- 确认用户所说 `dualarms_ws` 在当前仓库中对应为 `/home/gwh/dashgo_rl_project/workspaces/dual-arm`。
+- 确认用户所说 `dualarms_ws` 在当前仓库中对应为 `/home/gwh/dual-arm`。
 - 阅读工作区规则文件 `AGENTS.md`。
 - 阅读顶层状态与说明文件：`STATE.md`、`README.md`、`SETUP_2026-04-15.md`。
 - 盘点 `src/`、`arm_planner/`、`robo_ctrl/`、`tools/` 的文件与包分布。

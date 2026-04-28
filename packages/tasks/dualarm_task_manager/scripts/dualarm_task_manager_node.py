@@ -25,6 +25,31 @@ from behaviors.handover_boundary import HANDOVER_BEHAVIOR_STATES, build_handover
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory, RunCompetition
 from dualarm_interfaces.msg import GraspTarget, SceneObject, SceneObjectArray, TaskEvent
 from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGripper, SetObjectInteraction, TaskCommand
+from task_contract import normalize_task_sequence, parse_task_sequence, rank_scene_objects
+
+
+POURING_TABLE_REQUIRED_STATES = {
+    "SCAN_TABLE_OBJECTS",
+    "ASSIGN_BOTTLES_AND_CUPS",
+    "GRASP_WATER_BOTTLE_BODY",
+    "GRASP_WATER_CAP",
+    "OPEN_WATER_CAP",
+    "PLACE_WATER_CAP",
+    "GRASP_WATER_CUP",
+    "PLAN_WATER_PREPOUR",
+    "EXECUTE_WATER_POUR",
+    "PLACE_WATER_BOTTLE",
+    "PLACE_WATER_CUP",
+    "GRASP_COLA_BOTTLE_BODY",
+    "GRASP_COLA_CAP",
+    "OPEN_COLA_CAP",
+    "PLACE_COLA_CAP",
+    "GRASP_COLA_CUP",
+    "PLAN_COLA_PREPOUR",
+    "EXECUTE_COLA_POUR",
+    "PLACE_COLA_BOTTLE",
+    "PLACE_COLA_CUP",
+}
 
 
 class DualArmTaskManagerNode(Node):
@@ -34,6 +59,9 @@ class DualArmTaskManagerNode(Node):
         repo_root = Path(get_package_prefix("dualarm_task_manager")).parent.parent
         self.declare_parameter("checkpoint_dir", str(repo_root / ".artifacts" / "checkpoints" / "competition"))
         self.declare_parameter("workspace_profiles_file", str(repo_root / "config" / "competition" / "workspace_profiles.yaml"))
+        self.declare_parameter("reobserve_once_enabled", True)
+        self.declare_parameter("reobserve_once_timeout_sec", 1.5)
+        self.declare_parameter("reobserve_once_interval_sec", 0.05)
 
         self._scene_cache = SceneObjectArray()
         self._grasp_targets: Dict[str, GraspTarget] = {}
@@ -45,13 +73,18 @@ class DualArmTaskManagerNode(Node):
         self._last_behavior_call = None
         self._start_immediately = False
         self._start_gate_source = ""
+        self._config_fingerprint = ""
         self._checkpoint_dir = Path(str(self.get_parameter("checkpoint_dir").value))
         self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
         (self._checkpoint_dir / "runs").mkdir(parents=True, exist_ok=True)
         workspace_profiles_file = Path(str(self.get_parameter("workspace_profiles_file").value)).expanduser().resolve()
+        self._config_fingerprint = self._file_sha256(workspace_profiles_file)
         workspace_profiles = yaml.safe_load(workspace_profiles_file.read_text(encoding="utf-8"))
         active_profile_name = str(workspace_profiles.get("active_profile", "competition_default"))
         self._active_workspace_profile = workspace_profiles.get("profiles", {}).get(active_profile_name, {})
+        self._reobserve_once_enabled = bool(self.get_parameter("reobserve_once_enabled").value)
+        self._reobserve_once_timeout_sec = float(self.get_parameter("reobserve_once_timeout_sec").value)
+        self._reobserve_once_interval_sec = float(self.get_parameter("reobserve_once_interval_sec").value)
 
         self._event_publisher = self.create_publisher(TaskEvent, "/task_manager/events", 10)
         self.create_subscription(SceneObjectArray, "/scene_fusion/scene_objects", self._handle_scene, 10)
@@ -107,6 +140,9 @@ class DualArmTaskManagerNode(Node):
             return response
         if command_id == "home_right":
             response.success, response.message = self._move_arm_to_named_pose("right_home_pose")
+            return response
+        if command_id == "reobserve_once":
+            response.success, response.message = self._reobserve_once("manual_command", object_id)
             return response
         if command_id == "preview_pick":
             response.success, response.message = self._preview_pick(object_id)
@@ -174,7 +210,7 @@ class DualArmTaskManagerNode(Node):
         self._last_plan_digest = ""
         self._last_behavior_call = None
         self._start_immediately = goal_handle.request.start_immediately
-        self._start_gate_source = "auto_start" if goal_handle.request.start_immediately else "action_goal"
+        self._start_gate_source = "start_gate_action" if goal_handle.request.start_immediately else "direct_action_goal"
         if goal_handle.request.resume_from_checkpoint:
             checkpoint_state = self._load_checkpoint(goal_handle.request.checkpoint_id)
             if checkpoint_state is None:
@@ -188,8 +224,17 @@ class DualArmTaskManagerNode(Node):
             run_id = checkpoint_state["run_id"]
             self._assignments = dict(checkpoint_state.get("assignments", {}))
 
-        sequence = self._normalize_task_sequence(goal_handle.request.requested_order or self.get_parameter("task_sequence").value)
-        checkpoint_sequence = self._normalize_task_sequence(str(checkpoint_state.get("task_sequence", ""))) if checkpoint_state else ""
+        try:
+            sequence = self._normalize_task_sequence(goal_handle.request.requested_order or self.get_parameter("task_sequence").value)
+            checkpoint_sequence = self._normalize_task_sequence(str(checkpoint_state.get("task_sequence", ""))) if checkpoint_state else ""
+        except ValueError as exc:
+            result = RunCompetition.Result()
+            result.success = False
+            result.message = f"task_sequence 非法: {exc}"
+            result.final_checkpoint_id = goal_handle.request.checkpoint_id
+            result.resume_hint = "请按双臂比赛合同设置 task_sequence，例如 handover,pouring"
+            goal_handle.abort()
+            return result
         if checkpoint_sequence and checkpoint_sequence != sequence:
             if goal_handle.request.allow_reconcile:
                 self.get_logger().warn(
@@ -323,6 +368,11 @@ class DualArmTaskManagerNode(Node):
         if state in {"BOOT", "SELF_CHECK", "LOAD_CALIBRATION", "HOME_ARMS", "WAIT_START", "PARK", "DONE"}:
             return self._execute_orchestration_gate(state)
 
+        if state in POURING_TABLE_REQUIRED_STATES:
+            table_ok, table_detail = self._require_table_surface()
+            if not table_ok:
+                return False, table_detail
+
         if state == "SCAN_BASKET":
             return self._require_object("basket", allowed_states=("stable",))
         if state == "WAIT_BALL_1_STABLE":
@@ -333,7 +383,7 @@ class DualArmTaskManagerNode(Node):
             ok1, _ = self._require_object("water_bottle", allowed_states=("stable",))
             ok2, _ = self._require_object("cola_bottle", allowed_states=("stable",))
             cups = self._objects_by_prefix("cup", allowed_states=("stable",))
-            return ok1 and ok2 and len(cups) >= 2, f"water={ok1}, cola={ok2}, cups={len(cups)}"
+            return ok1 and ok2 and len(cups) >= 2, f"table=true, water={ok1}, cola={ok2}, cups={len(cups)}"
         if state == "ASSIGN_BOTTLES_AND_CUPS":
             return self._assign_table_objects()
 
@@ -413,10 +463,10 @@ class DualArmTaskManagerNode(Node):
             return self._verify_no_live_allocations("HOME_ARMS")
 
         if state == "WAIT_START":
-            if self._start_gate_source == "auto_start":
-                return True, "WAIT_START 通过：start_immediately=true"
-            if self._start_gate_source == "action_goal":
-                return True, "WAIT_START 通过：已收到显式 RunCompetition goal，视为外部开赛 gate 已满足"
+            if self._start_gate_source == "start_gate_action":
+                return True, "WAIT_START 通过：start gate 已发送授权 RunCompetition goal"
+            if self._start_gate_source == "direct_action_goal":
+                return False, "WAIT_START 拒绝直接 action goal；请通过 /competition/start_signal 或 mock/dev 显式 start gate"
             return False, "WAIT_START 缺少合法开赛来源"
 
         if state in {"PARK", "DONE"}:
@@ -427,9 +477,24 @@ class DualArmTaskManagerNode(Node):
     def _require_object(self, semantic_type: str, allowed_states: Tuple[str, ...] = ("stable", "reserved", "attached")) -> Tuple[bool, str]:
         scene_object = self._find_object(semantic_type, allowed_states=allowed_states)
         if scene_object is None:
-            return False, f"未找到 {semantic_type}"
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_object", semantic_type)
+            if reobserve_ok:
+                scene_object = self._find_object(semantic_type, allowed_states=allowed_states)
+            if scene_object is None:
+                return False, f"未找到 {semantic_type}; {reobserve_detail}"
         self._assignments[semantic_type] = scene_object.id
         return True, f"{semantic_type}={scene_object.id}"
+
+    def _require_table_surface(self) -> Tuple[bool, str]:
+        table = self._find_object("table_surface", allowed_states=("stable",))
+        if table is None:
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_table_surface", "table_surface")
+            if reobserve_ok:
+                table = self._find_object("table_surface", allowed_states=("stable",))
+            if table is None:
+                return False, f"pouring 需要 stable table_surface; {reobserve_detail}"
+        self._assignments["table_surface"] = table.id
+        return True, f"table_surface={table.id}"
 
     def _assign_table_objects(self) -> Tuple[bool, str]:
         water = self._find_object("water_bottle", allowed_states=("stable",))
@@ -439,17 +504,26 @@ class DualArmTaskManagerNode(Node):
             return False, "桌面对象不完整，正式流程要求两只杯子"
         self._assignments["water_bottle"] = water.id
         self._assignments["cola_bottle"] = cola.id
-        self._assignments["cup_water"] = cups[0].id
-        self._assignments["cup_cola"] = cups[1].id
-        return True, f"water={water.id}, cola={cola.id}, cups={[cup.id for cup in cups]}"
+        ranked_cups = self._rank_scene_objects(cups)
+        self._assignments["cup_water"] = ranked_cups[0].id
+        self._assignments["cup_cola"] = ranked_cups[1].id
+        return True, f"water={water.id}, cola={cola.id}, cups={[cup.id for cup in ranked_cups]}"
 
     def _plan_for_object(self, semantic_type: str, target_field: str, reserved_by: str) -> Tuple[bool, str]:
         scene_object = self._find_object(semantic_type, allowed_states=("stable",))
         if scene_object is None:
-            return False, f"未找到 {semantic_type}"
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_plan_object", semantic_type)
+            if reobserve_ok:
+                scene_object = self._find_object(semantic_type, allowed_states=("stable",))
+            if scene_object is None:
+                return False, f"未找到 {semantic_type}; {reobserve_detail}"
         target = self._grasp_targets.get(scene_object.id)
         if target is None:
-            return False, f"{scene_object.id} 的 grasp target 不存在"
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_grasp_target", scene_object.id)
+            if reobserve_ok:
+                target = self._grasp_targets.get(scene_object.id)
+            if target is None:
+                return False, f"{scene_object.id} 的 grasp target 不存在; {reobserve_detail}"
         if not self._reserve(scene_object.id, reserved_by, target.arm_mode):
             return False, f"{scene_object.id} reservation 失败"
         pose = getattr(target, target_field)
@@ -463,27 +537,32 @@ class DualArmTaskManagerNode(Node):
     def _direct_grasp(self, semantic_type_or_id: str, reserved_by: str) -> Tuple[bool, str]:
         scene_object = self._find_object_by_id_or_semantic(semantic_type_or_id)
         if scene_object is None:
-            return False, f"未找到 {semantic_type_or_id}"
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_direct_grasp_object", semantic_type_or_id)
+            if reobserve_ok:
+                scene_object = self._find_object_by_id_or_semantic(semantic_type_or_id)
+            if scene_object is None:
+                return False, f"未找到 {semantic_type_or_id}; {reobserve_detail}"
         target = self._grasp_targets.get(scene_object.id)
         if target is None:
-            return False, f"{scene_object.id} 的 grasp target 不存在"
-        planner_response = self._call_plan_pose(target.arm_mode, target.pregrasp)
-        if planner_response is None or not planner_response.success:
-            return False, "抓取前规划失败"
-        self._set_last_plan(planner_response)
-        executed = self._execute_plan(planner_response)
-        if executed is None or not executed.success:
-            return False, "抓取前执行失败"
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_direct_grasp_target", scene_object.id)
+            if reobserve_ok:
+                target = self._grasp_targets.get(scene_object.id)
+            if target is None:
+                return False, f"{scene_object.id} 的 grasp target 不存在; {reobserve_detail}"
         if not self._reserve(scene_object.id, reserved_by, target.arm_mode):
             return False, "reservation 失败"
-        link_name = "left_tcp" if target.arm_mode == "left_arm" else "right_tcp"
-        attached = self._set_gripper(
-            target.arm_mode,
+        primitive_result = self._execute_primitive_action(
+            primitive_id="guarded_grasp",
+            arm_group=target.arm_mode,
             object_id=scene_object.id,
-            link_name=link_name,
-            attach=True,
+            primary_waypoints=[target.pregrasp, target.grasp, target.retreat],
+            execution_profile=target.execution_profile or "default",
         )
-        return attached, f"{scene_object.id} 抓取{'成功' if attached else '失败'}"
+        if not primitive_result.success:
+            self._release(scene_object.id)
+            return False, f"{scene_object.id} guarded_grasp 失败: {primitive_result.result_code} {primitive_result.message}"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        return True, f"{scene_object.id} guarded_grasp 成功"
 
     def _place_object(self, key: str) -> Tuple[bool, str]:
         object_id = self._assignments.get(key, key)
@@ -557,23 +636,60 @@ class DualArmTaskManagerNode(Node):
 
         return self._poll_scene_predicate(predicate, timeout_sec=1.5, interval_sec=0.1)
 
+    def _scene_version(self) -> int:
+        return int(getattr(self._scene_cache, "scene_version", 0))
+
+    def _wait_for_scene_update(self, after_version: int, timeout_sec: float) -> bool:
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            if self._scene_version() > after_version:
+                return True
+            time.sleep(self._reobserve_once_interval_sec)
+        return self._scene_version() > after_version
+
+    def _reobserve_once(self, reason: str, object_key: str = "") -> Tuple[bool, str]:
+        if not self._reobserve_once_enabled:
+            return False, f"reobserve_once disabled: reason={reason}, object={object_key}"
+        before = self._scene_version()
+        if self._wait_for_scene_update(before, self._reobserve_once_timeout_sec):
+            after = self._scene_version()
+            return True, f"reobserve_once ok: scene_version {before}->{after}, reason={reason}, object={object_key}"
+        return False, f"reobserve_once timeout: scene_version={before}, reason={reason}, object={object_key}"
+
     def _find_object(self, semantic_type: str, allowed_states: Optional[Tuple[str, ...]] = None) -> Optional[SceneObject]:
-        candidates = [obj for obj in self._scene_cache.objects if obj.semantic_type == semantic_type]
+        candidates = [
+            obj for obj in self._scene_cache.objects
+            if obj.semantic_type == semantic_type and self._is_usable_world_object(obj)
+        ]
         if allowed_states is not None:
             candidates = [obj for obj in candidates if obj.lifecycle_state in allowed_states]
-        return candidates[0] if candidates else None
+        ranked = self._rank_scene_objects(candidates)
+        return ranked[0] if ranked else None
 
     def _objects_by_prefix(self, prefix: str, allowed_states: Optional[Tuple[str, ...]] = None) -> List[SceneObject]:
-        candidates = [obj for obj in self._scene_cache.objects if obj.semantic_type.startswith(prefix)]
+        candidates = [
+            obj for obj in self._scene_cache.objects
+            if obj.semantic_type.startswith(prefix) and self._is_usable_world_object(obj)
+        ]
         if allowed_states is not None:
             candidates = [obj for obj in candidates if obj.lifecycle_state in allowed_states]
-        return candidates
+        return self._rank_scene_objects(candidates)
+
+    def _rank_scene_objects(self, objects: List[SceneObject]) -> List[SceneObject]:
+        return rank_scene_objects(objects)
 
     def _find_object_by_id_or_semantic(self, key: str) -> Optional[SceneObject]:
         for scene_object in self._scene_cache.objects:
-            if scene_object.id == key or scene_object.semantic_type == key:
+            if (scene_object.id == key or scene_object.semantic_type == key) and self._is_usable_world_object(scene_object):
                 return scene_object
         return None
+
+    def _is_usable_world_object(self, scene_object: SceneObject) -> bool:
+        if scene_object.pose.header.frame_id != "world":
+            return False
+        if not scene_object.source:
+            return False
+        return bool(scene_object.id and scene_object.semantic_type)
 
     def _reserve(self, object_id: str, reserved_by: str, arm_mode: str) -> bool:
         if not self._reserve_client.wait_for_service(timeout_sec=0.5):
@@ -735,6 +851,9 @@ class DualArmTaskManagerNode(Node):
             "next_state_owner": self._state_owner(next_state),
             "next_behavior_group": self._behavior_group_for_state(next_state),
             "scene_version": int(getattr(self._scene_cache, "scene_version", 0)),
+            "config_fingerprint": self._config_fingerprint,
+            "start_gate_source": self._start_gate_source,
+            "selected_objects": dict(self._assignments),
             "assignments": self._assignments,
             "reserved_objects": [
                 {"id": obj.id, "reserved_by": obj.reserved_by}
@@ -1063,10 +1182,15 @@ class DualArmTaskManagerNode(Node):
         return ""
 
     def _normalize_task_sequence(self, raw_sequence: str) -> str:
-        return ",".join(self._parse_task_sequence(raw_sequence))
+        return normalize_task_sequence(raw_sequence)
 
     def _parse_task_sequence(self, raw_sequence: str) -> List[str]:
-        return [item.strip() for item in raw_sequence.split(",") if item.strip()]
+        return parse_task_sequence(raw_sequence)
+
+    def _file_sha256(self, path: Path) -> str:
+        if not path.exists():
+            return ""
+        return hashlib.sha256(path.read_bytes()).hexdigest()
 
     def _validate_checkpoint_state(self, checkpoint_state, states: List[str], allow_reconcile: bool) -> Optional[str]:
         schema_version = int(checkpoint_state.get("checkpoint_schema_version", 0))

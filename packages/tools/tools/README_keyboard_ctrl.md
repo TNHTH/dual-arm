@@ -39,9 +39,9 @@
 
 ```bash
 # 方法1：直接运行Python脚本
-cd <repo-root>
+cd /home/gwh/dual-arm
 source install/setup.bash
-/usr/bin/python3 packages/tools/tools/scripts/keyboard_ctrl.py
+python3 src/tools/scripts/keyboard_ctrl.py
 
 # 方法2：使用ROS2 run命令（需要先编译包）
 ros2 run tools keyboard_ctrl.py

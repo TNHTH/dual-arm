@@ -35,6 +35,7 @@
 
 *.pyc
 *.log
+.pytest_cache/
 
 build/
 install/
@@ -48,5 +49,21 @@ dist/
 test-results/
 playwright-report/
 
+*.pt.tmp
+*.onnx.tmp
+*.engine
+*.plan
+wandb/
+runs/
+**/runs/
+**/yolo_runs/
+**/weights/last.pt
+**/software.backup_*/
+*.bak
+*.backup
+*.swp
+*.tmp
+
 **/*.enging
 **/asserts/
+vendor/fairino_sdk/software.backup_*/

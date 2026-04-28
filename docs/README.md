@@ -7,6 +7,8 @@
 ## 包含内容
 
 - `architecture/`：系统架构与主链说明。
+- `api/`：接口合同、字段单位和错误码。
+- `artifacts/`：模型、训练输出、厂商 SDK 和运行证据治理。
 - `operations/`：运行手册、流程规范和验收约束。
 - `development/`：开发约定、README 风格与工程说明。
 - `reference/`：仓库地图、路径迁移表和其他参考索引。
@@ -18,6 +20,7 @@
 ```bash
 ls docs
 sed -n '1,200p' docs/reference/repo-map.md
+sed -n '1,200p' docs/architecture/runtime-architecture.md
 ```
 
 ## 上下游依赖

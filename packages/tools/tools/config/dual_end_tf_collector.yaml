@@ -3,7 +3,7 @@
 dual_end_tf_collector:
   ros__parameters:
     # 数据保存路径
-    save_path: "/tmp/dual_end_tf_data"
+    save_path: "/home/gwh/dual-arm/.artifacts/dual_end_tf_data"
     
     # 自动采集设置
     auto_capture: false

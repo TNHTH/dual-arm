@@ -200,7 +200,18 @@ install(DIRECTORY
 
 # Install Python scripts
 install(PROGRAMS
+  scripts/capture_table_calibration_sample.py
+  scripts/evaluate_table_calibration_run.py
   scripts/keyboard_ctrl.py
+  scripts/pick_assist_auto_grasp.py
+  scripts/single_arm_pick_debug.py
+  scripts/smoke_dual_camera_scene_dedup.py
+  scripts/smoke_dual_camera_scene_fusion.py
+  scripts/smoke_camera_frames.py
+  scripts/smoke_planning_scene_sync.py
+  scripts/smoke_resume_checkpoint.py
+  scripts/smoke_scene_freshness.py
+  scripts/table_surface_detector.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

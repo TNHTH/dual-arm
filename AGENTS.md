@@ -6,6 +6,7 @@
 
 ## Continuation Rules
 - Default to Chinese for responses and code comments.
+- Project context entry: `/home/gwh/文档/Obsidian Vault/03_项目记录/DualArm项目上下文入口_2026-04-27_22-02.md`. Read it first when the user asks to understand or take over the DualArm/FairinoDualArm project.
 - Before continuing any `dual-arm` implementation task, read `STATE.md` first.
 - Before continuing any multi-wave implementation, also read `docs/operations/runbooks/engineering-process-standards.md` and `.codex/tmp/resume/IMPLEMENTATION_BREAKPOINTS.md`.
 - After finishing each implementation wave, update `STATE.md` in the repo root.
@@ -19,6 +20,9 @@
   - exact next wave scope
 - When resuming in a new session, prefer `STATE.md` as the authoritative handoff summary before scanning the rest of the repo.
 - When resuming Wave-based work, use `.codex/tmp/resume/SUBAGENT_REGISTRY.json` to preserve the subagent role model; do not restart broad read-through work unless the registry or checkpoint is missing.
+- Subagents in this repository are non-blocking sidecars. Do not delegate broad final review, final verification, or the immediate critical-path next step to a subagent.
+- Reviewer/verifier subagents get one bounded wait only. On timeout, close them immediately, record the lifecycle in `.codex/tmp/resume/SUBAGENT_REGISTRY.json`, and run the local fallback checklist in `docs/operations/runbooks/subagent-timeout-policy.md`.
+- If two subagents time out in one task/session, stop opening non-essential subagents for the rest of that task; use local review/verification evidence instead.
 
 ## Project Process Standards
 - Treat `docs/operations/runbooks/engineering-process-standards.md` as the mandatory process contract for this project.
