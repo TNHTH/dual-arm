@@ -67,3 +67,26 @@ runs/
 **/*.enging
 **/asserts/
 vendor/fairino_sdk/software.backup_*/
+
+# AI / agent workspace files
+.codex/
+.claude/
+AGENTS.md
+agent.md
+CLAUDE.md
+STATE.md
+**/SKILL.md
+**/ERROR_TRACE.md
+**/RETRO.md
+**/IMPLEMENTATION_BREAKPOINTS.md
+**/SUBAGENT_REGISTRY.json
+**/WAVE-STATE.md
+**/RUN_STATE_SCHEMA.md
+
+# AI / agent process notes
+docs/process/
+docs/operations/reports/2026-04-28-branch-audit.md
+docs/operations/runbooks/engineering-process-standards.md
+docs/operations/runbooks/software-only-refactor-guard.md
+docs/operations/runbooks/software-parallel-window-prompts.md
+docs/operations/runbooks/subagent-timeout-policy.md
