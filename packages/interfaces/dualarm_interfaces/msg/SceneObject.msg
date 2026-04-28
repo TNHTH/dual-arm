@@ -7,9 +7,14 @@ Subframe[] subframes
 bool graspable
 bool movable
 string source
+string[] source_views
+string shape_type
+string pose_source
+float32 quality_score
 builtin_interfaces/Time last_seen
 uint32 scene_version
 string lifecycle_state
 string reserved_by
 string attached_link
+# Estimated covariance diagonal for x/y/z/roll/pitch/yaw. Values are heuristic unless a calibrated estimator fills them.
 float32[6] pose_covariance_diagonal

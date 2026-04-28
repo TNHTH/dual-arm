@@ -6,6 +6,7 @@
 
 ## Continuation Rules
 - Default to Chinese for responses and code comments.
+- Project context entry: `/home/gwh/文档/Obsidian Vault/03_项目记录/DualArm项目上下文入口_2026-04-27_22-02.md`. Read it first when the user asks to understand or take over the DualArm/FairinoDualArm project.
 - Before continuing any `dual-arm` implementation task, read `STATE.md` first.
 - Before continuing any multi-wave implementation, also read `docs/operations/runbooks/engineering-process-standards.md` and `.codex/tmp/resume/IMPLEMENTATION_BREAKPOINTS.md`.
 - After finishing each implementation wave, update `STATE.md` in the repo root.

@@ -71,6 +71,86 @@ std::array<float, 3> guessSize(const std::string& semantic_type, const Eigen::Ve
     return {observed_size.x(), observed_size.y(), observed_size.z()};
 }
 
+std::string shapeTypeForSemantic(const std::string& semantic_type) {
+    if (semantic_type == "water_bottle" || semantic_type == "cola_bottle" || semantic_type.find("cup") != std::string::npos) {
+        return "cylinder";
+    }
+    if (semantic_type == "basketball" || semantic_type == "soccer_ball") {
+        return "sphere";
+    }
+    if (semantic_type == "basket") {
+        return "box";
+    }
+    if (semantic_type == "table_surface") {
+        return "plane";
+    }
+    return "unknown";
+}
+
+float clamp01(float value) {
+    return std::max(0.0f, std::min(1.0f, value));
+}
+
+std::array<float, 6> estimatePoseCovarianceDiagonal(
+    const std::vector<Eigen::Vector3f>& support_points,
+    const Eigen::Vector3f& center,
+    const std::string& shape_type,
+    int min_points)
+{
+    const float fallback_position_variance = support_points.size() <= 1 ? 0.0025f : 0.0004f;
+    Eigen::Vector3f variance(
+        fallback_position_variance,
+        fallback_position_variance,
+        fallback_position_variance);
+    if (support_points.size() > 1) {
+        variance = Eigen::Vector3f::Zero();
+        for (const auto& point : support_points) {
+            const Eigen::Vector3f delta = point - center;
+            variance += delta.cwiseProduct(delta);
+        }
+        variance /= static_cast<float>(support_points.size());
+        const float sample_scale = std::max(1.0f, static_cast<float>(min_points) / static_cast<float>(support_points.size()));
+        variance = variance * sample_scale;
+        variance.x() = std::max(variance.x(), 1e-6f);
+        variance.y() = std::max(variance.y(), 1e-6f);
+        variance.z() = std::max(variance.z(), 1e-6f);
+    }
+
+    float orientation_variance = 1.0f;
+    if (shape_type == "sphere") {
+        orientation_variance = 3.14f;
+    } else if (shape_type == "cylinder" || shape_type == "box" || shape_type == "plane") {
+        orientation_variance = support_points.size() <= 1 ? 1.0f : 0.35f;
+    }
+    return {
+        variance.x(),
+        variance.y(),
+        variance.z(),
+        orientation_variance,
+        orientation_variance,
+        orientation_variance,
+    };
+}
+
+float estimateQualityScore(
+    float detector_confidence,
+    const std::vector<Eigen::Vector3f>& support_points,
+    const Eigen::Vector3f& observed_size,
+    int min_points)
+{
+    const float confidence_score = clamp01(detector_confidence);
+    const float point_score = clamp01(static_cast<float>(support_points.size()) / std::max(1.0f, static_cast<float>(min_points * 4)));
+    const bool finite_size =
+        std::isfinite(observed_size.x()) &&
+        std::isfinite(observed_size.y()) &&
+        std::isfinite(observed_size.z()) &&
+        observed_size.x() > 0.0f &&
+        observed_size.y() > 0.0f &&
+        observed_size.z() > 0.0f;
+    const float geometry_score = finite_size ? 1.0f : 0.0f;
+    return clamp01(0.55f * confidence_score + 0.35f * point_score + 0.10f * geometry_score);
+}
+
 }  // namespace
 
 DepthProcessorNode::DepthProcessorNode(const rclcpp::NodeOptions& options)
@@ -619,12 +699,17 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
     object.graspable = true;
     object.movable = true;
     object.source = source_name_;
+    object.source_views = {source_name_};
+    object.shape_type = shapeTypeForSemantic(geometry.semantic_type);
+    object.pose_source = geometry.support_points.size() <= 1 ? "depth_roi_prior_fallback" : "depth_roi_primitive_fit";
+    object.quality_score = estimateQualityScore(geometry.confidence, geometry.support_points, observed_size, min_points_);
     object.last_seen = header.stamp;
     object.scene_version = 0;
     object.lifecycle_state = "observed";
     object.reserved_by = "none";
     object.attached_link = "";
-    object.pose_covariance_diagonal = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+    object.pose_covariance_diagonal =
+        estimatePoseCovarianceDiagonal(geometry.support_points, geometry.center, object.shape_type, min_points_);
 
     auto add_subframe = [&](const std::string& name, const Eigen::Vector3f& position) {
         dualarm_interfaces::msg::Subframe subframe;

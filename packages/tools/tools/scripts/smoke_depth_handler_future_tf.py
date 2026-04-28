@@ -77,11 +77,14 @@ class DepthHandlerFutureTfSmoke(Node):
         detection.header.frame_id = "right_camera_color_frame"
         detection.semantic_type = "water_bottle"
         detection.source = "right_camera"
+        detection.view_id = "right_camera"
+        detection.mask_topic = ""
         detection.x = width / 2.0
         detection.y = height / 2.0
         detection.width = width - 2.0
         detection.height = height - 2.0
         detection.score = 0.95
+        detection.bbox_quality = 0.95
         detections.detections.append(detection)
         self._detection_pub.publish(detections)
 

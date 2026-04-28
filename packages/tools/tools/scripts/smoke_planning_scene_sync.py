@@ -92,6 +92,10 @@ class PlanningSceneSyncSmoke(Node):
         obj.graspable = True
         obj.movable = True
         obj.source = "smoke"
+        obj.source_views = ["smoke"]
+        obj.shape_type = "cylinder"
+        obj.pose_source = "smoke_fixture"
+        obj.quality_score = 0.9
         obj.scene_version = 1
         obj.lifecycle_state = "stable"
         obj.reserved_by = "none"

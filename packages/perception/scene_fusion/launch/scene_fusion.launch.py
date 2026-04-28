@@ -11,6 +11,7 @@ def generate_launch_description():
                 "scene_fusion_input_topics",
                 default_value="['/perception/scene_objects','/perception/ball_basket_scene_objects','/perception/table_scene_objects']",
             ),
+            DeclareLaunchArgument("scene_fusion_rgb_detection_topics", default_value="[]"),
             DeclareLaunchArgument("scene_fusion_output_topic", default_value="/scene_fusion/raw_scene_objects"),
             DeclareLaunchArgument("scene_fusion_stability_count", default_value="5"),
             DeclareLaunchArgument("scene_fusion_stale_timeout", default_value="0.4"),
@@ -23,6 +24,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         "input_topics": LaunchConfiguration("scene_fusion_input_topics"),
+                        "rgb_detection_topics": LaunchConfiguration("scene_fusion_rgb_detection_topics"),
                         "output_topic": LaunchConfiguration("scene_fusion_output_topic"),
                         "stability_count": LaunchConfiguration("scene_fusion_stability_count"),
                         "stale_timeout": LaunchConfiguration("scene_fusion_stale_timeout"),

@@ -1,6 +1,31 @@
 # Implementation Breakpoints
 
-更新时间: 2026-04-26
+更新时间: 2026-04-28
+
+## 2026-04-28 v1 Hardware-Interface Hardening
+- 当前波次：v1-hardware-interface-hardening
+- 状态：implemented_and_verified_software_only
+- 代码范围：
+  - interfaces: `Detection2D` / `SceneObject` / `ExecutePrimitive`
+  - launch: `competition.launch.py` / core / integrated
+  - perception: detector_adapter, depth_handler, ball_basket_pose_estimator, table_surface_detector, scene_fusion
+  - planning: planning_scene_sync subframes, fairino_dualarm_planner launch/default freshness
+  - control: execution_adapter planner-first Cartesian, vendor direct double gate, guarded_grasp
+  - tasks: direct_grasp -> guarded_grasp, pouring table gate
+  - ops: new evidence_manager package
+  - docs/tests: v1 runbook and `tests/unit/test_v1_hardening_contracts.py`
+- 验证证据：
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py` -> `28 passed`
+  - `colcon build --base-paths packages --packages-select dualarm_interfaces dualarm_bringup detector_adapter depth_handler scene_fusion planning_scene_sync fairino_dualarm_planner execution_adapter dualarm_task_manager evidence_manager` -> `10 packages finished`
+  - `ros2 interface show` 三个接口确认新字段
+  - `ros2 launch dualarm_bringup competition_core.launch.py --show-args` 通过
+  - 非法 depth：`active_depth_camera:=right right_camera_enable_depth:=false` fail-fast
+  - `bash scripts/ci/software_check.sh` 通过
+- 未计入通过证据：
+  - `smoke_depth_handler_future_tf.py` 本轮未正常退出，已 kill 残留并记录到 ERROR_TRACE Incident 31。
+- 下一步：
+  - 硬件联调前先 clean launch smoke，保持 `start_hardware=false`，再由操作员明确切换。
+  - v2 单独处理人体安全、真实 fill/spill、dense occupancy、标定验收、6D pose refine。
 
 ## 2026-04-26 Software Engineering Hardening
 - 当前分支：`codex/software-engineering-hardening-20260426`

@@ -3,6 +3,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import Command, PathJoinSubstitution
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -36,6 +37,10 @@ def generate_launch_description():
             DeclareLaunchArgument("left_base_rpy", default_value="0 0 0"),
             DeclareLaunchArgument("right_base_xyz", default_value="0 -0.35 0"),
             DeclareLaunchArgument("right_base_rpy", default_value="0 0 0"),
+            DeclareLaunchArgument("scene_age_limit_ms", default_value="800"),
+            DeclareLaunchArgument("robot_state_age_limit_ms", default_value="100"),
+            DeclareLaunchArgument("planning_time", default_value="5.0"),
+            DeclareLaunchArgument("planning_attempts", default_value="10"),
             Node(
                 package="fairino_dualarm_planner",
                 executable="fairino_dualarm_planner_node",
@@ -45,8 +50,10 @@ def generate_launch_description():
                 parameters=[
                     {
                         "scene_topic": "/scene_fusion/scene_objects",
-                        "planning_time": 5.0,
-                        "planning_attempts": 10,
+                        "planning_time": ParameterValue(LaunchConfiguration("planning_time"), value_type=float),
+                        "planning_attempts": ParameterValue(LaunchConfiguration("planning_attempts"), value_type=int),
+                        "scene_age_limit_ms": ParameterValue(LaunchConfiguration("scene_age_limit_ms"), value_type=int),
+                        "robot_state_age_limit_ms": ParameterValue(LaunchConfiguration("robot_state_age_limit_ms"), value_type=int),
                         "robot_description": robot_description_content,
                         "robot_description_semantic": Command(
                             [

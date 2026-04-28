@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
@@ -10,6 +10,46 @@ import os
 
 
 SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+
+
+def _as_bool(value) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def validate_depth_configuration(config: dict) -> None:
+    active_depth_camera = str(config.get("active_depth_camera", "")).strip()
+    enable_left_camera = _as_bool(config.get("enable_left_camera", "false"))
+    enable_right_camera = _as_bool(config.get("enable_right_camera", "false"))
+    left_depth = _as_bool(config.get("left_camera_enable_depth", "false"))
+    right_depth = _as_bool(config.get("right_camera_enable_depth", "false"))
+
+    if active_depth_camera not in {"left", "right"}:
+        raise RuntimeError("active_depth_camera 必须是 left 或 right")
+    if left_depth and right_depth:
+        raise RuntimeError("left_camera_enable_depth 与 right_camera_enable_depth 不能同时为 true")
+    if active_depth_camera == "left" and not enable_left_camera:
+        raise RuntimeError("active_depth_camera=left 时 enable_left_camera 必须为 true")
+    if active_depth_camera == "right" and not enable_right_camera:
+        raise RuntimeError("active_depth_camera=right 时 enable_right_camera 必须为 true")
+    if active_depth_camera == "left" and not left_depth:
+        raise RuntimeError("active_depth_camera=left 时 left_camera_enable_depth 必须为 true")
+    if active_depth_camera == "right" and not right_depth:
+        raise RuntimeError("active_depth_camera=right 时 right_camera_enable_depth 必须为 true")
+
+
+def _validate_depth_configuration(context, *args, **kwargs):  # pylint: disable=unused-argument
+    config = {
+        key: LaunchConfiguration(key).perform(context)
+        for key in (
+            "active_depth_camera",
+            "enable_left_camera",
+            "enable_right_camera",
+            "left_camera_enable_depth",
+            "right_camera_enable_depth",
+        )
+    }
+    validate_depth_configuration(config)
+    return []
 
 
 def _include(package_name: str, relative_launch: str, condition=None, launch_arguments=None):
@@ -52,23 +92,51 @@ def generate_launch_description():
             ["'", LaunchConfiguration("start_camera_bridge"), "' == 'true' and '", LaunchConfiguration("enable_right_camera"), "' == 'true'"]
         )
     )
-    right_full_condition = IfCondition(PythonExpression(["'", LaunchConfiguration("dual_camera_mode"), "' == 'full'"]))
+    left_detector_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                LaunchConfiguration("start_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("start_left_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("enable_left_camera"),
+                "' == 'true'",
+            ]
+        )
+    )
     right_detector_condition = IfCondition(
         PythonExpression(
-            ["'", LaunchConfiguration("start_detector"), "' == 'true' and '", LaunchConfiguration("dual_camera_mode"), "' == 'full'"]
+            [
+                "'",
+                LaunchConfiguration("start_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("start_right_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("enable_right_camera"),
+                "' == 'true'",
+            ]
         )
     )
     left_depth_chain_condition = IfCondition(
         PythonExpression(
-            ["'", LaunchConfiguration("enable_left_camera"), "' == 'true' and '", LaunchConfiguration("left_camera_enable_depth"), "' == 'true'"]
+            [
+                "'",
+                LaunchConfiguration("active_depth_camera"),
+                "' == 'left' and '",
+                LaunchConfiguration("enable_left_camera"),
+                "' == 'true' and '",
+                LaunchConfiguration("left_camera_enable_depth"),
+                "' == 'true'",
+            ]
         )
     )
     right_depth_chain_condition = IfCondition(
         PythonExpression(
             [
                 "'",
-                LaunchConfiguration("dual_camera_mode"),
-                "' == 'full' and '",
+                LaunchConfiguration("active_depth_camera"),
+                "' == 'right' and '",
                 LaunchConfiguration("enable_right_camera"),
                 "' == 'true' and '",
                 LaunchConfiguration("right_camera_enable_depth"),
@@ -93,9 +161,12 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("start_detector", default_value="false"),
+            DeclareLaunchArgument("start_left_detector", default_value="true"),
+            DeclareLaunchArgument("start_right_detector", default_value="true"),
             DeclareLaunchArgument("start_table_surface_detector", default_value="true"),
             DeclareLaunchArgument("start_camera_bridge", default_value="false"),
             DeclareLaunchArgument("dual_camera_mode", default_value="reobserve_only"),
+            DeclareLaunchArgument("active_depth_camera", default_value="left"),
             DeclareLaunchArgument("enable_left_camera", default_value="true"),
             DeclareLaunchArgument("enable_right_camera", default_value="true"),
             DeclareLaunchArgument("require_verified_camera_extrinsics", default_value="true"),
@@ -142,10 +213,10 @@ def generate_launch_description():
             DeclareLaunchArgument("detector_device", default_value=""),
             DeclareLaunchArgument("detector_allowed_class_ids", default_value="[0,1,2,3,4,5]"),
             DeclareLaunchArgument("detector_class_map_file", default_value=default_detector_class_map),
-            DeclareLaunchArgument("depth_require_depth_aligned_detections", default_value="false"),
+            DeclareLaunchArgument("depth_require_depth_aligned_detections", default_value="true"),
             DeclareLaunchArgument("depth_require_camera_info_depth_frame", default_value="true"),
             DeclareLaunchArgument("depth_expected_detection_frame", default_value="left_camera_color_frame"),
-            DeclareLaunchArgument("ball_require_depth_aligned_detections", default_value="false"),
+            DeclareLaunchArgument("ball_require_depth_aligned_detections", default_value="true"),
             DeclareLaunchArgument("ball_require_camera_info_depth_frame", default_value="true"),
             DeclareLaunchArgument("ball_expected_detection_frame", default_value="left_camera_color_frame"),
             DeclareLaunchArgument("table_timer_hz", default_value="2.0"),
@@ -181,6 +252,13 @@ def generate_launch_description():
             DeclareLaunchArgument("start_mode", default_value="external_gate"),
             DeclareLaunchArgument("start_signal_topic", default_value="/competition/start_signal"),
             DeclareLaunchArgument("task_sequence", default_value="handover,pouring"),
+            DeclareLaunchArgument("scene_age_limit_ms", default_value="800"),
+            DeclareLaunchArgument("robot_state_age_limit_ms", default_value="100"),
+            DeclareLaunchArgument("planning_time", default_value="5.0"),
+            DeclareLaunchArgument("planning_attempts", default_value="10"),
+            DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
+            DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value="[]"),
+            OpaqueFunction(function=_validate_depth_configuration),
             _include(
                 "tf_node",
                 "frame_authority.launch.py",
@@ -237,6 +315,7 @@ def generate_launch_description():
             _include(
                 "detector_adapter",
                 "detector_adapter.launch.py",
+                condition=left_detector_condition,
                 launch_arguments={
                     "node_name": "detector_adapter_left",
                     "input_topic": LaunchConfiguration("left_detector_detections_topic"),
@@ -248,7 +327,7 @@ def generate_launch_description():
             _include(
                 "detector_adapter",
                 "detector_adapter.launch.py",
-                condition=right_full_condition,
+                condition=right_detector_condition,
                 launch_arguments={
                     "node_name": "detector_adapter_right",
                     "input_topic": LaunchConfiguration("right_detector_detections_topic"),
@@ -332,9 +411,11 @@ def generate_launch_description():
                 "scene_fusion.launch.py",
                 launch_arguments={
                     "scene_fusion_input_topics": "['/perception/left/scene_objects','/perception/right/scene_objects','/perception/left/ball_basket_scene_objects','/perception/right/ball_basket_scene_objects','/perception/table_scene_objects']",
+                    "scene_fusion_rgb_detection_topics": "['/perception/right/detection_2d']",
                 }.items(),
             ),
             _include("planning_scene_sync", "planning_scene_sync.launch.py"),
+            _include("evidence_manager", "evidence_manager.launch.py"),
             _include("grasp_pose_generator", "grasp_pose_generator.launch.py"),
             _include("joint_state_aggregator", "joint_state_aggregator.launch.py"),
             _include(
@@ -356,6 +437,10 @@ def generate_launch_description():
                     "left_base_rpy": LaunchConfiguration("left_base_rpy"),
                     "right_base_xyz": LaunchConfiguration("right_base_xyz"),
                     "right_base_rpy": LaunchConfiguration("right_base_rpy"),
+                    "scene_age_limit_ms": LaunchConfiguration("scene_age_limit_ms"),
+                    "robot_state_age_limit_ms": LaunchConfiguration("robot_state_age_limit_ms"),
+                    "planning_time": LaunchConfiguration("planning_time"),
+                    "planning_attempts": LaunchConfiguration("planning_attempts"),
                 }.items(),
             ),
             _include(
@@ -370,6 +455,8 @@ def generate_launch_description():
                     "right_gripper_status_service": "/gripper1/epg50_gripper/status",
                     "left_gripper_status_topic": "/gripper0/epg50_gripper/status_stream",
                     "right_gripper_status_topic": "/gripper1/epg50_gripper/status_stream",
+                    "allow_vendor_direct_cartesian": LaunchConfiguration("allow_vendor_direct_cartesian"),
+                    "vendor_direct_cartesian_profiles": LaunchConfiguration("vendor_direct_cartesian_profiles"),
                 }.items(),
             ),
             _include("dualarm_task_manager", "dualarm_task_manager.launch.py"),
@@ -386,7 +473,7 @@ def generate_launch_description():
                 package="detector",
                 executable=LaunchConfiguration("detector_executable"),
                 name="detector_left",
-                condition=IfCondition(LaunchConfiguration("start_detector")),
+                condition=left_detector_condition,
                 output="screen",
                 parameters=[
                     {
