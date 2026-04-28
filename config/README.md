@@ -7,11 +7,15 @@
 ## 包含内容
 
 - `system/`：构建分组和仓库级系统配置。
+- `profiles/`：跨包运行 profile，当前默认入口为 `profiles/competition_default.yaml`。
+- `competition/`：比赛对象、任务阈值和工作区 profile。
+- `control/`：控制和安全限幅配置。
 
 ## 入口文件或常用命令
 
 ```bash
 sed -n '1,160p' config/system/build_groups.yaml
+sed -n '1,200p' config/profiles/competition_default.yaml
 ./build_workspace.sh --list-groups
 ```
 

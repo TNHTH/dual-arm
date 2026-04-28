@@ -442,18 +442,23 @@ class TableSurfaceDetector(Node):
             table_object.graspable = False
             table_object.movable = False
             table_object.source = "table_surface_detector"
+            table_object.source_views = ["left_camera", "table_surface_detector"]
+            table_object.shape_type = "plane"
+            table_object.pose_source = "depth_table_plane_fit"
+            table_object.quality_score = float(max(0.0, min(1.0, result["confidence"])))
             table_object.last_seen = stamp
             table_object.scene_version = self._scene_version
             table_object.lifecycle_state = "stable"
             table_object.reserved_by = "none"
             table_object.attached_link = ""
+            position_variance = float(result["median_residual_mm"] or 999.0) / 1_000_000.0
             table_object.pose_covariance_diagonal = [
-                float(result["median_residual_mm"] or 999.0) / 1_000_000.0,
-                float(result["median_residual_mm"] or 999.0) / 1_000_000.0,
-                float(result["median_residual_mm"] or 999.0) / 1_000_000.0,
-                -1.0,
-                -1.0,
-                -1.0,
+                position_variance,
+                position_variance,
+                position_variance,
+                0.35,
+                0.35,
+                0.35,
             ]
             normal_pose = PoseStamped()
             normal_pose.header = table_object.pose.header

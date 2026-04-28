@@ -23,6 +23,7 @@ def generate_launch_description():
             DeclareLaunchArgument("depth_frame_id", default_value="left_camera_depth_frame"),
             DeclareLaunchArgument("depth_backend", default_value="auto"),
             DeclareLaunchArgument("depth_obsensor_index", default_value="0"),
+            DeclareLaunchArgument("enable_depth", default_value="true"),
             DeclareLaunchArgument("rotate_180", default_value="true"),
             DeclareLaunchArgument("use_mock_stream", default_value="false"),
             DeclareLaunchArgument("publish_color_camera_info", default_value="true"),
@@ -47,6 +48,7 @@ def generate_launch_description():
                         "depth_device": LaunchConfiguration("depth_device"),
                         "depth_backend": LaunchConfiguration("depth_backend"),
                         "depth_obsensor_index": LaunchConfiguration("depth_obsensor_index"),
+                        "enable_depth": LaunchConfiguration("enable_depth"),
                         "rotate_180": LaunchConfiguration("rotate_180"),
                         "publish_color_camera_info": LaunchConfiguration("publish_color_camera_info"),
                         "depth_alignment_mode": LaunchConfiguration("depth_alignment_mode"),
@@ -58,11 +60,17 @@ def generate_launch_description():
             Node(
                 package="orbbec_gemini_bridge",
                 executable="mock_camera_stream.py",
-                name="mock_camera_stream",
+                name=LaunchConfiguration("node_name"),
                 condition=IfCondition(LaunchConfiguration("use_mock_stream")),
                 output="screen",
                 parameters=[
                     {
+                        "color_topic": LaunchConfiguration("color_topic"),
+                        "depth_topic": LaunchConfiguration("depth_topic"),
+                        "color_camera_info_topic": LaunchConfiguration("color_camera_info_topic"),
+                        "depth_camera_info_topic": LaunchConfiguration("depth_camera_info_topic"),
+                        "color_frame_id": LaunchConfiguration("color_frame_id"),
+                        "depth_frame_id": LaunchConfiguration("depth_frame_id"),
                         "publish_color_camera_info": LaunchConfiguration("publish_color_camera_info"),
                     }
                 ],

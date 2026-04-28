@@ -59,13 +59,13 @@
 - `planning_scene_sync` 还不是“真” PlanningScene 同步，和 `STATE.md` 记录一致，是当前 production 最明显未收口点。
 - `scene_version` 在 `scene_fusion` 会递增，但 `ball_basket_pose_estimator` / `depth_handler` 初始对象仍写入 `scene_version=0`，场景 freshness 与 managed scene 版本之间仍有断层。
 - `dualarm_task_manager` 的状态机很完整，但很多状态仍是占位成功，例如开盖、倒水、倒可乐等 primitive 仍未落到具体动作。
-- `detector`、`tools` 和部分旧包里保留了多个旧工作区路径，如 `/home/phoenix/roboarm/FairinoDualArm/...`，这些默认值不能直接当当前环境事实。
+- `detector`、`tools` 和部分旧包里保留了多个旧工作区路径，如 `/home/gwh/dual-arm/...`，这些默认值不能直接当当前环境事实。
 - `tests/competition`、`tests/hardware`、`tests/integration`、`tests/unit` 目录目前为空，系统主要依赖手工构建和 smoke 验证。
 - `robo_ctrl` 代码中混有较多调试输出、旧 TF 命名和历史容错逻辑，后续做生产收口时需要谨慎处理。
 
 ## 已核对证据
 - `colcon list --names-only` 当前可见 25 个包。
-- `third_party/fairino_sdk/software/README_CTL.txt` 记录版本为 `v3.7.5.1`，日期为 `2025-09-05`。
+- `vendor/fairino_sdk/software/README_CTL.txt` 记录版本为 `v3.7.5.1`，日期为 `2025-09-05`。
 - `tests/` 目前只有目录，没有测试文件。
 
 ## 2026-04-15 硬件连通性补充

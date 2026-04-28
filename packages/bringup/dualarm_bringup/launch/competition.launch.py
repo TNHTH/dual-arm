@@ -1,8 +1,8 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
@@ -10,6 +10,46 @@ import os
 
 
 SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+
+
+def _as_bool(value) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def validate_depth_configuration(config: dict) -> None:
+    active_depth_camera = str(config.get("active_depth_camera", "")).strip()
+    enable_left_camera = _as_bool(config.get("enable_left_camera", "false"))
+    enable_right_camera = _as_bool(config.get("enable_right_camera", "false"))
+    left_depth = _as_bool(config.get("left_camera_enable_depth", "false"))
+    right_depth = _as_bool(config.get("right_camera_enable_depth", "false"))
+
+    if active_depth_camera not in {"left", "right"}:
+        raise RuntimeError("active_depth_camera 必须是 left 或 right")
+    if left_depth and right_depth:
+        raise RuntimeError("left_camera_enable_depth 与 right_camera_enable_depth 不能同时为 true")
+    if active_depth_camera == "left" and not enable_left_camera:
+        raise RuntimeError("active_depth_camera=left 时 enable_left_camera 必须为 true")
+    if active_depth_camera == "right" and not enable_right_camera:
+        raise RuntimeError("active_depth_camera=right 时 enable_right_camera 必须为 true")
+    if active_depth_camera == "left" and not left_depth:
+        raise RuntimeError("active_depth_camera=left 时 left_camera_enable_depth 必须为 true")
+    if active_depth_camera == "right" and not right_depth:
+        raise RuntimeError("active_depth_camera=right 时 right_camera_enable_depth 必须为 true")
+
+
+def _validate_depth_configuration(context, *args, **kwargs):  # pylint: disable=unused-argument
+    config = {
+        key: LaunchConfiguration(key).perform(context)
+        for key in (
+            "active_depth_camera",
+            "enable_left_camera",
+            "enable_right_camera",
+            "left_camera_enable_depth",
+            "right_camera_enable_depth",
+        )
+    }
+    validate_depth_configuration(config)
+    return []
 
 
 def _include(package_name: str, relative_launch: str, condition=None, launch_arguments=None):
@@ -32,7 +72,7 @@ def generate_launch_description():
         "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0"
     )
     default_detector_class_map = os.path.join(detector_adapter_share, "config", "class_map_best_pt.yaml")
-    default_detector_model = os.path.join(
+    default_detector_model = os.environ.get("DUALARM_DETECTOR_MODEL_PATH") or os.path.join(
         detector_share,
         "models",
         "yolov8",
@@ -42,12 +82,93 @@ def generate_launch_description():
         "best.pt",
     )
     default_pick_assist_rgb_overlay_topic = "/perception/pick_assist/rgb_overlay"
+    left_camera_bridge_condition = IfCondition(
+        PythonExpression(
+            ["'", LaunchConfiguration("start_camera_bridge"), "' == 'true' and '", LaunchConfiguration("enable_left_camera"), "' == 'true'"]
+        )
+    )
+    right_camera_bridge_condition = IfCondition(
+        PythonExpression(
+            ["'", LaunchConfiguration("start_camera_bridge"), "' == 'true' and '", LaunchConfiguration("enable_right_camera"), "' == 'true'"]
+        )
+    )
+    left_detector_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                LaunchConfiguration("start_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("start_left_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("enable_left_camera"),
+                "' == 'true'",
+            ]
+        )
+    )
+    right_detector_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                LaunchConfiguration("start_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("start_right_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("enable_right_camera"),
+                "' == 'true'",
+            ]
+        )
+    )
+    left_depth_chain_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                LaunchConfiguration("active_depth_camera"),
+                "' == 'left' and '",
+                LaunchConfiguration("enable_left_camera"),
+                "' == 'true' and '",
+                LaunchConfiguration("left_camera_enable_depth"),
+                "' == 'true'",
+            ]
+        )
+    )
+    right_depth_chain_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                LaunchConfiguration("active_depth_camera"),
+                "' == 'right' and '",
+                LaunchConfiguration("enable_right_camera"),
+                "' == 'true' and '",
+                LaunchConfiguration("right_camera_enable_depth"),
+                "' == 'true'",
+            ]
+        )
+    )
+    table_surface_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                LaunchConfiguration("start_table_surface_detector"),
+                "' == 'true' and '",
+                LaunchConfiguration("enable_left_camera"),
+                "' == 'true' and '",
+                LaunchConfiguration("left_camera_enable_depth"),
+                "' == 'true'",
+            ]
+        )
+    )
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("start_detector", default_value="false"),
+            DeclareLaunchArgument("start_left_detector", default_value="true"),
+            DeclareLaunchArgument("start_right_detector", default_value="true"),
             DeclareLaunchArgument("start_table_surface_detector", default_value="true"),
             DeclareLaunchArgument("start_camera_bridge", default_value="false"),
+            DeclareLaunchArgument("dual_camera_mode", default_value="reobserve_only"),
+            DeclareLaunchArgument("active_depth_camera", default_value="left"),
+            DeclareLaunchArgument("enable_left_camera", default_value="true"),
+            DeclareLaunchArgument("enable_right_camera", default_value="true"),
             DeclareLaunchArgument("require_verified_camera_extrinsics", default_value="true"),
             DeclareLaunchArgument("allow_unverified_camera_extrinsics", default_value="false"),
             DeclareLaunchArgument("required_camera_calibration_status", default_value="verified"),
@@ -56,18 +177,46 @@ def generate_launch_description():
             DeclareLaunchArgument("camera_depth_device", default_value="auto"),
             DeclareLaunchArgument("camera_depth_backend", default_value="auto"),
             DeclareLaunchArgument("camera_v4l2_depth_unit_to_mm_scale", default_value="0.125"),
+            DeclareLaunchArgument("left_camera_color_device", default_value="auto"),
+            DeclareLaunchArgument("left_camera_depth_device", default_value="auto"),
+            DeclareLaunchArgument("left_camera_depth_backend", default_value="auto"),
+            DeclareLaunchArgument("left_camera_enable_depth", default_value="true"),
+            DeclareLaunchArgument("left_camera_fps", default_value="5.0"),
+            DeclareLaunchArgument("left_camera_color_topic", default_value="/left_camera/color/image_raw"),
+            DeclareLaunchArgument("left_camera_depth_topic", default_value="/left_camera/depth/image_raw"),
+            DeclareLaunchArgument("left_camera_color_info_topic", default_value="/left_camera/color/camera_info"),
+            DeclareLaunchArgument("left_camera_depth_info_topic", default_value="/left_camera/depth/camera_info"),
+            DeclareLaunchArgument("left_camera_color_frame", default_value="left_camera_color_frame"),
+            DeclareLaunchArgument("left_camera_depth_frame", default_value="left_camera_depth_frame"),
+            DeclareLaunchArgument("left_camera_rotate_180", default_value="true"),
+            DeclareLaunchArgument("right_camera_color_device", default_value="auto"),
+            DeclareLaunchArgument("right_camera_depth_device", default_value="auto"),
+            DeclareLaunchArgument("right_camera_depth_backend", default_value="auto"),
+            DeclareLaunchArgument("right_camera_enable_depth", default_value="false"),
+            DeclareLaunchArgument("right_camera_fps", default_value="5.0"),
+            DeclareLaunchArgument("right_camera_color_topic", default_value="/right_camera/color/image_raw"),
+            DeclareLaunchArgument("right_camera_depth_topic", default_value="/right_camera/depth/image_raw"),
+            DeclareLaunchArgument("right_camera_color_info_topic", default_value="/right_camera/color/camera_info"),
+            DeclareLaunchArgument("right_camera_depth_info_topic", default_value="/right_camera/depth/camera_info"),
+            DeclareLaunchArgument("right_camera_color_frame", default_value="right_camera_color_frame"),
+            DeclareLaunchArgument("right_camera_depth_frame", default_value="right_camera_depth_frame"),
+            DeclareLaunchArgument("right_camera_rotate_180", default_value="false"),
             DeclareLaunchArgument("publish_fake_joint_states", default_value="false"),
             DeclareLaunchArgument("detector_executable", default_value="detector_pt_node.py"),
             DeclareLaunchArgument("detector_model_path", default_value=default_detector_model),
-            DeclareLaunchArgument("detector_image_topic", default_value="/camera/color/image_raw"),
+            DeclareLaunchArgument("detector_image_topic", default_value="/left_camera/color/image_raw"),
+            DeclareLaunchArgument("left_detector_detections_topic", default_value="/detector/left/detections"),
+            DeclareLaunchArgument("right_detector_detections_topic", default_value="/detector/right/detections"),
+            DeclareLaunchArgument("left_detection_2d_topic", default_value="/perception/left/detection_2d"),
+            DeclareLaunchArgument("right_detection_2d_topic", default_value="/perception/right/detection_2d"),
             DeclareLaunchArgument("detector_confidence_threshold", default_value="0.5"),
             DeclareLaunchArgument("detector_device", default_value=""),
             DeclareLaunchArgument("detector_allowed_class_ids", default_value="[0,1,2,3,4,5]"),
             DeclareLaunchArgument("detector_class_map_file", default_value=default_detector_class_map),
-            DeclareLaunchArgument("depth_require_depth_aligned_detections", default_value="false"),
+            DeclareLaunchArgument("depth_require_depth_aligned_detections", default_value="true"),
             DeclareLaunchArgument("depth_require_camera_info_depth_frame", default_value="true"),
             DeclareLaunchArgument("depth_expected_detection_frame", default_value="left_camera_color_frame"),
-            DeclareLaunchArgument("ball_require_depth_aligned_detections", default_value="false"),
+            DeclareLaunchArgument("ball_require_depth_aligned_detections", default_value="true"),
             DeclareLaunchArgument("ball_require_camera_info_depth_frame", default_value="true"),
             DeclareLaunchArgument("ball_expected_detection_frame", default_value="left_camera_color_frame"),
             DeclareLaunchArgument("table_timer_hz", default_value="2.0"),
@@ -84,18 +233,10 @@ def generate_launch_description():
             DeclareLaunchArgument("start_hardware", default_value="false"),
             DeclareLaunchArgument("left_robot_ip", default_value="192.168.58.2"),
             DeclareLaunchArgument("right_robot_ip", default_value="192.168.58.3"),
-            DeclareLaunchArgument("left_base_x", default_value="0"),
-            DeclareLaunchArgument("left_base_y", default_value="0.35"),
-            DeclareLaunchArgument("left_base_z", default_value="0"),
-            DeclareLaunchArgument("left_base_roll", default_value="0"),
-            DeclareLaunchArgument("left_base_pitch", default_value="0"),
-            DeclareLaunchArgument("left_base_yaw", default_value="0"),
-            DeclareLaunchArgument("right_base_x", default_value="0"),
-            DeclareLaunchArgument("right_base_y", default_value="-0.35"),
-            DeclareLaunchArgument("right_base_z", default_value="0"),
-            DeclareLaunchArgument("right_base_roll", default_value="0"),
-            DeclareLaunchArgument("right_base_pitch", default_value="0"),
-            DeclareLaunchArgument("right_base_yaw", default_value="3.141592653589793"),
+            DeclareLaunchArgument("left_base_xyz", default_value="0 0.35 0"),
+            DeclareLaunchArgument("left_base_rpy", default_value="0 0 0"),
+            DeclareLaunchArgument("right_base_xyz", default_value="0 -0.35 0"),
+            DeclareLaunchArgument("right_base_rpy", default_value="0 0 0"),
             DeclareLaunchArgument("left_robot_port", default_value="8080"),
             DeclareLaunchArgument("right_robot_port", default_value="8080"),
             DeclareLaunchArgument("robot_state_query_interval", default_value="0.05"),
@@ -111,6 +252,13 @@ def generate_launch_description():
             DeclareLaunchArgument("start_mode", default_value="external_gate"),
             DeclareLaunchArgument("start_signal_topic", default_value="/competition/start_signal"),
             DeclareLaunchArgument("task_sequence", default_value="handover,pouring"),
+            DeclareLaunchArgument("scene_age_limit_ms", default_value="800"),
+            DeclareLaunchArgument("robot_state_age_limit_ms", default_value="100"),
+            DeclareLaunchArgument("planning_time", default_value="5.0"),
+            DeclareLaunchArgument("planning_attempts", default_value="10"),
+            DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
+            DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value="[]"),
+            OpaqueFunction(function=_validate_depth_configuration),
             _include(
                 "tf_node",
                 "frame_authority.launch.py",
@@ -123,40 +271,151 @@ def generate_launch_description():
             _include(
                 "orbbec_gemini_bridge",
                 "orbbec_gemini_bridge.launch.py",
-                condition=IfCondition(LaunchConfiguration("start_camera_bridge")),
+                condition=left_camera_bridge_condition,
                 launch_arguments={
                     "use_mock_stream": LaunchConfiguration("use_mock_camera_stream"),
-                    "color_device": LaunchConfiguration("camera_color_device"),
-                    "depth_device": LaunchConfiguration("camera_depth_device"),
-                    "depth_backend": LaunchConfiguration("camera_depth_backend"),
+                    "node_name": "left_orbbec_gemini_bridge",
+                    "fps": LaunchConfiguration("left_camera_fps"),
+                    "color_device": LaunchConfiguration("left_camera_color_device"),
+                    "depth_device": LaunchConfiguration("left_camera_depth_device"),
+                    "depth_backend": LaunchConfiguration("left_camera_depth_backend"),
+                    "enable_depth": LaunchConfiguration("left_camera_enable_depth"),
+                    "color_topic": LaunchConfiguration("left_camera_color_topic"),
+                    "depth_topic": LaunchConfiguration("left_camera_depth_topic"),
+                    "color_camera_info_topic": LaunchConfiguration("left_camera_color_info_topic"),
+                    "depth_camera_info_topic": LaunchConfiguration("left_camera_depth_info_topic"),
+                    "color_frame_id": LaunchConfiguration("left_camera_color_frame"),
+                    "depth_frame_id": LaunchConfiguration("left_camera_depth_frame"),
+                    "rotate_180": LaunchConfiguration("left_camera_rotate_180"),
+                    "v4l2_depth_unit_to_mm_scale": LaunchConfiguration("camera_v4l2_depth_unit_to_mm_scale"),
+                }.items(),
+            ),
+            _include(
+                "orbbec_gemini_bridge",
+                "orbbec_gemini_bridge.launch.py",
+                condition=right_camera_bridge_condition,
+                launch_arguments={
+                    "use_mock_stream": LaunchConfiguration("use_mock_camera_stream"),
+                    "node_name": "right_orbbec_gemini_bridge",
+                    "fps": LaunchConfiguration("right_camera_fps"),
+                    "color_device": LaunchConfiguration("right_camera_color_device"),
+                    "depth_device": LaunchConfiguration("right_camera_depth_device"),
+                    "depth_backend": LaunchConfiguration("right_camera_depth_backend"),
+                    "enable_depth": LaunchConfiguration("right_camera_enable_depth"),
+                    "color_topic": LaunchConfiguration("right_camera_color_topic"),
+                    "depth_topic": LaunchConfiguration("right_camera_depth_topic"),
+                    "color_camera_info_topic": LaunchConfiguration("right_camera_color_info_topic"),
+                    "depth_camera_info_topic": LaunchConfiguration("right_camera_depth_info_topic"),
+                    "color_frame_id": LaunchConfiguration("right_camera_color_frame"),
+                    "depth_frame_id": LaunchConfiguration("right_camera_depth_frame"),
+                    "rotate_180": LaunchConfiguration("right_camera_rotate_180"),
                     "v4l2_depth_unit_to_mm_scale": LaunchConfiguration("camera_v4l2_depth_unit_to_mm_scale"),
                 }.items(),
             ),
             _include(
                 "detector_adapter",
                 "detector_adapter.launch.py",
-                launch_arguments={"class_map_file": LaunchConfiguration("detector_class_map_file")}.items(),
+                condition=left_detector_condition,
+                launch_arguments={
+                    "node_name": "detector_adapter_left",
+                    "input_topic": LaunchConfiguration("left_detector_detections_topic"),
+                    "output_topic": LaunchConfiguration("left_detection_2d_topic"),
+                    "class_map_file": LaunchConfiguration("detector_class_map_file"),
+                    "source_name": "left_camera",
+                }.items(),
+            ),
+            _include(
+                "detector_adapter",
+                "detector_adapter.launch.py",
+                condition=right_detector_condition,
+                launch_arguments={
+                    "node_name": "detector_adapter_right",
+                    "input_topic": LaunchConfiguration("right_detector_detections_topic"),
+                    "output_topic": LaunchConfiguration("right_detection_2d_topic"),
+                    "class_map_file": LaunchConfiguration("detector_class_map_file"),
+                    "source_name": "right_camera",
+                }.items(),
             ),
             _include(
                 "depth_handler",
                 "depth_processor.launch.py",
+                condition=left_depth_chain_condition,
                 launch_arguments={
+                    "node_name": "depth_handler_left",
+                    "camera_info_topic": LaunchConfiguration("left_camera_depth_info_topic"),
+                    "depth_topic": LaunchConfiguration("left_camera_depth_topic"),
+                    "detection_topic": LaunchConfiguration("left_detection_2d_topic"),
+                    "bbox3d_topic": "/depth_handler/left/bbox3d",
+                    "scene_objects_topic": "/perception/left/scene_objects",
+                    "pointcloud_topic": "/depth_handler/left/pointcloud",
+                    "visualization_topic": "/depth_handler/left/visualization",
                     "require_depth_aligned_detections": LaunchConfiguration("depth_require_depth_aligned_detections"),
                     "require_camera_info_depth_frame": LaunchConfiguration("depth_require_camera_info_depth_frame"),
-                    "expected_detection_frame": LaunchConfiguration("depth_expected_detection_frame"),
+                    "expected_detection_frame": LaunchConfiguration("left_camera_color_frame"),
+                    "source_name": "left_camera",
+                }.items(),
+            ),
+            _include(
+                "depth_handler",
+                "depth_processor.launch.py",
+                condition=right_depth_chain_condition,
+                launch_arguments={
+                    "node_name": "depth_handler_right",
+                    "camera_info_topic": LaunchConfiguration("right_camera_depth_info_topic"),
+                    "depth_topic": LaunchConfiguration("right_camera_depth_topic"),
+                    "detection_topic": LaunchConfiguration("right_detection_2d_topic"),
+                    "bbox3d_topic": "/depth_handler/right/bbox3d",
+                    "scene_objects_topic": "/perception/right/scene_objects",
+                    "pointcloud_topic": "/depth_handler/right/pointcloud",
+                    "visualization_topic": "/depth_handler/right/visualization",
+                    "require_depth_aligned_detections": LaunchConfiguration("depth_require_depth_aligned_detections"),
+                    "require_camera_info_depth_frame": LaunchConfiguration("depth_require_camera_info_depth_frame"),
+                    "expected_detection_frame": LaunchConfiguration("right_camera_color_frame"),
+                    "source_name": "right_camera",
                 }.items(),
             ),
             _include(
                 "ball_basket_pose_estimator",
                 "ball_basket_pose_estimator.launch.py",
+                condition=left_depth_chain_condition,
                 launch_arguments={
+                    "node_name": "ball_basket_pose_estimator_left",
+                    "detections_topic": LaunchConfiguration("left_detection_2d_topic"),
+                    "depth_topic": LaunchConfiguration("left_camera_depth_topic"),
+                    "camera_info_topic": LaunchConfiguration("left_camera_depth_info_topic"),
+                    "output_topic": "/perception/left/ball_basket_scene_objects",
+                    "source_name": "left_camera",
                     "require_depth_aligned_detections": LaunchConfiguration("ball_require_depth_aligned_detections"),
                     "require_camera_info_depth_frame": LaunchConfiguration("ball_require_camera_info_depth_frame"),
-                    "expected_detection_frame": LaunchConfiguration("ball_expected_detection_frame"),
+                    "expected_detection_frame": LaunchConfiguration("left_camera_color_frame"),
                 }.items(),
             ),
-            _include("scene_fusion", "scene_fusion.launch.py"),
+            _include(
+                "ball_basket_pose_estimator",
+                "ball_basket_pose_estimator.launch.py",
+                condition=right_depth_chain_condition,
+                launch_arguments={
+                    "node_name": "ball_basket_pose_estimator_right",
+                    "detections_topic": LaunchConfiguration("right_detection_2d_topic"),
+                    "depth_topic": LaunchConfiguration("right_camera_depth_topic"),
+                    "camera_info_topic": LaunchConfiguration("right_camera_depth_info_topic"),
+                    "output_topic": "/perception/right/ball_basket_scene_objects",
+                    "source_name": "right_camera",
+                    "require_depth_aligned_detections": LaunchConfiguration("ball_require_depth_aligned_detections"),
+                    "require_camera_info_depth_frame": LaunchConfiguration("ball_require_camera_info_depth_frame"),
+                    "expected_detection_frame": LaunchConfiguration("right_camera_color_frame"),
+                }.items(),
+            ),
+            _include(
+                "scene_fusion",
+                "scene_fusion.launch.py",
+                launch_arguments={
+                    "scene_fusion_input_topics": "['/perception/left/scene_objects','/perception/right/scene_objects','/perception/left/ball_basket_scene_objects','/perception/right/ball_basket_scene_objects','/perception/table_scene_objects']",
+                    "scene_fusion_rgb_detection_topics": "['/perception/right/detection_2d']",
+                }.items(),
+            ),
             _include("planning_scene_sync", "planning_scene_sync.launch.py"),
+            _include("evidence_manager", "evidence_manager.launch.py"),
             _include("grasp_pose_generator", "grasp_pose_generator.launch.py"),
             _include("joint_state_aggregator", "joint_state_aggregator.launch.py"),
             _include(
@@ -164,36 +423,24 @@ def generate_launch_description():
                 "move_group.launch.py",
                 launch_arguments={
                     "publish_fake_joint_states": LaunchConfiguration("publish_fake_joint_states"),
-                    "left_base_x": LaunchConfiguration("left_base_x"),
-                    "left_base_y": LaunchConfiguration("left_base_y"),
-                    "left_base_z": LaunchConfiguration("left_base_z"),
-                    "left_base_roll": LaunchConfiguration("left_base_roll"),
-                    "left_base_pitch": LaunchConfiguration("left_base_pitch"),
-                    "left_base_yaw": LaunchConfiguration("left_base_yaw"),
-                    "right_base_x": LaunchConfiguration("right_base_x"),
-                    "right_base_y": LaunchConfiguration("right_base_y"),
-                    "right_base_z": LaunchConfiguration("right_base_z"),
-                    "right_base_roll": LaunchConfiguration("right_base_roll"),
-                    "right_base_pitch": LaunchConfiguration("right_base_pitch"),
-                    "right_base_yaw": LaunchConfiguration("right_base_yaw"),
+                    "left_base_xyz": LaunchConfiguration("left_base_xyz"),
+                    "left_base_rpy": LaunchConfiguration("left_base_rpy"),
+                    "right_base_xyz": LaunchConfiguration("right_base_xyz"),
+                    "right_base_rpy": LaunchConfiguration("right_base_rpy"),
                 }.items(),
             ),
             _include(
                 "fairino_dualarm_planner",
                 "fairino_dualarm_planner.launch.py",
                 launch_arguments={
-                    "left_base_x": LaunchConfiguration("left_base_x"),
-                    "left_base_y": LaunchConfiguration("left_base_y"),
-                    "left_base_z": LaunchConfiguration("left_base_z"),
-                    "left_base_roll": LaunchConfiguration("left_base_roll"),
-                    "left_base_pitch": LaunchConfiguration("left_base_pitch"),
-                    "left_base_yaw": LaunchConfiguration("left_base_yaw"),
-                    "right_base_x": LaunchConfiguration("right_base_x"),
-                    "right_base_y": LaunchConfiguration("right_base_y"),
-                    "right_base_z": LaunchConfiguration("right_base_z"),
-                    "right_base_roll": LaunchConfiguration("right_base_roll"),
-                    "right_base_pitch": LaunchConfiguration("right_base_pitch"),
-                    "right_base_yaw": LaunchConfiguration("right_base_yaw"),
+                    "left_base_xyz": LaunchConfiguration("left_base_xyz"),
+                    "left_base_rpy": LaunchConfiguration("left_base_rpy"),
+                    "right_base_xyz": LaunchConfiguration("right_base_xyz"),
+                    "right_base_rpy": LaunchConfiguration("right_base_rpy"),
+                    "scene_age_limit_ms": LaunchConfiguration("scene_age_limit_ms"),
+                    "robot_state_age_limit_ms": LaunchConfiguration("robot_state_age_limit_ms"),
+                    "planning_time": LaunchConfiguration("planning_time"),
+                    "planning_attempts": LaunchConfiguration("planning_attempts"),
                 }.items(),
             ),
             _include(
@@ -208,6 +455,8 @@ def generate_launch_description():
                     "right_gripper_status_service": "/gripper1/epg50_gripper/status",
                     "left_gripper_status_topic": "/gripper0/epg50_gripper/status_stream",
                     "right_gripper_status_topic": "/gripper1/epg50_gripper/status_stream",
+                    "allow_vendor_direct_cartesian": LaunchConfiguration("allow_vendor_direct_cartesian"),
+                    "vendor_direct_cartesian_profiles": LaunchConfiguration("vendor_direct_cartesian_profiles"),
                 }.items(),
             ),
             _include("dualarm_task_manager", "dualarm_task_manager.launch.py"),
@@ -223,13 +472,34 @@ def generate_launch_description():
             Node(
                 package="detector",
                 executable=LaunchConfiguration("detector_executable"),
-                name="detector_node",
-                condition=IfCondition(LaunchConfiguration("start_detector")),
+                name="detector_left",
+                condition=left_detector_condition,
                 output="screen",
                 parameters=[
                     {
                         "model_path": LaunchConfiguration("detector_model_path"),
-                        "image_topic": LaunchConfiguration("detector_image_topic"),
+                        "image_topic": LaunchConfiguration("left_camera_color_topic"),
+                        "detections_topic": LaunchConfiguration("left_detector_detections_topic"),
+                        "confidence_threshold": LaunchConfiguration("detector_confidence_threshold"),
+                        "device": LaunchConfiguration("detector_device"),
+                        "allowed_class_ids": ParameterValue(
+                            LaunchConfiguration("detector_allowed_class_ids"),
+                            value_type=str,
+                        ),
+                    }
+                ],
+            ),
+            Node(
+                package="detector",
+                executable=LaunchConfiguration("detector_executable"),
+                name="detector_right",
+                condition=right_detector_condition,
+                output="screen",
+                parameters=[
+                    {
+                        "model_path": LaunchConfiguration("detector_model_path"),
+                        "image_topic": LaunchConfiguration("right_camera_color_topic"),
+                        "detections_topic": LaunchConfiguration("right_detector_detections_topic"),
                         "confidence_threshold": LaunchConfiguration("detector_confidence_threshold"),
                         "device": LaunchConfiguration("detector_device"),
                         "allowed_class_ids": ParameterValue(
@@ -243,14 +513,14 @@ def generate_launch_description():
                 package="tools",
                 executable="table_surface_detector.py",
                 name="table_surface_detector",
-                condition=IfCondition(LaunchConfiguration("start_table_surface_detector")),
+                condition=table_surface_condition,
                 output="screen",
                 parameters=[
                     {
-                        "color_topic": LaunchConfiguration("detector_image_topic"),
-                        "depth_topic": "/camera/depth/image_raw",
-                        "camera_info_topic": "/camera/depth/camera_info",
-                        "detections_topic": "/perception/detection_2d",
+                        "color_topic": LaunchConfiguration("left_camera_color_topic"),
+                        "depth_topic": LaunchConfiguration("left_camera_depth_topic"),
+                        "camera_info_topic": LaunchConfiguration("left_camera_depth_info_topic"),
+                        "detections_topic": LaunchConfiguration("left_detection_2d_topic"),
                         "rgb_overlay_topic": LaunchConfiguration("pick_assist_rgb_overlay_topic"),
                         "timer_hz": LaunchConfiguration("table_timer_hz"),
                         "min_depth_mm": LaunchConfiguration("table_min_depth_mm"),

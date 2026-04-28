@@ -8,11 +8,13 @@
 
 - `system_overview.md`
 - `control-plane.md`
+- `runtime-architecture.md`
 
 ## 入口文件或常用命令
 
 ```bash
 sed -n '1,200p' docs/architecture/system_overview.md
+sed -n '1,200p' docs/architecture/runtime-architecture.md
 ```
 
 ## 上下游依赖

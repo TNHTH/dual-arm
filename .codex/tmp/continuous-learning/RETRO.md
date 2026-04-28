@@ -1,6 +1,44 @@
 # dual-arm 任务复盘
 
-更新时间：2026-04-16
+更新时间：2026-04-26
+
+## 2026-04-26 Software-only Hardening 复盘入口
+
+### Worked
+- 先建立软件-only 护栏再做安全和控制相关修改，可以避免 review 后的修复误触实机。
+- Wave 0 基线把 README 覆盖和 pytest 缺失直接转成后续可执行任务，避免只停留在报告。
+- Wave 1 先从 HTTP 暴露面和 mockable stop 入口入手，能在不碰实机的前提下先降低最直接的软件风险。
+- Wave 2 把安全逻辑抽成无 ROS 依赖 helper 后，测试能同时服务普通 pytest 和 colcon test，避免 ROS graph 成为单元测试前提。
+- Playwright 使用 route mock API 后，前端 smoke 不再依赖手工启动 API。
+- Wave 3 用 profile 先收拢 launch 默认值，比直接重写所有节点读取配置风险更低；show-args 是适合软件-only 的验证证据。
+- Wave 4 把比赛任务序列和对象排序抽成纯 Python helper 后，可以不用启动 ROS graph 就验证关键比赛契约。
+- 在 evidence 不完整时显式失败，比继续返回 motion success 更适合比赛任务链；否则上层会把“动作执行了”误判成“任务成功了”。
+- Wave 5 拆大文件时先抽纯 helper、保留入口兼容，是在时间有限且需要按 Wave 提交时的低风险路径。
+- 发现 subagent 多次超时后，及时关闭并转本地主线程验证，避免最终提交被外部 sidecar 卡死。
+
+### Waste
+- 当前系统缺少 `pytest` 命令，说明测试入口不能假设全局工具已安装；Wave 2 需要提供明确依赖说明或脚本降级提示。
+- Playwright 第一次失败来自文本断言命中多个元素；API-backed UI 测试应优先断言 mock 调用计数或 role 精确选择器。
+- 包内测试文件名与顶层测试同名会触发 pytest import mismatch；跨目录测试必须用唯一 basename。
+- reviewer subagent 第二次超时说明长只读审查也可能不稳定；必须有本地主线程验证 fallback，不把提交节奏依赖在 subagent 返回上。
+- Wave 1、Wave 5、Wave 6 的 reviewer/verifier prompt 仍偏宽，导致 subagent 难以在短时间内完成；以后不能把“最终全量判断”直接委派给单个 subagent。
+
+### Trigger Redesign
+- signal：用户要求 review 后直接修复/重构，并要求提交推送。
+- route：进入 auto-pipeline 多 Wave 执行，按 Wave 提交。
+- guard：先写软件-only 护栏，所有验证默认 mock/dry-run。
+- signal：控制台 API 暴露 motion、gripper、recover、delete 或 process control。
+- route：默认本机监听 + token 鉴权 + 审计日志。
+- guard：无 token 时危险 API 默认拒绝，而不是依赖网络隔离。
+- signal：同一轮 pytest 同时收集顶层 tests 和包内 test 目录。
+- route：测试文件 basename 唯一化。
+- guard：避免 pytest 将同名模块缓存到错误路径。
+- signal：subagent 任务描述包含“完整 review / 最终 verifier / 检查全部 diff”。
+- route：先拆成本地 checklist，再只把单一风险点委派给 subagent。
+- guard：若下一步提交/推送依赖该结论，主线程必须先有本地 fallback 验证路径。
+- signal：同一任务已有两个 subagent 超时。
+- route：停用非必要 subagent，切本地主线程 review/verify。
+- guard：只有更窄且非阻塞的问题才允许再开新 subagent。
 
 ## 结论
 本次对话把 `dual-arm` 从“架构骨架式重构”推进到了“Wave 1 真 MoveIt 双臂规划基线”，方向是对的，但过程里暴露出多类可规避问题：subagent 不稳定、旧 ROS 进程污染验证、安装树残留、Conda 抢 Python、以及验证步骤顺序不严格。不能保证以后绝对不再犯，但这些问题已经被转成仓库规则和执行检查点。
@@ -331,3 +369,29 @@
 - 发生 repo 级目录重构后，`STATE.md` 中所有“正式主根/正式构建入口”叙述必须在同一天更新到最终术语，历史阶段只能标注为历史，不得继续冒充当前事实。
 - 长链路多 subagent 任务进入提交前，必须执行一次 `close_agent -> registry 回填 -> state 回填 -> final summary` 的固定收口序列。
 - 任何“从隔离 worktree 部署到最终落点目录”的任务，最终目录必须重建 install 树后再做 launch smoke，不能直接相信源 worktree 的构建产物。
+
+## 2026-04-28 v1 hardware-interface hardening 复盘
+
+### Facts
+- 本轮按 `Approved for v1 hardware-interface hardening scope` 执行，没有新增硬件，也没有连接真实机械臂或夹爪。
+- 已实现双 RGB/单 Depth 静态门控、右 detector 解耦、frame alignment 默认 true、table gate、planner-first Cartesian、vendor direct 双门控、`guarded_grasp` 和 pour evidence 不假成功。
+- 新增 `evidence_manager` 只作为现有信号聚合器，不替代真实 fill/spill 传感器。
+- 验证主证据为 `28 passed`、相关 10 包 colcon build、接口 show、launch show-args、非法 depth fail-fast 和 `software_check.sh` 通过。
+- `smoke_depth_handler_future_tf.py` 本轮未正常退出，已记录为未闭环 incident，未作为通过证据。
+
+### Worked
+- 先扩接口，再更新所有构造方，能快速暴露 `scene_fusion` 继续写 `[-1]` covariance 这类合同破口。
+- 用 `OpaqueFunction` 做启动期 depth 校验，比在节点 condition 里隐式不启动更清晰，非法组合可以直接 fail fast。
+- Cartesian 默认拉回 planner service 后再 `_execute_joint()`，能在不改底层 `robo_ctrl` 硬件接口的前提下关闭默认裸 `MoveCart` 风险。
+- `guarded_grasp` 让 contact false 到 attach 之间出现明确断点，任务层也能在失败时 release reservation。
+- 把 residual risks 写入 runbook，有助于防止 v1 被误报成完整人体安全、真实倒水证据或 dense world model。
+
+### Waste / Risk
+- 新增 ament CMake 包时首次被 Conda Python 抢占，说明本地 shell 环境仍然可能绕过 ROS Humble system Python。
+- 旧 `smoke_depth_handler_future_tf.py` 语义与本轮 frame alignment gate 不一致，直接复用会浪费时间并产生残留进程。
+- `planning_scene_sync` 本轮同时修正 object pose、primitive local pose 和 subframe local pose，后续最好补一个最小 MoveIt diff runtime smoke 专门覆盖 subframe frame 语义。
+
+### New Rules
+- 新增 v1/v2 范围型方案时，最终文档必须同时列 `Closed In v1` 和 `Residual Risks / Out Of Scope`，避免“没假成功”被误写成“已真实验证成功”。
+- frame alignment 验收应有专用 smoke：错 frame 拒绝、aligned frame 通过；future TF fallback smoke 不能替代 alignment gate。
+- 新增 ROS CMake 包时，若工作站存在 Conda，优先在包或构建命令中固定 `/usr/bin/python3`，并把首次构建失败记录到 error trace。

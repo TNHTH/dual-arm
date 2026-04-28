@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import rclpy
+import yaml
 from epg50_gripper_ros.msg import GripperStatus
 from epg50_gripper_ros.srv import GripperCommand, GripperStatus as GripperStatusSrv
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
@@ -18,7 +19,7 @@ from sensor_msgs.msg import JointState
 
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory
 from dualarm_interfaces.msg import SceneObjectArray
-from dualarm_interfaces.srv import AttachObject, DetachObject, SetGripper, SetObjectInteraction
+from dualarm_interfaces.srv import AttachObject, DetachObject, PlanCartesian, PlanDualPose, PlanPose, SetGripper, SetObjectInteraction
 from primitive_contract import (
     PRIMITIVE_CONTRACT_VERSION,
     RESULT_CONTACT_FAILED,
@@ -35,6 +36,7 @@ from primitive_contract import (
     supported_primitive_ids,
     validate_primitive_goal,
 )
+from primitive_evidence import RESULT_UNVERIFIED_EVIDENCE, has_pour_evidence
 from robo_ctrl.msg import RobotState
 from robo_ctrl.srv import RobotMove, RobotMoveCart, RobotServoJoint
 
@@ -48,6 +50,10 @@ class PrimitiveExecutionOutcome:
     contact_verified: bool = False
     detach_verified: bool = False
     spill_detected: bool = False
+    fill_target_reached: bool = False
+    estimated_poured_mass_g: float = -1.0
+    evidence_confidence: float = 0.0
+    evidence_sources: Tuple[str, ...] = ()
     primary_started: bool = False
     secondary_started: bool = False
     primary_completed: bool = False
@@ -68,6 +74,8 @@ class ExecutionAdapterNode(Node):
         self.declare_parameter("gripper_command_timeout_s", 8.0)
         self.declare_parameter("dual_arm_skew_limit_ms", 30.0)
         self.declare_parameter("world_frame", "world")
+        self.declare_parameter("allow_vendor_direct_cartesian", False)
+        self.declare_parameter("vendor_direct_cartesian_profiles", [])
         self._left_gripper_slave_id = int(self.get_parameter("left_gripper_slave_id").value)
         self._right_gripper_slave_id = int(self.get_parameter("right_gripper_slave_id").value)
         self._left_gripper_command_service = str(self.get_parameter("left_gripper_command_service").value)
@@ -79,6 +87,10 @@ class ExecutionAdapterNode(Node):
         self._gripper_command_timeout_s = float(self.get_parameter("gripper_command_timeout_s").value)
         self._dual_arm_skew_limit_ms = float(self.get_parameter("dual_arm_skew_limit_ms").value)
         self._world_frame = str(self.get_parameter("world_frame").value)
+        self._allow_vendor_direct_cartesian = self._parse_bool(self.get_parameter("allow_vendor_direct_cartesian").value)
+        self._vendor_direct_cartesian_profiles = self._parse_profile_list(
+            self.get_parameter("vendor_direct_cartesian_profiles").value
+        )
         self._reentrant_group = ReentrantCallbackGroup()
 
         self._robot_move_clients: Dict[str, any] = {
@@ -117,6 +129,13 @@ class ExecutionAdapterNode(Node):
         )
         self._set_interaction_client = self.create_client(
             SetObjectInteraction, "/scene/set_object_interaction", callback_group=self._reentrant_group
+        )
+        self._plan_pose_client = self.create_client(PlanPose, "/planning/plan_pose", callback_group=self._reentrant_group)
+        self._plan_cartesian_client = self.create_client(
+            PlanCartesian, "/planning/plan_cartesian", callback_group=self._reentrant_group
+        )
+        self._plan_dual_pose_client = self.create_client(
+            PlanDualPose, "/planning/plan_dual_pose", callback_group=self._reentrant_group
         )
 
         self._left_robot_state: Optional[RobotState] = None
@@ -164,6 +183,24 @@ class ExecutionAdapterNode(Node):
             callback_group=self._reentrant_group,
         )
         self.get_logger().info("execution_adapter 已启动")
+
+    def _parse_profile_list(self, value) -> set[str]:
+        if isinstance(value, str):
+            try:
+                parsed = yaml.safe_load(value)
+            except Exception:  # pylint: disable=broad-except
+                parsed = None
+            if isinstance(parsed, list):
+                return {str(item) for item in parsed if str(item).strip()}
+            return {item.strip() for item in value.split(",") if item.strip()}
+        if isinstance(value, (list, tuple)):
+            return {str(item) for item in value if str(item).strip()}
+        return set()
+
+    def _parse_bool(self, value) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
     def _wait_future(self, future, timeout_sec: float):
         deadline = time.monotonic() + max(timeout_sec, 0.0)
@@ -247,7 +284,7 @@ class ExecutionAdapterNode(Node):
             )
         elif goal.use_cartesian_execution and goal.cartesian_waypoints:
             primary_started = True
-            success, message = self._execute_cartesian_sequence(goal.arm_group, goal.cartesian_waypoints)
+            success, message = self._execute_cartesian_sequence(goal.arm_group, goal.cartesian_waypoints, goal.execution_profile)
             primary_completed = success
             result_code = "success" if success else "driver_failure"
         elif goal.joint_trajectory.points:
@@ -324,6 +361,10 @@ class ExecutionAdapterNode(Node):
         result.contact_verified = outcome.contact_verified
         result.detach_verified = outcome.detach_verified
         result.spill_detected = outcome.spill_detected
+        result.fill_target_reached = outcome.fill_target_reached
+        result.estimated_poured_mass_g = float(outcome.estimated_poured_mass_g)
+        result.evidence_confidence = float(outcome.evidence_confidence)
+        result.evidence_sources = list(outcome.evidence_sources)
         result.final_primary_joint_state = self._robot_state_to_joint_state(
             self._left_robot_state if goal.arm_group != "right_arm" else self._right_robot_state,
             goal.arm_group if goal.arm_group != "dual_arm" else "left_arm",
@@ -342,6 +383,7 @@ class ExecutionAdapterNode(Node):
             outcome.success, outcome.message = self._execute_cartesian_sequence(
                 primary_arm_group(goal.arm_group),
                 goal.primary_cartesian_waypoints,
+                goal.execution_profile,
             )
             outcome.primary_completed = outcome.success
             if outcome.success:
@@ -383,6 +425,7 @@ class ExecutionAdapterNode(Node):
             outcome.success, outcome.message = self._execute_cartesian_sequence(
                 primary_arm_group(goal.arm_group),
                 goal.primary_cartesian_waypoints,
+                goal.execution_profile,
             )
             outcome.primary_completed = outcome.success
             if outcome.success:
@@ -405,7 +448,18 @@ class ExecutionAdapterNode(Node):
             )
         elif goal.primitive_id == "pour_tilt":
             outcome = self._execute_dual_or_single_cartesian(goal)
-            outcome.result_code = self._primitive_motion_result_code(outcome)
+            if outcome.success and not has_pour_evidence(goal.stop_condition_id):
+                outcome.success = False
+                outcome.message = "pour_tilt 运动完成，但缺少 fill/spill evidence，不能判定成功"
+                outcome.result_code = RESULT_UNVERIFIED_EVIDENCE
+                outcome.fill_target_reached = False
+                outcome.estimated_poured_mass_g = -1.0
+                outcome.evidence_confidence = 0.0
+                outcome.evidence_sources = ()
+            else:
+                outcome.result_code = self._primitive_motion_result_code(outcome)
+        elif goal.primitive_id == "guarded_grasp":
+            outcome = self._execute_guarded_grasp(goal)
         elif goal.primitive_id == "hold_verify":
             outcome.success, outcome.contact_verified = self._hold_verify(
                 primary_arm_group(goal.arm_group),
@@ -456,6 +510,56 @@ class ExecutionAdapterNode(Node):
                 outcome.result_code = RESULT_DETACH_FAILED
         return outcome
 
+    def _execute_guarded_grasp(self, goal: ExecutePrimitive.Goal) -> PrimitiveExecutionOutcome:
+        outcome = PrimitiveExecutionOutcome(primary_started=True)
+        primary_arm = primary_arm_group(goal.arm_group)
+        if len(goal.primary_cartesian_waypoints) < 2:
+            outcome.message = "guarded_grasp 至少需要 pregrasp 和 grasp 两个 waypoint"
+            outcome.result_code = RESULT_INVALID_REQUEST
+            return outcome
+
+        pregrasp = goal.primary_cartesian_waypoints[0]
+        grasp = goal.primary_cartesian_waypoints[1]
+        retreat = goal.primary_cartesian_waypoints[2] if len(goal.primary_cartesian_waypoints) >= 3 else pregrasp
+
+        pregrasp_ok, pregrasp_message = self._execute_cartesian_sequence(primary_arm, [pregrasp], goal.execution_profile)
+        if not pregrasp_ok:
+            outcome.message = f"guarded_grasp pregrasp 失败: {pregrasp_message}"
+            outcome.result_code = RESULT_DRIVER_FAILURE
+            return outcome
+
+        approach_ok, approach_message = self._execute_cartesian_sequence(primary_arm, [grasp], goal.execution_profile)
+        if not approach_ok:
+            outcome.message = f"guarded_grasp approach 失败: {approach_message}"
+            outcome.result_code = RESULT_DRIVER_FAILURE
+            return outcome
+
+        gripper_ok = self._set_gripper_internal(primary_arm, command=2, position=255)
+        if not gripper_ok:
+            outcome.message = "guarded_grasp 夹爪闭合命令失败"
+            outcome.result_code = RESULT_DRIVER_FAILURE
+            return outcome
+
+        outcome.contact_verified = self._check_gripper_contact(primary_arm)
+        if not outcome.contact_verified:
+            outcome.message = "guarded_grasp 接触未验证，禁止 attach"
+            outcome.result_code = RESULT_CONTACT_FAILED
+            return outcome
+
+        link_name = self._tool_link_for_arm(primary_arm)
+        attach_ok = self._call_attach(goal.object_id, link_name)
+        if not attach_ok:
+            outcome.message = "guarded_grasp 接触已验证但 attach 同步失败"
+            outcome.result_code = RESULT_DRIVER_FAILURE
+            return outcome
+
+        retreat_ok, retreat_message = self._execute_cartesian_sequence(primary_arm, [retreat], goal.execution_profile)
+        outcome.primary_completed = retreat_ok
+        outcome.success = retreat_ok
+        outcome.message = "guarded_grasp 完成" if retreat_ok else f"guarded_grasp retreat 失败: {retreat_message}"
+        outcome.result_code = RESULT_SUCCESS if retreat_ok else RESULT_DRIVER_FAILURE
+        return outcome
+
     def _primitive_motion_result_code(self, outcome: PrimitiveExecutionOutcome) -> str:
         if outcome.success:
             return RESULT_SUCCESS
@@ -485,11 +589,13 @@ class ExecutionAdapterNode(Node):
                 secondary_arm,
                 goal.primary_cartesian_waypoints,
                 goal.secondary_cartesian_waypoints,
+                goal.execution_profile,
             )
             return outcome
         outcome.success, outcome.message = self._execute_cartesian_sequence(
             primary_arm_group(goal.arm_group),
             goal.primary_cartesian_waypoints,
+            goal.execution_profile,
         )
         outcome.primary_completed = outcome.success
         return outcome
@@ -500,6 +606,7 @@ class ExecutionAdapterNode(Node):
         secondary_arm: str,
         primary_waypoints,
         secondary_waypoints,
+        execution_profile: str,
     ) -> tuple[bool, str, float, bool, bool, bool, bool]:
         if not primary_waypoints or not secondary_waypoints:
             return False, "双臂 cartesian primitive 缺少 waypoint", 0.0, False, False, False, False
@@ -508,6 +615,58 @@ class ExecutionAdapterNode(Node):
         for pose_stamped in list(primary_waypoints) + list(secondary_waypoints):
             if not self._cartesian_waypoint_frame_valid(pose_stamped):
                 return False, f"双臂 cartesian primitive waypoint 必须是 {self._world_frame} frame", 0.0, False, False, False, False
+        if self._vendor_direct_allowed(execution_profile):
+            return self._execute_vendor_dual_cartesian(primary_arm, secondary_arm, primary_waypoints, secondary_waypoints)
+
+        max_skew_ms = 0.0
+        primary_completed = False
+        secondary_completed = False
+        for index in range(len(primary_waypoints)):
+            if not self._plan_dual_pose_client.wait_for_service(timeout_sec=0.5):
+                return False, "/planning/plan_dual_pose 服务不可用", max_skew_ms, False, False, primary_completed, secondary_completed
+            request = PlanDualPose.Request()
+            if primary_arm == "left_arm":
+                request.left_target_pose = primary_waypoints[index]
+                request.right_target_pose = secondary_waypoints[index]
+            else:
+                request.left_target_pose = secondary_waypoints[index]
+                request.right_target_pose = primary_waypoints[index]
+            request.primary_arm = primary_arm
+            request.planner_id = ""
+            request.coordination_mode = "paired_pose"
+            request.sync_policy = "software_pair"
+            future = self._plan_dual_pose_client.call_async(request)
+            response = self._wait_future(future, 5.0)
+            if response is None:
+                return False, f"双臂 cartesian step {index} 规划超时", max_skew_ms, False, False, primary_completed, secondary_completed
+            if not bool(response.success) or response.result_code != RESULT_SUCCESS:
+                return False, f"双臂 cartesian step {index} 规划失败: {response.result_code}", max_skew_ms, False, False, primary_completed, secondary_completed
+            (
+                success,
+                message,
+                result_code,
+                primary_started,
+                secondary_started,
+                primary_done,
+                secondary_done,
+                sync_skew_ms,
+            ) = self._execute_dual_arm(response.left_joint_trajectory, response.right_joint_trajectory)
+            max_skew_ms = max(max_skew_ms, sync_skew_ms)
+            primary_completed = primary_done
+            secondary_completed = secondary_done
+            if not success:
+                if result_code == RESULT_SYNC_VIOLATION:
+                    return False, message, max_skew_ms, primary_started, secondary_started, primary_completed, secondary_completed
+                return False, f"双臂 cartesian step {index} 执行失败: {message}", max_skew_ms, primary_started, secondary_started, primary_completed, secondary_completed
+        return True, "双臂 cartesian primitive 经 MoveIt 规划后执行成功", max_skew_ms, True, True, True, True
+
+    def _execute_vendor_dual_cartesian(
+        self,
+        primary_arm: str,
+        secondary_arm: str,
+        primary_waypoints,
+        secondary_waypoints,
+    ) -> tuple[bool, str, float, bool, bool, bool, bool]:
         max_skew_ms = 0.0
         primary_completed = False
         secondary_completed = False
@@ -537,16 +696,52 @@ class ExecutionAdapterNode(Node):
                 return False, f"双臂 cartesian step {index} 执行失败", max_skew_ms, True, True, primary_completed, secondary_completed
         return True, "双臂 cartesian primitive 执行成功", max_skew_ms, True, True, True, True
 
-    def _execute_cartesian_sequence(self, arm_group: str, waypoints) -> tuple[bool, str]:
+    def _execute_cartesian_sequence(self, arm_group: str, waypoints, execution_profile: str = "") -> tuple[bool, str]:
         if not waypoints:
             return False, "cartesian waypoints 为空"
         for index, pose_stamped in enumerate(waypoints):
             if not self._cartesian_waypoint_frame_valid(pose_stamped):
                 return False, f"step={index}: cartesian waypoint 必须是 {self._world_frame} frame"
+        if self._vendor_direct_allowed(execution_profile):
+            return self._execute_vendor_cartesian_sequence(arm_group, waypoints)
+        if len(waypoints) == 1:
+            if not self._plan_pose_client.wait_for_service(timeout_sec=0.5):
+                return False, "/planning/plan_pose 服务不可用"
+            request = PlanPose.Request()
+            request.arm_group = arm_group
+            request.target_pose = waypoints[0]
+            request.planner_id = ""
+            request.cartesian = False
+            response = self._wait_future(self._plan_pose_client.call_async(request), 5.0)
+        else:
+            if not self._plan_cartesian_client.wait_for_service(timeout_sec=0.5):
+                return False, "/planning/plan_cartesian 服务不可用"
+            request = PlanCartesian.Request()
+            request.arm_group = arm_group
+            request.waypoints = list(waypoints)
+            request.planner_id = ""
+            response = self._wait_future(self._plan_cartesian_client.call_async(request), 5.0)
+        if response is None:
+            return False, "cartesian planning 超时"
+        if not bool(response.success) or response.result_code != RESULT_SUCCESS:
+            return False, f"cartesian planning 失败: {response.result_code}"
+        success, message = self._execute_joint(arm_group, response.joint_trajectory)
+        return success, message if not success else "cartesian sequence 经 MoveIt 规划后执行成功"
+
+    def _execute_vendor_cartesian_sequence(self, arm_group: str, waypoints) -> tuple[bool, str]:
+        for index, pose_stamped in enumerate(waypoints):
             success, message = self._execute_cartesian(arm_group, pose_stamped)
             if not success:
                 return False, f"step={index}: {message}"
-        return True, "cartesian sequence 执行成功"
+        return True, "vendor direct cartesian sequence 执行成功"
+
+    def _vendor_direct_allowed(self, execution_profile: str) -> bool:
+        profile_name = (execution_profile or "").strip()
+        return (
+            self._allow_vendor_direct_cartesian
+            and bool(profile_name)
+            and profile_name in self._vendor_direct_cartesian_profiles
+        )
 
     def _cartesian_waypoint_frame_valid(self, pose_stamped) -> bool:
         frame_id = pose_stamped.header.frame_id.strip()
@@ -731,7 +926,7 @@ class ExecutionAdapterNode(Node):
         for scene_object in self._scene_cache.objects:
             if scene_object.id == object_id:
                 return scene_object.attached_link == ""
-        return True
+        return False
 
     def _check_gripper_contact(self, arm_name: str) -> bool:
         status = self._get_gripper_status(arm_name)
@@ -763,15 +958,15 @@ class ExecutionAdapterNode(Node):
         for scene_object in self._scene_cache.objects:
             if scene_object.id == object_id:
                 return scene_object.lifecycle_state not in {"held_dual_contact", "attached", "opened_split_active"}
-        return True
+        return False
 
     def _verify_object_attached_or_hidden(self, object_id: str) -> bool:
         if not object_id:
             return False
         for scene_object in self._scene_cache.objects:
             if scene_object.id == object_id:
-                return scene_object.attached_link != "" or scene_object.lifecycle_state in {"lost", "opened_split_active", "opened_split"}
-        return True
+                return scene_object.attached_link != "" or scene_object.lifecycle_state in {"opened_split_active", "opened_split"}
+        return False
 
     def _set_object_interaction(
         self,

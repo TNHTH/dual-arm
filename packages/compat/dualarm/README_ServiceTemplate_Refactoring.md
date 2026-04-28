@@ -100,7 +100,8 @@ if (!gripper_response->success) {
 
 ### 1. 编译重构后的代码
 ```bash
-./build_workspace.sh --group compat
+cd /home/gwh/dual-arm
+colcon build --packages-select dualarm
 ```
 
 ### 2. 运行不同版本
@@ -171,12 +172,6 @@ auto response = ServiceCaller<robo_ctrl::srv::RobotMove>::callServiceSync(
 4. **性能监控**: 增强统计和监控功能
 5. **服务发现**: 自动发现可用服务
 
-## 当前仓库约定
-
-- 当前正式源码根为 `packages/`，兼容期内 `src -> packages` 仅作旧入口别名。
-- 运行或调试本包前，优先在仓库根目录执行 `./use_workspace.sh`。
-- 若需要查看本包在新仓库结构中的位置，请先阅读 `README.md` 与 `docs/reference/repo-map.md`。
-
 ## 总结
 
-通过使用 `ServiceServerTemplate` 和相关辅助类，我们成功简化了 `main.cpp` 中的服务调用逻辑，提高了代码的可维护性和可读性。这种模板化的方法可以应用到其他需要大量服务调用的 ROS 2 项目中。
+通过使用 `ServiceServerTemplate` 和相关辅助类，我们成功简化了 `main.cpp` 中的服务调用逻辑，提高了代码的可维护性和可读性。这种模板化的方法可以应用到其他需要大量服务调用的ROS2项目中。

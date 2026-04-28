@@ -1,5 +1,40 @@
 # Error Trace
 
+## Incident 30
+- Time: 2026-04-26
+- Scope: Wave 0 software-only baseline
+- Symptom: `pytest --collect-only tests` failed with `/bin/bash: pytest: 未找到命令`.
+- Root cause: 当前 shell 环境没有可执行的 `pytest` 命令；测试入口依赖没有被仓库脚本显式治理。
+- Handling: 将该问题记录为 Wave 2 必修项，后续通过 `scripts/ci/software_check.sh` 给出明确依赖检查和降级提示，并补真实软件-only 测试。
+- Evidence: Wave 0 基线命令返回 exit code 127。
+- Prevention: 不再把全局 `pytest` 视为隐含前提；CI 脚本必须先检查依赖并输出可操作错误。
+- Remaining: Wave 2 完成前，仓库测试体系仍不能证明核心功能回归。
+
+## Incident 31
+- Time: 2026-04-26
+- Scope: Wave 4 task manager test registration
+- Symptom: 同时收集 `tests/unit/test_task_contract.py` 和 `packages/tasks/dualarm_task_manager/test/test_task_contract.py` 时，pytest 报 `ImportMismatchError`。
+- Root cause: 两个测试文件 basename 相同，pytest 模块缓存把包内测试解析到顶层测试路径。
+- Handling: 将包内测试重命名为 `test_dualarm_task_contract.py`，并同步更新 `dualarm_task_manager/CMakeLists.txt`。
+- Evidence: 重跑 `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py` 通过，`17 passed`。
+- Prevention: 后续跨顶层和包内测试目录新增测试时，文件 basename 保持唯一，避免 pytest import mismatch。
+- Remaining: 无。
+
+## Incident 32
+- Time: 2026-04-26
+- Scope: software-only hardening subagent orchestration
+- Symptom: Wave 1 security reviewer、Wave 5 reviewer、Wave 6 final verifier 均在 120-180 秒内未返回有效结果，需要关闭后本地 fallback。
+- Root cause: subagent prompt 粒度偏宽，且把 reviewer/verifier 用作接近最终全量判断的 sidecar；这种任务对上下文、文件扫描和结论综合要求过高，容易超过等待预算。
+- Handling:
+  1. 已关闭所有超时 subagent；
+  2. 已在 `SUBAGENT_REGISTRY.json` 记录生命周期；
+  3. 主线程用 py_compile、pytest、colcon build/test、software_check、git diff --check、敏感信息扫描等本地证据完成 fallback；
+  4. 已新增 `docs/operations/runbooks/subagent-timeout-policy.md`；
+  5. 已更新 `AGENTS.md`、`engineering-process-standards.md`、`auto-pipeline` skill 和 `wave-executor` skill。
+- Evidence: 当前分支已有 Wave 0-6 提交并推送；subagent registry 中 3 个软件 hardening reviewer/verifier 均为 `timed_out_closed_local_fallback`。
+- Prevention: subagent 只做非阻塞、窄范围、短答 sidecar；reviewer/verifier 只等待一次；同一任务两次超时后停用非必要 subagent。
+- Remaining: 平台级 subagent 超时无法在仓库内彻底消除，只能通过任务粒度、等待预算和本地 fallback 降低影响。
+
 ## Incident 1
 - Time: 2026-04-15
 - Scope: Wave 1 MoveIt bringup
@@ -353,3 +388,33 @@
   - verifier 最终结论：README 覆盖、路径治理、build groups、包发现、launch smoke、workspace acceptance 均通过，包 README 轻微缺口已补
   - 已执行 closeout：`close_agent(019d970b-e8ec-7392-a635-66234093e43f)`、`close_agent(019d970b-e939-7cf0-9148-536c6d653ca5)`
 - Prevention: 长链路多 subagent 任务在进入最终提交前，必须先做一次“sidecar 关闭 + registry 回填 + state 回填”的收口动作，避免完成态仍显示为进行中。
+
+## Incident 30
+- Time: 2026-04-28
+- Scope: v1 hardware-interface hardening verification
+- Symptom: `colcon build --base-paths packages --packages-select ... evidence_manager` 首次构建新包时失败，`ament_package_xml.cmake` 调用 `/usr/local/miniconda/bin/python3` 后报 `ModuleNotFoundError: No module named 'catkin_pkg'`。
+- Root cause: 当前 shell 默认 Python 被 Conda 抢占；新 CMake 包首次配置时 CMake 发现了 Conda Python，而 ROS Humble 的 `catkin_pkg` 安装在 `/usr/lib/python3/dist-packages`。
+- Handling:
+  1. 在 `packages/ops/evidence_manager/CMakeLists.txt` 中明确优先使用 `/usr/bin/python3` 作为 `Python3_EXECUTABLE`；
+  2. 重新执行相关包构建，`10 packages finished`。
+- Evidence:
+  - 失败日志：`execute_process(/usr/local/miniconda/bin/python3 ... package_xml_2_cmake.py ...) returned error code 1`
+  - 验证命令：`colcon build --base-paths packages --packages-select dualarm_interfaces dualarm_bringup detector_adapter depth_handler scene_fusion planning_scene_sync fairino_dualarm_planner execution_adapter dualarm_task_manager evidence_manager`
+  - 最终输出：`Summary: 10 packages finished`
+- Prevention: 新增 ament CMake 包时，若当前环境可能被 Conda 抢占，应按项目规则固定 ROS Humble system Python 或用 `/usr/bin/python3 -m colcon`/系统环境执行构建。
+
+## Incident 31
+- Time: 2026-04-28
+- Scope: frame-alignment smoke attempt
+- Symptom: `bash -lc 'source install/setup.bash && /usr/bin/python3 packages/tools/tools/scripts/smoke_depth_handler_future_tf.py'` 本轮没有在预期时间内退出，遗留 `smoke_depth_handler_future_tf.py` 与 `depth_handler_future_tf_test` 进程。
+- Root cause: 未闭环。该旧 smoke 脚本当前测试的是 future TF fallback，参数仍使用 `require_depth_aligned_detections:=false`，与本轮 v1 默认 frame-alignment gate 验收目标不完全一致；本轮未继续扩展该脚本。
+- Handling:
+  1. 终止遗留 PID `28893` 与 `29009`；
+  2. 再次检查无 `ros2 launch|move_group|fairino_dualarm_planner|competition_console_api|planning_scene_sync|depth_processor_node|mock` 残留；
+  3. 本轮不把该 smoke 记为通过证据，改以新增 v1 静态合同测试、launch 默认值、接口展示和非法 depth fail-fast 作为可审计证据。
+- Evidence:
+  - 残留进程检查曾显示：
+    - `/usr/bin/python3 packages/tools/tools/scripts/smoke_depth_handler_future_tf.py`
+    - `depth_processor_node --ros-args -r __node:=depth_handler_future_tf_test ...`
+  - 清理后进程检查只剩当前 `pgrep` 命令本身。
+- Prevention: 后续若要验收 frame alignment，应新增专用 smoke：`require_depth_aligned_detections=true` 时错 frame 必须拒绝，正确 aligned frame 必须发布 scene object；不要复用 future TF fallback smoke 作为 alignment gate。

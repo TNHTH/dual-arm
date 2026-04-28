@@ -1,11 +1,186 @@
 # dual-arm STATE
 
-更新时间：2026-04-16
+更新时间：2026-04-28
 
 ## Current Wave
-- Wave: repo-reorg / README / path-governance
-- 目标：在隔离 worktree 中把正式源码根升级为 `packages/`，补齐 README 体系，收口路径治理与兼容入口，并完成验证、提交和推送
-- 状态：reviewer / verifier 已完成，待单提交推送到远程 `test`，并执行阶段二部署到 `/home/gwh/dual-arm`
+- Wave: v1-hardware-interface-hardening
+- 分支：`codex/software-engineering-hardening-20260426`
+- 目标：在不新增硬件、不连接实机的前提下，关闭 DualArm 当前硬件接口与任务执行链路中的 v1 级假成功/误触风险。
+- 状态：v1 hardening 已完成本地实现与软件-only 主验证；未执行真实硬件动作。
+
+## 2026-04-28 v1 硬件接口闭环加固
+- 已完成：
+  - 扩展 `Detection2D`、`SceneObject`、`ExecutePrimitive.Result`，新增 view/quality/source/shape/pose/evidence 字段。
+  - `competition.launch.py` 增加 `active_depth_camera` 启动期 fail-fast 校验；左右 depth 不允许同时启用；active depth 对应相机和 depth 必须启用。
+  - `start_left_detector` / `start_right_detector` 只在 `start_detector=true` 后生效；右 detector 不再受 `dual_camera_mode=full` 绑定。
+  - depth/ball alignment 默认切到 `true`；planner freshness 默认 `scene_age_limit_ms=800`。
+  - `detector_adapter`、`depth_handler`、`ball_basket_pose_estimator`、`table_surface_detector` 写入 v1 quality/source/shape/covariance 字段。
+  - `scene_fusion` 订阅右 RGB-only `Detection2DArray`，只更新已有 3D track 的 `source_views` / quality，不创建伪 3D 对象。
+  - `planning_scene_sync` 对完整 object 写 MoveIt subframes，并把 primitive/subframe pose 转为 collision object 局部坐标；`opened_split` 暂不迁移 subframes。
+  - `execution_adapter` Cartesian 默认改为 planner service -> `_execute_joint()`；vendor direct Cartesian 增加 global flag + profile 白名单双门控。
+  - 新增 `guarded_grasp` primitive；contact 未验证时直接返回 `contact_failed`，不调用 `/scene/attach_object`。
+  - `_direct_grasp()` 改为 reserve 后调用 `guarded_grasp`，失败会 release reservation。
+  - pouring 关键状态统一要求 `table_surface stable`。
+  - 新增 `evidence_manager` 骨架包，仅聚合现有 scene/gripper/robot/task 信号，不推断真实 fill/spill。
+  - 新增 `docs/operations/runbooks/dual-arm-v1-hardware-interface-hardening.md`，明确 v1 scope、residual risks 和 handover real-motion safety note。
+- 验证：
+  - `/usr/bin/python3 -m py_compile ...`：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`28 passed`。
+  - `colcon build --base-paths packages --packages-select dualarm_interfaces dualarm_bringup detector_adapter depth_handler scene_fusion planning_scene_sync fairino_dualarm_planner execution_adapter dualarm_task_manager evidence_manager`：通过，`10 packages finished`。
+  - `ros2 interface show dualarm_interfaces/msg/Detection2D`、`SceneObject`、`ExecutePrimitive`：确认新字段可见。
+  - `ros2 launch dualarm_bringup competition_core.launch.py --show-args`：通过，新增参数和默认值可见。
+  - 非法 depth 组合 `active_depth_camera:=right right_camera_enable_depth:=false`：启动期 fail-fast，报错 `active_depth_camera=right 时 right_camera_enable_depth 必须为 true`。
+  - `python3 scripts/check_readme_coverage.py`：通过，共检查 59 个目录。
+  - `python3 scripts/check_path_hardcodes.py`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，含 28 个 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+- 当前风险与未关闭项：
+  - 本 v1 不声明解决精确 6D pose、右 RGB-only 真实 3D、active depth 动态切换、人体/人手避障、dense occupancy、真实 fill/spill、硬实时双臂同步、完整标定验收。
+  - `packages/tools/tools/scripts/smoke_depth_handler_future_tf.py` 本轮运行未正常退出，已清理残留进程；该 smoke 未计入通过证据，frame alignment 当前以 launch 默认值、接口合同和 fail-fast 验证为证据。
+  - `AGENTS.md` 在本轮开始前已有未提交改动，本轮未修改或回滚。
+- 下一步：
+  - 若要进入硬件联调，先按 runbook 保持 `start_hardware=false` 做一轮 clean launch smoke，再由操作员确认 handover 人体静止区、低速 profile 和急停可达。
+  - v2 再拆人体安全、真实倒水证据、dense occupancy、标定验收和 6D pose refine。
+
+## 2026-04-26 Wave 0 基线
+- 分支与远端：
+  - 当前分支：`codex/software-engineering-hardening-20260426`
+  - 远端：`git@github.com:TNHTH/dual-arm.git`
+- 软件-only 约束：
+  - 禁止连接真实机械臂 IP。
+  - 禁止打开真实串口或 `/dev/serial/by-id/*` 设备。
+  - 禁止运行真实硬件 launch 或发送真实运动/夹爪命令。
+  - 所有验证默认使用静态检查、单元测试、mock、dry-run、launch 参数检查。
+- 基线检查：
+  - `python3 scripts/check_path_hardcodes.py`：通过，输出 `路径硬编码检查通过。`
+  - `python3 scripts/check_readme_coverage.py`：失败，缺少 `packages/ops/competition_rviz_tools/README.md`。
+  - `pytest --collect-only tests`：失败，当前 shell 找不到 `pytest` 命令。
+  - `colcon list --base-paths packages --names-only | sort`：发现 27 个 ROS 包。
+- 当前主要整改方向：
+  - P0：默认网络暴露、危险 API 鉴权、stop/cancel/timeout 语义、速度/范围校验。
+  - P1：测试从 0 tests 升级为可重复软件回归；配置从硬编码迁到 profile/YAML；任务成功标准不能无证据默认为成功。
+  - P2：大文件职责拆分、README/runbook/API/artifact 文档补齐、旧路径与旧说明清理。
+
+## 2026-04-26 Wave 1 安全基线
+- 已完成：
+  - `competition_console_api` 默认监听 `127.0.0.1`，外部监听需要显式 `allow_external_host=true`。
+  - 危险 HTTP API 增加 token 中间件，覆盖 bringup、control、tasks、acceptance run、presets、action groups、recordings。
+  - 默认拒绝 `start_hardware=true`，除非显式设置 `allow_hardware_bringup=true`。
+  - jog 增加单步、累计、持续时间、周期、速度、加速度限制。
+  - jog timeout/stop 请求 `RobotServoJoint(command_type=1)`，形成 mockable stop 入口。
+  - `robo_ctrl` 增加 velocity/acceleration/ovl/blend/SetSpeed 校验和 motion_done timeout；timeout 时请求 `StopMotion`。
+  - 清理 `robo_ctrl_node.cpp` 高频 `std::cout`。
+- 验证：
+  - `/usr/bin/python3 -m py_compile ...competition_console_api_node.py ...competition_console_static_server.py` 通过。
+  - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl` 通过，`2 packages finished`。
+  - `rg -n "0\\.0\\.0\\.0|std::cout|print\\(" packages/ops/competition_console_api/scripts packages/control/robo_ctrl/src/robo_ctrl_node.cpp` 无匹配。
+- 待办：
+  - Wave 2 为危险 API 鉴权、jog 限幅、stop timeout 补可重复测试。
+
+## 2026-04-26 Wave 2 测试与 CI
+- 已完成：
+  - 抽出 `competition_console_security.py`，让鉴权、危险路由分类、jog limit 和 gripper clamp 可被纯测试覆盖。
+  - `competition_console_api` 包内 pytest 已接入 `colcon test`。
+  - 顶层 `tests/unit` 和 `tests/integration` 已有真实测试，不再只是 README 占位。
+  - 新增 `scripts/ci/software_check.sh` 和 `.github/workflows/software-check.yml`。
+  - Playwright smoke 改为自启动 Vite + mock API，不依赖手工后端。
+  - 补齐 `packages/ops/competition_rviz_tools/README.md`。
+- 验证：
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/ops/competition_console_api/test/test_console_security.py`：`14 passed`。
+  - `colcon test --base-paths packages --packages-select competition_console_api --event-handlers console_direct+`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，前端 build 与 Playwright `2 passed`。
+- 待办：
+  - Wave 3 统一 profile/YAML，并让测试覆盖 profile 默认值和 canonical 路径。
+
+## 2026-04-26 Wave 3 配置化
+- 已完成：
+  - 新增 `config/profiles/competition_default.yaml` 和 `config/profiles/README.md`。
+  - `competition_core.launch.py` 从 profile 读取 detector、机器人 IP/端口、base transform、gripper 端口默认值。
+  - detector 模型默认路径优先 canonical `packages/...`，保留安装包 fallback。
+  - 右臂 base yaw 默认对齐为 `180.0`。
+  - 左右夹爪端口默认 `auto`，软件-only 默认不再携带真实 by-id 串口路径。
+  - `grasp_pose_generator` 改用 canonical `config/competition/workspace_profiles.yaml`。
+- 验证：
+  - py_compile：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration`：`10 passed`。
+  - `colcon build --base-paths packages --packages-select dualarm_bringup grasp_pose_generator`：通过。
+  - `ros2 launch dualarm_bringup competition_core.launch.py --show-args`：通过，profile 默认值生效。
+  - `bash scripts/ci/software_check.sh`：通过。
+- 待办：
+  - Wave 4 处理 task order、start gate、对象选择、pour/release/handover evidence 和 checkpoint。
+
+## 2026-04-26 Wave 4 任务语义与接口契约
+- 已完成：
+  - 新增 `dualarm_task_manager/scripts/task_contract.py`，集中定义比赛任务白名单、任务序列解析和场景对象排序策略。
+  - `dualarm_task_manager` 现在拒绝未知/重复/空任务序列，避免未知状态静默进入状态机。
+  - `WAIT_START` 不再把直接 action goal 当作外部开赛 gate；直接 goal 会被拒绝并提示走 `/competition/start_signal` 或显式 mock/dev gate。
+  - `competition_start_gate` 只在外部信号或显式 auto/dev 模式满足后发送 `start_immediately=true` goal。
+  - 对象选择从“列表前两个”改为稳定性、置信度、scene_version、id 的确定性排序。
+  - checkpoint 增加 `config_fingerprint`、`start_gate_source`、`selected_objects`。
+  - `execution_adapter` 不再把目标对象丢失视作 release/detach/hold 成功；`pour_tilt` 缺少 fill/spill evidence 时返回 `unverified_evidence`。
+  - `scripts/ci/software_check.sh` 已纳入 task manager 包内 pytest，并构建 Wave 4 相关包。
+- 验证：
+  - py_compile：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`17 passed`。
+  - `colcon build --base-paths packages --packages-select dualarm_task_manager execution_adapter competition_start_gate`：通过。
+  - `colcon test --base-paths packages --packages-select dualarm_task_manager --event-handlers console_direct+`：通过，包内 `3 passed`。
+  - `bash scripts/ci/software_check.sh`：通过，含 17 个 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+- 待办：
+  - Wave 5 做第一轮模块职责拆分，同时保持原 node executable、launch、service/action 名称兼容。
+
+## 2026-04-26 Wave 5 模块职责拆分
+- 已完成：
+  - `competition_console_api_node.py` 抽出 `process_manager.py`，统一 core process running/pid 判断。
+  - `execution_adapter_node.py` 抽出 `primitive_evidence.py`，集中管理 `pour_tilt` 证据 gate 与 `unverified_evidence` 结果码。
+  - `robo_ctrl_node.cpp` 抽出 `include/robo_ctrl/safety_limits.hpp`，集中 percent/blend 校验。
+  - `competition_console_web/src/App.tsx` 抽出 `src/apiClient.ts`，统一 GET/POST/DELETE JSON 调用。
+  - 原 node executable、launch、service/action 名称均保持不变。
+  - 新增 helper 单元测试和静态集成测试，验证拆分文件存在且入口名称保留。
+- 验证：
+  - py_compile：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py packages/ops/competition_console_api/test/test_console_security.py`：`26 passed`。
+  - `npm run build`：通过。
+  - `colcon build --base-paths packages --packages-select competition_console_api execution_adapter robo_ctrl`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，含 20 个顶层 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+- Subagent：
+  - Wave 5 reviewer `019dc803-c68d-74b1-97b1-c345c8bf088b` 120 秒未返回，已关闭并记录，主线程使用本地验证证据完成复核。
+- 待办：
+  - Wave 6 补齐 README、架构、安全、接口、artifact 文档，更新仓库卫生规则，做最终验证、最终 verifier、提交并 push。
+
+## 2026-04-26 Wave 6 文档、仓库卫生与最终验证
+- 已完成：
+  - 根 README 补项目输入输出、成功标准、软件-only mock 启动、测试命令、配置方式、文档索引和常见问题。
+  - 新增 `docs/architecture/runtime-architecture.md`，说明模块职责、数据流、topic/service/action 和配置流。
+  - 新增 `docs/operations/runbooks/safety.md`，说明 API 暴露、token、stop/cancel、限幅和 mock/real 切换。
+  - 新增 `docs/api/interfaces.md`，说明关键 msg/srv/action 字段单位、范围和错误码。
+  - 新增 `docs/artifacts/model-and-vendor-manifest.md`，说明模型权重、YOLO runs、vendor SDK、backup 和运行证据治理。
+  - 补 `docs/api/README.md`、`docs/artifacts/README.md` 并更新 docs 目录索引。
+  - 修正 `robo_ctrl` README 中旧 ROS 版本、旧工作区路径、旧 launch 名和未说明的 `robot_port` 语义。
+  - 修正 `epg50_gripper_ros` README 中旧串口默认值误导，明确 ROS 2 launch 默认 `port:=auto`。
+  - 标记 `docs/archive/sessions/SETUP_2026-04-15.md` 为历史文档。
+  - 更新 `.gitignore`，阻止新增训练 run、临时模型导出、vendor backup 和临时 artifact。
+- 验证：
+  - `python3 scripts/check_readme_coverage.py`：通过。
+  - `python3 scripts/check_path_hardcodes.py`：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration`：`17 passed`。
+  - `bash scripts/ci/software_check.sh`：通过，含 20 个 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+  - `colcon test-result --all`：`11 tests, 0 errors, 0 failures, 0 skipped`。
+- 待办：
+  - Wave 6 提交和 push。
+
+## 2026-04-26 Subagent Timeout 复盘优化
+- 事实：
+  - Wave 1 security reviewer、Wave 5 reviewer、Wave 6 final verifier 均超时，且均已关闭。
+  - 超时没有造成未关闭 subagent，但等待时间浪费明显，说明宽泛 reviewer/verifier 不适合直接委派。
+- 已完成治理：
+  - 新增 `docs/operations/runbooks/subagent-timeout-policy.md`。
+  - 更新 `AGENTS.md`，规定 subagent 只能作为非阻塞 sidecar，超时即关闭并执行本地 fallback。
+  - 更新 `docs/operations/runbooks/engineering-process-standards.md`，加入等待预算、两次超时停用非必要 subagent、本地 checklist 规则。
+  - 更新 shared skills：`auto-pipeline` 与 `wave-executor` 增加 subagent timeout control。
+  - 更新 `.codex/tmp/error-trace/ERROR_TRACE.md` Incident 32 和复盘记录。
+- 后续规则：
+  - reviewer/verifier subagent 不再接“完整最终审查”宽泛任务；先拆成本地 checklist，再委派单一风险点。
+  - reviewer/verifier 只等待一次，预算 120-180 秒；窄范围检查 60-90 秒。
+  - 同一任务两次 subagent 超时后，停止使用非必要 subagent。
 
 ## 已完成
 - 2026-04-16 仓库重构与文档体系化：
