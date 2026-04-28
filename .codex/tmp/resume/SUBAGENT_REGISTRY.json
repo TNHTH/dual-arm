@@ -1,7 +1,12 @@
 {
-  "updated_at": "2026-04-26",
-  "task": "dual-arm software engineering hardening / software-only Wave 0-6",
+  "updated_at": "2026-04-28",
+  "task": "dual-arm v1 hardware-interface hardening",
   "agents": [
+    {
+      "role": "v1_hardware_interface_hardening",
+      "status": "local_main_thread_completed",
+      "summary": "未开启 subagent；主线程完成接口、launch、感知字段、PlanningScene subframes、planner 参数、execution_adapter、task_manager、evidence_manager、测试与验证。"
+    },
     {
       "role": "software_hardening_orchestrator",
       "status": "local_main_thread_active",

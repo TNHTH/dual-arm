@@ -1,8 +1,11 @@
 std_msgs/Header header
 string semantic_type
 string source
+string view_id
+string mask_topic
 float32 x
 float32 y
 float32 width
 float32 height
 float32 score
+float32 bbox_quality

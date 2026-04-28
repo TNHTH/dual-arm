@@ -4,13 +4,14 @@
 # - cap_align_and_grasp
 # - cap_twist_and_unthread
 # - cap_place_or_release
+# - guarded_grasp
 # - pour_tilt
 # - hold_verify
 # - release_guard
 #
 # Result code set:
 # success, invalid_request, unknown_primitive, driver_failure, timeout,
-# sync_violation, contact_failed, detach_failed, hold_failed, cancelled.
+# sync_violation, contact_failed, detach_failed, hold_failed, unverified_evidence, cancelled.
 string primitive_id
 string arm_group
 string secondary_arm_group
@@ -37,6 +38,10 @@ bool secondary_completed
 bool contact_verified
 bool detach_verified
 bool spill_detected
+bool fill_target_reached
+float32 estimated_poured_mass_g
+float32 evidence_confidence
+string[] evidence_sources
 sensor_msgs/JointState final_primary_joint_state
 sensor_msgs/JointState final_secondary_joint_state
 ---

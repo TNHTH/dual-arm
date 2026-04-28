@@ -70,11 +70,14 @@ class DetectorAdapterNode(Node):
             detection.header = message.header
             detection.semantic_type = self._class_map.get(item.class_id, f"class_{item.class_id}")
             detection.source = self._source_name
+            detection.view_id = self._source_name
+            detection.mask_topic = ""
             detection.x = item.x
             detection.y = item.y
             detection.width = item.width
             detection.height = item.height
             detection.score = item.score
+            detection.bbox_quality = float(max(0.0, min(1.0, item.score)))
             normalized.detections.append(detection)
 
         self._publisher.publish(normalized)

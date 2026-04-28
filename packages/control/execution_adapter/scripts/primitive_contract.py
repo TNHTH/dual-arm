@@ -17,6 +17,7 @@ RESULT_SYNC_VIOLATION = "sync_violation"
 RESULT_CONTACT_FAILED = "contact_failed"
 RESULT_DETACH_FAILED = "detach_failed"
 RESULT_HOLD_FAILED = "hold_failed"
+RESULT_UNVERIFIED_EVIDENCE = "unverified_evidence"
 RESULT_CANCELLED = "cancelled"
 
 SUPPORTED_RESULT_CODES: Tuple[str, ...] = (
@@ -29,6 +30,7 @@ SUPPORTED_RESULT_CODES: Tuple[str, ...] = (
     RESULT_CONTACT_FAILED,
     RESULT_DETACH_FAILED,
     RESULT_HOLD_FAILED,
+    RESULT_UNVERIFIED_EVIDENCE,
     RESULT_CANCELLED,
 )
 
@@ -82,6 +84,13 @@ PRIMITIVE_CONTRACTS: Dict[str, PrimitiveContract] = {
         requires_primary_waypoints=True,
         requires_secondary_waypoints=True,
         supports_synchronized=True,
+    ),
+    "guarded_grasp": PrimitiveContract(
+        primitive_id="guarded_grasp",
+        family="grasp",
+        requires_object_id=True,
+        requires_primary_waypoints=True,
+        contact_required_for_success=True,
     ),
     "hold_verify": PrimitiveContract(
         primitive_id="hold_verify",
@@ -151,6 +160,8 @@ def validate_primitive_goal(goal) -> tuple[bool, str, str, PrimitiveContract | N
         return False, RESULT_INVALID_REQUEST, f"{goal.primitive_id} 缺少 reference_object_id", contract
     if contract.requires_primary_waypoints and not goal.primary_cartesian_waypoints:
         return False, RESULT_INVALID_REQUEST, f"{goal.primitive_id} 缺少 primary_cartesian_waypoints", contract
+    if goal.primitive_id == "guarded_grasp" and len(goal.primary_cartesian_waypoints) < 2:
+        return False, RESULT_INVALID_REQUEST, "guarded_grasp 至少需要 pregrasp 和 grasp waypoint", contract
     if contract.requires_secondary_waypoints and not goal.secondary_cartesian_waypoints:
         return False, RESULT_INVALID_REQUEST, f"{goal.primitive_id} 缺少 secondary_cartesian_waypoints", contract
     if goal.primary_cartesian_waypoints and goal.secondary_cartesian_waypoints:

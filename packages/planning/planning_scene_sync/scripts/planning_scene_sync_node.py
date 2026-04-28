@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+import math
 import threading
 import time
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -27,6 +28,9 @@ class CollisionEntry:
     primitives: Tuple[SolidPrimitive, ...]
     poses: Tuple[Pose, ...]
     frame_id: str
+    object_pose: Pose
+    subframe_names: Tuple[str, ...] = ()
+    subframe_poses: Tuple[Pose, ...] = ()
     attached_link: str = ""
     touch_links: Tuple[str, ...] = ()
 
@@ -38,6 +42,59 @@ class InteractionState:
     primary_link: str = ""
     secondary_link: str = ""
     enabled: bool = False
+
+
+def _normalize_quaternion(pose: Pose) -> Tuple[float, float, float, float]:
+    qx = float(pose.orientation.x)
+    qy = float(pose.orientation.y)
+    qz = float(pose.orientation.z)
+    qw = float(pose.orientation.w)
+    norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+    if norm <= 1e-9:
+        return 0.0, 0.0, 0.0, 1.0
+    return qx / norm, qy / norm, qz / norm, qw / norm
+
+
+def _quat_multiply(lhs: Tuple[float, float, float, float], rhs: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+    ax, ay, az, aw = lhs
+    bx, by, bz, bw = rhs
+    return (
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    )
+
+
+def _quat_conjugate(quat: Tuple[float, float, float, float]) -> Tuple[float, float, float, float]:
+    return -quat[0], -quat[1], -quat[2], quat[3]
+
+
+def _rotate_vector(quat: Tuple[float, float, float, float], vector: Tuple[float, float, float]) -> Tuple[float, float, float]:
+    rotated = _quat_multiply(_quat_multiply(quat, (vector[0], vector[1], vector[2], 0.0)), _quat_conjugate(quat))
+    return rotated[0], rotated[1], rotated[2]
+
+
+def _pose_to_object_local(object_pose: Pose, world_pose: Pose) -> Pose:
+    object_quat = _normalize_quaternion(object_pose)
+    inverse_quat = _quat_conjugate(object_quat)
+    delta = (
+        float(world_pose.position.x - object_pose.position.x),
+        float(world_pose.position.y - object_pose.position.y),
+        float(world_pose.position.z - object_pose.position.z),
+    )
+    local_xyz = _rotate_vector(inverse_quat, delta)
+    world_quat = _normalize_quaternion(world_pose)
+    local_quat = _quat_multiply(inverse_quat, world_quat)
+    local_pose = Pose()
+    local_pose.position.x = local_xyz[0]
+    local_pose.position.y = local_xyz[1]
+    local_pose.position.z = local_xyz[2]
+    local_pose.orientation.x = local_quat[0]
+    local_pose.orientation.y = local_quat[1]
+    local_pose.orientation.z = local_quat[2]
+    local_pose.orientation.w = local_quat[3]
+    return local_pose
 
 
 class PlanningSceneSyncNode(Node):
@@ -551,8 +608,11 @@ class PlanningSceneSyncNode(Node):
         collision_object = CollisionObject()
         collision_object.id = collision_entry.collision_id
         collision_object.header.frame_id = collision_entry.frame_id
+        collision_object.pose = deepcopy(collision_entry.object_pose)
         collision_object.primitives.extend(collision_entry.primitives)
         collision_object.primitive_poses.extend(collision_entry.poses)
+        collision_object.subframe_names.extend(collision_entry.subframe_names)
+        collision_object.subframe_poses.extend(collision_entry.subframe_poses)
         collision_object.operation = CollisionObject.ADD
         return collision_object
 
@@ -648,12 +708,17 @@ class PlanningSceneSyncNode(Node):
                 scene_object,
                 include_cap=scene_object.id not in self._opened_objects,
             )
+            object_pose = deepcopy(scene_object.pose.pose)
+            subframe_names, subframe_poses = self._local_subframes_for(scene_object, object_pose)
             attached_entries.append(
                 CollisionEntry(
                     collision_id=scene_object.id,
                     primitives=primitives,
-                    poses=poses,
+                    poses=self._local_collision_poses(object_pose, poses),
                     frame_id=frame_id,
+                    object_pose=object_pose,
+                    subframe_names=subframe_names,
+                    subframe_poses=subframe_poses,
                     attached_link=scene_object.attached_link,
                     touch_links=(scene_object.attached_link,),
                 )
@@ -664,15 +729,33 @@ class PlanningSceneSyncNode(Node):
             scene_object,
             include_cap=scene_object.id not in self._opened_objects,
         )
+        object_pose = deepcopy(scene_object.pose.pose)
+        subframe_names, subframe_poses = self._local_subframes_for(scene_object, object_pose)
         world_entries.append(
             CollisionEntry(
                 collision_id=scene_object.id,
                 primitives=primitives,
-                poses=poses,
+                poses=self._local_collision_poses(object_pose, poses),
                 frame_id=frame_id,
+                object_pose=object_pose,
+                subframe_names=subframe_names,
+                subframe_poses=subframe_poses,
             )
         )
         return world_entries, attached_entries
+
+    def _local_collision_poses(self, object_pose: Pose, world_poses: Tuple[Pose, ...]) -> Tuple[Pose, ...]:
+        return tuple(_pose_to_object_local(object_pose, pose) for pose in world_poses)
+
+    def _local_subframes_for(self, scene_object: SceneObject, object_pose: Pose) -> Tuple[Tuple[str, ...], Tuple[Pose, ...]]:
+        names: List[str] = []
+        poses: List[Pose] = []
+        for subframe in scene_object.subframes:
+            if not subframe.name:
+                continue
+            names.append(subframe.name)
+            poses.append(_pose_to_object_local(object_pose, subframe.pose.pose))
+        return tuple(names), tuple(poses)
 
     def _make_split_entries(
         self,
@@ -699,19 +782,23 @@ class PlanningSceneSyncNode(Node):
         cap_primitive.type = SolidPrimitive.CYLINDER
         cap_primitive.dimensions = [cap_height, cap_radius]
 
+        body_local_pose = _pose_to_object_local(body_pose, body_pose)
+        cap_local_pose = _pose_to_object_local(cap_center_pose, cap_center_pose)
         body_entry = CollisionEntry(
             collision_id=f"{scene_object.id}::body",
             primitives=(body_primitive,),
-            poses=(body_pose,),
+            poses=(body_local_pose,),
             frame_id=frame_id,
+            object_pose=body_pose,
             attached_link=interaction.primary_link,
             touch_links=((interaction.primary_link,) if interaction.primary_link else ()),
         )
         cap_entry = CollisionEntry(
             collision_id=f"{scene_object.id}::cap",
             primitives=(cap_primitive,),
-            poses=(cap_center_pose,),
+            poses=(cap_local_pose,),
             frame_id=frame_id,
+            object_pose=cap_center_pose,
             attached_link=interaction.secondary_link,
             touch_links=((interaction.secondary_link,) if interaction.secondary_link else ()),
         )
@@ -776,10 +863,35 @@ class PlanningSceneSyncNode(Node):
         )
 
     def _collision_snapshot(self, collision_entry: CollisionEntry) -> Tuple:
-        pose = collision_entry.poses[0]
+        pose = collision_entry.object_pose
         dims = tuple(
             tuple(round(float(value), 4) for value in primitive.dimensions)
             for primitive in collision_entry.primitives
+        )
+        primitive_poses = tuple(
+            (
+                round(float(item.position.x), 4),
+                round(float(item.position.y), 4),
+                round(float(item.position.z), 4),
+                round(float(item.orientation.x), 4),
+                round(float(item.orientation.y), 4),
+                round(float(item.orientation.z), 4),
+                round(float(item.orientation.w), 4),
+            )
+            for item in collision_entry.poses
+        )
+        subframes = tuple(
+            (
+                name,
+                round(float(item.position.x), 4),
+                round(float(item.position.y), 4),
+                round(float(item.position.z), 4),
+                round(float(item.orientation.x), 4),
+                round(float(item.orientation.y), 4),
+                round(float(item.orientation.z), 4),
+                round(float(item.orientation.w), 4),
+            )
+            for name, item in zip(collision_entry.subframe_names, collision_entry.subframe_poses)
         )
         return (
             collision_entry.collision_id,
@@ -792,6 +904,8 @@ class PlanningSceneSyncNode(Node):
             round(float(pose.orientation.z), 4),
             round(float(pose.orientation.w), 4),
             dims,
+            primitive_poses,
+            subframes,
             collision_entry.attached_link,
             collision_entry.touch_links,
         )

@@ -61,7 +61,7 @@ public:
     declare_parameter("scene_topic", "/scene_fusion/scene_objects");
     declare_parameter("planning_time", 5.0);
     declare_parameter("planning_attempts", 10);
-    declare_parameter("scene_age_limit_ms", 200);
+    declare_parameter("scene_age_limit_ms", 800);
     declare_parameter("robot_state_age_limit_ms", 100);
     declare_parameter("dual_arm_half_span", 0.08);
 

@@ -369,3 +369,29 @@
 - 发生 repo 级目录重构后，`STATE.md` 中所有“正式主根/正式构建入口”叙述必须在同一天更新到最终术语，历史阶段只能标注为历史，不得继续冒充当前事实。
 - 长链路多 subagent 任务进入提交前，必须执行一次 `close_agent -> registry 回填 -> state 回填 -> final summary` 的固定收口序列。
 - 任何“从隔离 worktree 部署到最终落点目录”的任务，最终目录必须重建 install 树后再做 launch smoke，不能直接相信源 worktree 的构建产物。
+
+## 2026-04-28 v1 hardware-interface hardening 复盘
+
+### Facts
+- 本轮按 `Approved for v1 hardware-interface hardening scope` 执行，没有新增硬件，也没有连接真实机械臂或夹爪。
+- 已实现双 RGB/单 Depth 静态门控、右 detector 解耦、frame alignment 默认 true、table gate、planner-first Cartesian、vendor direct 双门控、`guarded_grasp` 和 pour evidence 不假成功。
+- 新增 `evidence_manager` 只作为现有信号聚合器，不替代真实 fill/spill 传感器。
+- 验证主证据为 `28 passed`、相关 10 包 colcon build、接口 show、launch show-args、非法 depth fail-fast 和 `software_check.sh` 通过。
+- `smoke_depth_handler_future_tf.py` 本轮未正常退出，已记录为未闭环 incident，未作为通过证据。
+
+### Worked
+- 先扩接口，再更新所有构造方，能快速暴露 `scene_fusion` 继续写 `[-1]` covariance 这类合同破口。
+- 用 `OpaqueFunction` 做启动期 depth 校验，比在节点 condition 里隐式不启动更清晰，非法组合可以直接 fail fast。
+- Cartesian 默认拉回 planner service 后再 `_execute_joint()`，能在不改底层 `robo_ctrl` 硬件接口的前提下关闭默认裸 `MoveCart` 风险。
+- `guarded_grasp` 让 contact false 到 attach 之间出现明确断点，任务层也能在失败时 release reservation。
+- 把 residual risks 写入 runbook，有助于防止 v1 被误报成完整人体安全、真实倒水证据或 dense world model。
+
+### Waste / Risk
+- 新增 ament CMake 包时首次被 Conda Python 抢占，说明本地 shell 环境仍然可能绕过 ROS Humble system Python。
+- 旧 `smoke_depth_handler_future_tf.py` 语义与本轮 frame alignment gate 不一致，直接复用会浪费时间并产生残留进程。
+- `planning_scene_sync` 本轮同时修正 object pose、primitive local pose 和 subframe local pose，后续最好补一个最小 MoveIt diff runtime smoke 专门覆盖 subframe frame 语义。
+
+### New Rules
+- 新增 v1/v2 范围型方案时，最终文档必须同时列 `Closed In v1` 和 `Residual Risks / Out Of Scope`，避免“没假成功”被误写成“已真实验证成功”。
+- frame alignment 验收应有专用 smoke：错 frame 拒绝、aligned frame 通过；future TF fallback smoke 不能替代 alignment gate。
+- 新增 ROS CMake 包时，若工作站存在 Conda，优先在包或构建命令中固定 `/usr/bin/python3`，并把首次构建失败记录到 error trace。

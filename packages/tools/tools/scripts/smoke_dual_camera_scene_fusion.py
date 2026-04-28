@@ -52,6 +52,10 @@ class DualCameraSceneFusionSmoke(Node):
         scene_object.graspable = True
         scene_object.movable = True
         scene_object.source = source
+        scene_object.source_views = [source]
+        scene_object.shape_type = "cylinder"
+        scene_object.pose_source = "smoke_fixture"
+        scene_object.quality_score = 0.9
         scene_object.last_seen = stamp
         scene_object.scene_version = 1
         scene_object.lifecycle_state = "observed"

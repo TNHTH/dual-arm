@@ -28,6 +28,30 @@ from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGr
 from task_contract import normalize_task_sequence, parse_task_sequence, rank_scene_objects
 
 
+POURING_TABLE_REQUIRED_STATES = {
+    "SCAN_TABLE_OBJECTS",
+    "ASSIGN_BOTTLES_AND_CUPS",
+    "GRASP_WATER_BOTTLE_BODY",
+    "GRASP_WATER_CAP",
+    "OPEN_WATER_CAP",
+    "PLACE_WATER_CAP",
+    "GRASP_WATER_CUP",
+    "PLAN_WATER_PREPOUR",
+    "EXECUTE_WATER_POUR",
+    "PLACE_WATER_BOTTLE",
+    "PLACE_WATER_CUP",
+    "GRASP_COLA_BOTTLE_BODY",
+    "GRASP_COLA_CAP",
+    "OPEN_COLA_CAP",
+    "PLACE_COLA_CAP",
+    "GRASP_COLA_CUP",
+    "PLAN_COLA_PREPOUR",
+    "EXECUTE_COLA_POUR",
+    "PLACE_COLA_BOTTLE",
+    "PLACE_COLA_CUP",
+}
+
+
 class DualArmTaskManagerNode(Node):
     def __init__(self) -> None:
         super().__init__("dualarm_task_manager")
@@ -344,6 +368,11 @@ class DualArmTaskManagerNode(Node):
         if state in {"BOOT", "SELF_CHECK", "LOAD_CALIBRATION", "HOME_ARMS", "WAIT_START", "PARK", "DONE"}:
             return self._execute_orchestration_gate(state)
 
+        if state in POURING_TABLE_REQUIRED_STATES:
+            table_ok, table_detail = self._require_table_surface()
+            if not table_ok:
+                return False, table_detail
+
         if state == "SCAN_BASKET":
             return self._require_object("basket", allowed_states=("stable",))
         if state == "WAIT_BALL_1_STABLE":
@@ -354,7 +383,7 @@ class DualArmTaskManagerNode(Node):
             ok1, _ = self._require_object("water_bottle", allowed_states=("stable",))
             ok2, _ = self._require_object("cola_bottle", allowed_states=("stable",))
             cups = self._objects_by_prefix("cup", allowed_states=("stable",))
-            return ok1 and ok2 and len(cups) >= 2, f"water={ok1}, cola={ok2}, cups={len(cups)}"
+            return ok1 and ok2 and len(cups) >= 2, f"table=true, water={ok1}, cola={ok2}, cups={len(cups)}"
         if state == "ASSIGN_BOTTLES_AND_CUPS":
             return self._assign_table_objects()
 
@@ -456,6 +485,17 @@ class DualArmTaskManagerNode(Node):
         self._assignments[semantic_type] = scene_object.id
         return True, f"{semantic_type}={scene_object.id}"
 
+    def _require_table_surface(self) -> Tuple[bool, str]:
+        table = self._find_object("table_surface", allowed_states=("stable",))
+        if table is None:
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_table_surface", "table_surface")
+            if reobserve_ok:
+                table = self._find_object("table_surface", allowed_states=("stable",))
+            if table is None:
+                return False, f"pouring 需要 stable table_surface; {reobserve_detail}"
+        self._assignments["table_surface"] = table.id
+        return True, f"table_surface={table.id}"
+
     def _assign_table_objects(self) -> Tuple[bool, str]:
         water = self._find_object("water_bottle", allowed_states=("stable",))
         cola = self._find_object("cola_bottle", allowed_states=("stable",))
@@ -509,23 +549,20 @@ class DualArmTaskManagerNode(Node):
                 target = self._grasp_targets.get(scene_object.id)
             if target is None:
                 return False, f"{scene_object.id} 的 grasp target 不存在; {reobserve_detail}"
-        planner_response = self._call_plan_pose(target.arm_mode, target.pregrasp)
-        if planner_response is None or not planner_response.success:
-            return False, "抓取前规划失败"
-        self._set_last_plan(planner_response)
-        executed = self._execute_plan(planner_response)
-        if executed is None or not executed.success:
-            return False, "抓取前执行失败"
         if not self._reserve(scene_object.id, reserved_by, target.arm_mode):
             return False, "reservation 失败"
-        link_name = "left_tcp" if target.arm_mode == "left_arm" else "right_tcp"
-        attached = self._set_gripper(
-            target.arm_mode,
+        primitive_result = self._execute_primitive_action(
+            primitive_id="guarded_grasp",
+            arm_group=target.arm_mode,
             object_id=scene_object.id,
-            link_name=link_name,
-            attach=True,
+            primary_waypoints=[target.pregrasp, target.grasp, target.retreat],
+            execution_profile=target.execution_profile or "default",
         )
-        return attached, f"{scene_object.id} 抓取{'成功' if attached else '失败'}"
+        if not primitive_result.success:
+            self._release(scene_object.id)
+            return False, f"{scene_object.id} guarded_grasp 失败: {primitive_result.result_code} {primitive_result.message}"
+        self._assignments[scene_object.semantic_type] = scene_object.id
+        return True, f"{scene_object.id} guarded_grasp 成功"
 
     def _place_object(self, key: str) -> Tuple[bool, str]:
         object_id = self._assignments.get(key, key)

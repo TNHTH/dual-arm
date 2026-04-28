@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Iterable, List, Optional
+from typing import Deque, Dict, Iterable, List, Optional, Tuple
 
 import math
 import rclpy
@@ -14,7 +14,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.time import Time
 
-from dualarm_interfaces.msg import SceneObject, SceneObjectArray
+from dualarm_interfaces.msg import Detection2DArray, SceneObject, SceneObjectArray
 
 
 @dataclass
@@ -24,6 +24,8 @@ class Track:
     observations: Deque[SceneObject] = field(default_factory=deque)
     last_update: Optional[Time] = None
     stable: bool = False
+    source_views: set[str] = field(default_factory=set)
+    rgb_only_observations: Dict[str, Time] = field(default_factory=dict)
 
 
 class SceneFusionNode(Node):
@@ -37,6 +39,7 @@ class SceneFusionNode(Node):
                 "/perception/table_scene_objects",
             ],
         )
+        self.declare_parameter("rgb_detection_topics", [])
         self.declare_parameter("output_topic", "/scene_fusion/raw_scene_objects")
         self.declare_parameter("stability_count", 5)
         self.declare_parameter("observation_window", 1.5)
@@ -67,8 +70,10 @@ class SceneFusionNode(Node):
         self._tracks: Dict[str, Track] = {}
         self._publisher = self.create_publisher(SceneObjectArray, self._output_topic, 10)
 
-        for topic in self._input_topics():
+        for topic in self._topics_from_parameter("input_topics"):
             self.create_subscription(SceneObjectArray, topic, self._handle_scene, 10)
+        for topic in self._topics_from_parameter("rgb_detection_topics"):
+            self.create_subscription(Detection2DArray, topic, self._handle_rgb_detections, 10)
 
         self.create_timer(0.1, self._publish_scene)
         self.get_logger().info(f"scene_fusion 已启动，输出: {self._output_topic}")
@@ -86,15 +91,42 @@ class SceneFusionNode(Node):
             observation.id = track.track_id
             if not observation.source:
                 observation.source = "unknown"
+            if not observation.source_views:
+                observation.source_views = [observation.source]
+            observation.source_views = sorted({str(view) for view in observation.source_views if str(view)} | {observation.source})
+            if not observation.shape_type:
+                observation.shape_type = self._shape_type_for(observation.semantic_type)
+            if not observation.pose_source:
+                observation.pose_source = "scene_object"
+            if observation.quality_score <= 0.0:
+                observation.quality_score = float(max(0.0, min(1.0, observation.confidence)))
             observation.last_seen = now.to_msg()
             observation.lifecycle_state = "observed"
             observation.reserved_by = "none"
             observation.attached_link = ""
             observation.scene_version = self._scene_version
-            observation.pose_covariance_diagonal = [-1.0] * 6
+            if any(value < 0.0 for value in observation.pose_covariance_diagonal):
+                observation.pose_covariance_diagonal = self._default_estimated_covariance(observation.semantic_type)
+            track.source_views.update(observation.source_views)
             track.observations.append(observation)
             self._trim_track(track, now)
             track.stable = self._is_track_stable(track, now)
+
+    def _handle_rgb_detections(self, message: Detection2DArray) -> None:
+        now = self.get_clock().now()
+        for detection in message.detections:
+            view_id = detection.view_id or detection.source or message.header.frame_id or "rgb_view"
+            matched = self._find_matching_track_for_detection(detection.semantic_type)
+            if matched is None:
+                continue
+            track = self._tracks[matched]
+            track.source_views.add(view_id)
+            track.rgb_only_observations[view_id] = now
+            if track.observations:
+                latest = track.observations[-1]
+                latest.source_views = sorted(set(latest.source_views) | track.source_views)
+                latest.confidence = max(float(latest.confidence), float(detection.score))
+                latest.quality_score = max(float(latest.quality_score), float(detection.bbox_quality or detection.score))
 
     def _create_track(self, scene_object: SceneObject) -> str:
         prefix = scene_object.semantic_type
@@ -119,8 +151,8 @@ class SceneFusionNode(Node):
 
         return best_track
 
-    def _input_topics(self) -> List[str]:
-        value = self.get_parameter("input_topics").value
+    def _topics_from_parameter(self, parameter_name: str) -> List[str]:
+        value = self.get_parameter(parameter_name).value
         if isinstance(value, str):
             try:
                 parsed = yaml.safe_load(value)
@@ -130,6 +162,18 @@ class SceneFusionNode(Node):
                 return [str(item) for item in parsed]
             return [item.strip() for item in value.split(",") if item.strip()]
         return [str(item) for item in value]
+
+    def _find_matching_track_for_detection(self, semantic_type: str) -> Optional[str]:
+        best_track = None
+        best_update_ns: Optional[int] = None
+        for track_id, track in self._tracks.items():
+            if track.semantic_type != semantic_type or not track.observations or track.last_update is None:
+                continue
+            update_ns = track.last_update.nanoseconds
+            if best_update_ns is None or update_ns > best_update_ns:
+                best_track = track_id
+                best_update_ns = update_ns
+        return best_track
 
     def _position_gate_for(self, semantic_type: str) -> float:
         if "bottle" in semantic_type:
@@ -192,6 +236,8 @@ class SceneFusionNode(Node):
         latest.size.y = self._median([item.size.y for item in recent])
         latest.size.z = self._median([item.size.z for item in recent])
         latest.confidence = max(item.confidence for item in recent)
+        latest.quality_score = max(float(item.quality_score) for item in recent)
+        latest.source_views = sorted(set(latest.source_views) | track.source_views)
         return latest
 
     def _median(self, values: Iterable[float]) -> float:
@@ -213,13 +259,30 @@ class SceneFusionNode(Node):
                     scene_object.semantic_type,
                     scene_object.lifecycle_state,
                     scene_object.source,
+                    tuple(scene_object.source_views),
                     round(float(position.x), 3),
                     round(float(position.y), 3),
                     round(float(position.z), 3),
                     round(float(scene_object.confidence), 3),
+                    round(float(scene_object.quality_score), 3),
                 )
             )
         return tuple(sorted(signature))
+
+    def _shape_type_for(self, semantic_type: str) -> str:
+        if semantic_type in {"water_bottle", "cola_bottle"} or semantic_type.startswith("cup"):
+            return "cylinder"
+        if semantic_type in {"basketball", "soccer_ball"}:
+            return "sphere"
+        if semantic_type == "table_surface":
+            return "plane"
+        if semantic_type == "basket":
+            return "box"
+        return "unknown"
+
+    def _default_estimated_covariance(self, semantic_type: str) -> List[float]:
+        orientation_variance = 3.14 if semantic_type in {"basketball", "soccer_ball"} else 1.0
+        return [0.0025, 0.0025, 0.0025, orientation_variance, orientation_variance, orientation_variance]
 
     def _publish_scene(self) -> None:
         now = self.get_clock().now()

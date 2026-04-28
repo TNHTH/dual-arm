@@ -1,12 +1,45 @@
 # dual-arm STATE
 
-更新时间：2026-04-26
+更新时间：2026-04-28
 
 ## Current Wave
-- Wave: software-engineering-hardening / Wave 0-6
+- Wave: v1-hardware-interface-hardening
 - 分支：`codex/software-engineering-hardening-20260426`
-- 目标：在软件-only 边界内完成工程化整改，包括安全入口、测试体系、配置收敛、任务语义、模块拆分、文档与仓库卫生；不连接实机、不打开真实串口、不运行真实硬件 launch。
-- 状态：Wave 6 已完成本地实现与主验证；最终 verifier 超时已关闭并记录，等待提交和 push。
+- 目标：在不新增硬件、不连接实机的前提下，关闭 DualArm 当前硬件接口与任务执行链路中的 v1 级假成功/误触风险。
+- 状态：v1 hardening 已完成本地实现与软件-only 主验证；未执行真实硬件动作。
+
+## 2026-04-28 v1 硬件接口闭环加固
+- 已完成：
+  - 扩展 `Detection2D`、`SceneObject`、`ExecutePrimitive.Result`，新增 view/quality/source/shape/pose/evidence 字段。
+  - `competition.launch.py` 增加 `active_depth_camera` 启动期 fail-fast 校验；左右 depth 不允许同时启用；active depth 对应相机和 depth 必须启用。
+  - `start_left_detector` / `start_right_detector` 只在 `start_detector=true` 后生效；右 detector 不再受 `dual_camera_mode=full` 绑定。
+  - depth/ball alignment 默认切到 `true`；planner freshness 默认 `scene_age_limit_ms=800`。
+  - `detector_adapter`、`depth_handler`、`ball_basket_pose_estimator`、`table_surface_detector` 写入 v1 quality/source/shape/covariance 字段。
+  - `scene_fusion` 订阅右 RGB-only `Detection2DArray`，只更新已有 3D track 的 `source_views` / quality，不创建伪 3D 对象。
+  - `planning_scene_sync` 对完整 object 写 MoveIt subframes，并把 primitive/subframe pose 转为 collision object 局部坐标；`opened_split` 暂不迁移 subframes。
+  - `execution_adapter` Cartesian 默认改为 planner service -> `_execute_joint()`；vendor direct Cartesian 增加 global flag + profile 白名单双门控。
+  - 新增 `guarded_grasp` primitive；contact 未验证时直接返回 `contact_failed`，不调用 `/scene/attach_object`。
+  - `_direct_grasp()` 改为 reserve 后调用 `guarded_grasp`，失败会 release reservation。
+  - pouring 关键状态统一要求 `table_surface stable`。
+  - 新增 `evidence_manager` 骨架包，仅聚合现有 scene/gripper/robot/task 信号，不推断真实 fill/spill。
+  - 新增 `docs/operations/runbooks/dual-arm-v1-hardware-interface-hardening.md`，明确 v1 scope、residual risks 和 handover real-motion safety note。
+- 验证：
+  - `/usr/bin/python3 -m py_compile ...`：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`28 passed`。
+  - `colcon build --base-paths packages --packages-select dualarm_interfaces dualarm_bringup detector_adapter depth_handler scene_fusion planning_scene_sync fairino_dualarm_planner execution_adapter dualarm_task_manager evidence_manager`：通过，`10 packages finished`。
+  - `ros2 interface show dualarm_interfaces/msg/Detection2D`、`SceneObject`、`ExecutePrimitive`：确认新字段可见。
+  - `ros2 launch dualarm_bringup competition_core.launch.py --show-args`：通过，新增参数和默认值可见。
+  - 非法 depth 组合 `active_depth_camera:=right right_camera_enable_depth:=false`：启动期 fail-fast，报错 `active_depth_camera=right 时 right_camera_enable_depth 必须为 true`。
+  - `python3 scripts/check_readme_coverage.py`：通过，共检查 59 个目录。
+  - `python3 scripts/check_path_hardcodes.py`：通过。
+  - `bash scripts/ci/software_check.sh`：通过，含 28 个 pytest、5 包 build、2 包 colcon test、前端 build 与 Playwright `2 passed`。
+- 当前风险与未关闭项：
+  - 本 v1 不声明解决精确 6D pose、右 RGB-only 真实 3D、active depth 动态切换、人体/人手避障、dense occupancy、真实 fill/spill、硬实时双臂同步、完整标定验收。
+  - `packages/tools/tools/scripts/smoke_depth_handler_future_tf.py` 本轮运行未正常退出，已清理残留进程；该 smoke 未计入通过证据，frame alignment 当前以 launch 默认值、接口合同和 fail-fast 验证为证据。
+  - `AGENTS.md` 在本轮开始前已有未提交改动，本轮未修改或回滚。
+- 下一步：
+  - 若要进入硬件联调，先按 runbook 保持 `start_hardware=false` 做一轮 clean launch smoke，再由操作员确认 handover 人体静止区、低速 profile 和急停可达。
+  - v2 再拆人体安全、真实倒水证据、dense occupancy、标定验收和 6D pose refine。
 
 ## 2026-04-26 Wave 0 基线
 - 分支与远端：

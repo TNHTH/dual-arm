@@ -16,6 +16,8 @@ def generate_launch_description():
             DeclareLaunchArgument("left_gripper_status_topic", default_value="/gripper0/epg50_gripper/status_stream"),
             DeclareLaunchArgument("right_gripper_status_topic", default_value="/gripper1/epg50_gripper/status_stream"),
             DeclareLaunchArgument("gripper_command_timeout_s", default_value="8.0"),
+            DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
+            DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value="[]"),
             Node(
                 package="execution_adapter",
                 executable="execution_adapter_node.py",
@@ -31,6 +33,8 @@ def generate_launch_description():
                         "left_gripper_status_topic": LaunchConfiguration("left_gripper_status_topic"),
                         "right_gripper_status_topic": LaunchConfiguration("right_gripper_status_topic"),
                         "gripper_command_timeout_s": LaunchConfiguration("gripper_command_timeout_s"),
+                        "allow_vendor_direct_cartesian": LaunchConfiguration("allow_vendor_direct_cartesian"),
+                        "vendor_direct_cartesian_profiles": LaunchConfiguration("vendor_direct_cartesian_profiles"),
                     }
                 ],
                 output="screen",

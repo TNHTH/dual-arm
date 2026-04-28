@@ -226,11 +226,14 @@ def make_detection(semantic_type: str, x: float, y: float, width: float, height:
     msg = Detection2D()
     msg.semantic_type = semantic_type
     msg.source = "acceptance"
+    msg.view_id = "acceptance"
+    msg.mask_topic = ""
     msg.x = x
     msg.y = y
     msg.width = width
     msg.height = height
     msg.score = 0.95
+    msg.bbox_quality = 0.95
     return msg
 
 

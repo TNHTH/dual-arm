@@ -163,6 +163,10 @@ class SceneFreshnessSmoke(Node):
         obj.graspable = True
         obj.movable = True
         obj.source = "freshness_smoke"
+        obj.source_views = ["freshness_smoke"]
+        obj.shape_type = "cylinder"
+        obj.pose_source = "smoke_fixture"
+        obj.quality_score = 0.92
         obj.last_seen = stamp
         obj.scene_version = message.scene_version
         obj.lifecycle_state = "stable"

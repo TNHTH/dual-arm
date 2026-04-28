@@ -356,6 +356,7 @@ class BallBasketPoseEstimatorNode(Node):
         object_msg.pose.pose.position.z = position[2]
         object_msg.pose.pose.orientation.w = 1.0
 
+        used_prior_fallback = roi_spec is None
         if roi_spec is None:
             roi_spec = self._default_roi_spec(semantic_type)
 
@@ -364,12 +365,25 @@ class BallBasketPoseEstimatorNode(Node):
         object_msg.graspable = semantic_type != "basket"
         object_msg.movable = semantic_type != "basket"
         object_msg.source = self._source_name
+        object_msg.source_views = [self._source_name]
+        object_msg.shape_type = "sphere" if semantic_type in {"basketball", "soccer_ball"} else "box"
+        object_msg.pose_source = "depth_roi_prior_fallback" if used_prior_fallback else "depth_roi_primitive_fit"
+        object_msg.quality_score = float(max(0.0, min(1.0, object_msg.confidence)))
         object_msg.last_seen = self._depth_image.header.stamp
         object_msg.scene_version = 0
         object_msg.lifecycle_state = "observed"
         object_msg.reserved_by = "none"
         object_msg.attached_link = ""
-        object_msg.pose_covariance_diagonal = [-1.0] * 6
+        position_variance = 0.0025 if used_prior_fallback else 0.0004
+        orientation_variance = 3.14 if object_msg.shape_type == "sphere" else 0.35
+        object_msg.pose_covariance_diagonal = [
+            position_variance,
+            position_variance,
+            position_variance,
+            orientation_variance,
+            orientation_variance,
+            orientation_variance,
+        ]
 
         if semantic_type == "basket":
             object_msg.subframes.extend(
