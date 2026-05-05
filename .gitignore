@@ -42,6 +42,7 @@ install/
 log/
 
 .cache/
+.artifacts/
 .artifacts/firefox-test-profile/
 
 node_modules/

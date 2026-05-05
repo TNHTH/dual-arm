@@ -102,7 +102,7 @@ def generate_launch_description():
             DeclareLaunchArgument("planning_time", default_value="5.0"),
             DeclareLaunchArgument("planning_attempts", default_value="10"),
             DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
-            DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value="[]"),
+            DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value=""),
             _include(
                 "dualarm_bringup",
                 "competition_core.launch.py",

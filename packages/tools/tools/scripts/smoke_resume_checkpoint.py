@@ -24,7 +24,7 @@ class ResumeCheckpointSmoke(Node):
     def run_resume(self, checkpoint_id: str):
         goal = RunCompetition.Goal()
         goal.start_immediately = False
-        goal.requested_order = " "
+        goal.requested_order = "handover,pouring"
         goal.resume_from_checkpoint = True
         goal.checkpoint_id = checkpoint_id
         goal.allow_reconcile = True
@@ -54,13 +54,57 @@ def main() -> int:
     (checkpoint_dir / "runs").mkdir(parents=True, exist_ok=True)
     latest = checkpoint_dir / "latest.json"
     checkpoint_id = "resume-smoke:SELF_CHECK"
+    completed_states = [
+        "BOOT",
+        "SELF_CHECK",
+        "LOAD_CALIBRATION",
+        "HOME_ARMS",
+        "WAIT_START",
+        "SCAN_BASKET",
+        "WAIT_BALL_1_STABLE",
+        "PLAN_BIMANUAL_BALL_1_PREGRASP",
+        "GRASP_BALL_1",
+        "HOLD_BALL_1_3S",
+        "PLAN_TO_BASKET_1",
+        "RELEASE_BALL_1",
+        "VERIFY_BALL_1_DROP",
+        "WAIT_BALL_2_STABLE",
+        "PLAN_BIMANUAL_BALL_2_PREGRASP",
+        "GRASP_BALL_2",
+        "HOLD_BALL_2_3S",
+        "PLAN_TO_BASKET_2",
+        "RELEASE_BALL_2",
+        "VERIFY_BALL_2_DROP",
+        "SCAN_TABLE_OBJECTS",
+        "ASSIGN_BOTTLES_AND_CUPS",
+        "GRASP_WATER_BOTTLE_BODY",
+        "GRASP_WATER_CAP",
+        "OPEN_WATER_CAP",
+        "PLACE_WATER_CAP",
+        "GRASP_WATER_CUP",
+        "PLAN_WATER_PREPOUR",
+        "EXECUTE_WATER_POUR",
+        "PLACE_WATER_BOTTLE",
+        "PLACE_WATER_CUP",
+        "GRASP_COLA_BOTTLE_BODY",
+        "GRASP_COLA_CAP",
+        "OPEN_COLA_CAP",
+        "PLACE_COLA_CAP",
+        "GRASP_COLA_CUP",
+        "PLAN_COLA_PREPOUR",
+        "EXECUTE_COLA_POUR",
+        "PLACE_COLA_BOTTLE",
+        "PLACE_COLA_CUP",
+        "PARK",
+        "DONE",
+    ]
     payload = {
         "run_id": "resume-smoke",
         "checkpoint_id": checkpoint_id,
         "checkpoint_schema_version": 1,
-        "task_sequence": " ",
-        "completed_states": ["BOOT", "SELF_CHECK"],
-        "next_state": "LOAD_CALIBRATION",
+        "task_sequence": "handover,pouring",
+        "completed_states": completed_states,
+        "next_state": "competition_done",
         "scene_version": 0,
         "assignments": {},
         "reserved_objects": [],

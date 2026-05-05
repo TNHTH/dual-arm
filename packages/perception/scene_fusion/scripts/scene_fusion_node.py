@@ -11,6 +11,7 @@ import math
 import rclpy
 import yaml
 from geometry_msgs.msg import PoseStamped
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 from rclpy.time import Time
 
@@ -31,6 +32,7 @@ class Track:
 class SceneFusionNode(Node):
     def __init__(self) -> None:
         super().__init__("scene_fusion")
+        topic_list_descriptor = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter(
             "input_topics",
             [
@@ -38,8 +40,9 @@ class SceneFusionNode(Node):
                 "/perception/ball_basket_scene_objects",
                 "/perception/table_scene_objects",
             ],
+            topic_list_descriptor,
         )
-        self.declare_parameter("rgb_detection_topics", [])
+        self.declare_parameter("rgb_detection_topics", "", topic_list_descriptor)
         self.declare_parameter("output_topic", "/scene_fusion/raw_scene_objects")
         self.declare_parameter("stability_count", 5)
         self.declare_parameter("observation_window", 1.5)

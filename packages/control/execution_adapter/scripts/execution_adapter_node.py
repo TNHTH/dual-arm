@@ -11,6 +11,7 @@ import rclpy
 import yaml
 from epg50_gripper_ros.msg import GripperStatus
 from epg50_gripper_ros.srv import GripperCommand, GripperStatus as GripperStatusSrv
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -63,6 +64,7 @@ class PrimitiveExecutionOutcome:
 class ExecutionAdapterNode(Node):
     def __init__(self) -> None:
         super().__init__("execution_adapter")
+        profile_list_descriptor = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter("left_gripper_slave_id", 9)
         self.declare_parameter("right_gripper_slave_id", 10)
         self.declare_parameter("left_gripper_command_service", "/gripper0/epg50_gripper/command")
@@ -75,7 +77,7 @@ class ExecutionAdapterNode(Node):
         self.declare_parameter("dual_arm_skew_limit_ms", 30.0)
         self.declare_parameter("world_frame", "world")
         self.declare_parameter("allow_vendor_direct_cartesian", False)
-        self.declare_parameter("vendor_direct_cartesian_profiles", [])
+        self.declare_parameter("vendor_direct_cartesian_profiles", "", profile_list_descriptor)
         self._left_gripper_slave_id = int(self.get_parameter("left_gripper_slave_id").value)
         self._right_gripper_slave_id = int(self.get_parameter("right_gripper_slave_id").value)
         self._left_gripper_command_service = str(self.get_parameter("left_gripper_command_service").value)

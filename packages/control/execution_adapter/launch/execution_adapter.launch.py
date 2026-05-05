@@ -17,7 +17,7 @@ def generate_launch_description():
             DeclareLaunchArgument("right_gripper_status_topic", default_value="/gripper1/epg50_gripper/status_stream"),
             DeclareLaunchArgument("gripper_command_timeout_s", default_value="8.0"),
             DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
-            DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value="[]"),
+            DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value=""),
             Node(
                 package="execution_adapter",
                 executable="execution_adapter_node.py",
