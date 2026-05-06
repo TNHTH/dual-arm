@@ -1,0 +1,31 @@
+ball_cage:
+  ball_radius_m: 0.06
+  pre_cage_offset_y_m: 0.10
+  cage_spacing_m: 0.13
+  lift_height_m: 0.08
+  hold_sec: 3.2
+  basket_release_height_m: 0.10
+  release_height_above_basket_m: 0.10
+  min_release_height_above_basket_m: 0.08
+  max_release_height_above_basket_m: 0.20
+  retreat_distance_m: 0.08
+
+handover:
+  hold_duration_after_cage_s: 3.2
+  confirm_grasp_by: timer
+  wait_for_human_release_s: 0.5
+  stable_frames: 5
+  max_position_std_m: 0.02
+  wait_for_stable_timeout_s: 8.0
+
+sequence:
+  - prompt_human
+  - wait_ball_stable
+  - move_both_to_pre_cage
+  - open_both_grippers
+  - move_both_to_cage
+  - wait_for_human_release
+  - lift_ball
+  - hold_3_sec
+  - move_to_basket_top
+  - retreat_release_before_contact

@@ -1,0 +1,76 @@
+schema_version: quick_waypoints.v1
+
+defaults:
+  payload_state: EMPTY_GRIPPER
+  keep_orientation_upright: false
+  safe_release_strategy: none
+
+left_arm:
+  home: null
+  observe_table: null
+  pregrasp_cup: null
+  cup_lift: null
+  cup_pour_hold:
+    primary:
+      joint_deg: null
+      tcp_pose_table_frame: null
+      source: actual_robot_feedback
+      created_at: ""
+      verified: false
+      keep_orientation_upright: true
+      payload_state: LIQUID_CONTAINER
+      safe_release_strategy: hold_gripper_alarm
+    fallback: []
+  cup_place: null
+  ball_left_pre_cage: null
+  ball_left_cage: null
+  ball_left_lift: null
+  ball_left_basket_top: null
+  ball_left_release_retreat: null
+
+right_arm:
+  home: null
+  observe_table: null
+  pregrasp_bottle: null
+  bottle_lift: null
+  bottle_pour_above_cup: null
+  bottle_pour_tilt:
+    primary:
+      joint_deg: null
+      tcp_pose_table_frame: null
+      source: actual_robot_feedback
+      created_at: ""
+      verified: false
+      keep_orientation_upright: true
+      payload_state: LIQUID_CONTAINER
+      safe_release_strategy: hold_gripper_alarm
+    fallback: []
+  bottle_upright_after_pour:
+    primary:
+      joint_deg: null
+      tcp_pose_table_frame: null
+      source: actual_robot_feedback
+      created_at: ""
+      verified: false
+      keep_orientation_upright: true
+      payload_state: LIQUID_CONTAINER
+      safe_release_strategy: hold_gripper_alarm
+    fallback: []
+  bottle_return_upright: null
+  bottle_place: null
+  ball_right_pre_cage: null
+  ball_right_cage: null
+  ball_right_lift: null
+  ball_right_basket_top: null
+  ball_right_release_retreat: null
+
+required_groups:
+  critical:
+    left_arm: [home]
+    right_arm: [home]
+  pouring:
+    left_arm: [observe_table, pregrasp_cup, cup_lift, cup_pour_hold, cup_place]
+    right_arm: [observe_table, pregrasp_bottle, bottle_lift, bottle_pour_above_cup, bottle_pour_tilt, bottle_upright_after_pour, bottle_place]
+  handover:
+    left_arm: [observe_table, ball_left_pre_cage, ball_left_cage, ball_left_lift, ball_left_basket_top, ball_left_release_retreat]
+    right_arm: [observe_table, ball_right_pre_cage, ball_right_cage, ball_right_lift, ball_right_basket_top, ball_right_release_retreat]

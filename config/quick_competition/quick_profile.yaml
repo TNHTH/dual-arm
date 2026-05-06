@@ -1,0 +1,54 @@
+mode: quick_competition
+dry_run_default: true
+scene_source_override: manual
+execution_frame: table_frame_corrected
+manual_offset_xyz: [0.0, 0.0, 0.0]
+
+task_order:
+  - pouring
+  - handover
+
+frames:
+  world_frame: table_frame
+  execution_frame: table_frame_corrected
+  left_motion_base_frame: quick_left_motion_base
+  right_motion_base_frame: quick_right_motion_base
+  left_base_frame: left_base_link
+  right_base_frame: right_base_link
+  left_tcp_frame: left_tcp
+  right_tcp_frame: right_tcp
+  primary_depth_frame: left_camera_depth_frame
+
+depth:
+  primary_camera: left
+  scene_source_override: manual
+  allow_switch_depth_camera: false
+  left_rgb_enabled: true
+  right_rgb_enabled: true
+  left_depth_enabled: true
+  right_depth_enabled: false
+  right_depth:
+    verified: false
+  topics:
+    left_depth: /left_camera/depth/image_raw
+    left_camera_info: /left_camera/depth/camera_info
+    right_depth: /right_camera/depth/image_raw
+    right_camera_info: /right_camera/depth/camera_info
+  frames:
+    left_depth: left_camera_depth_frame
+    right_depth: right_camera_depth_frame
+  max_stamp_age_sec: 1.0
+
+execution:
+  prefer_legacy_bridge: true
+  use_moveit_for_quick_mode: false
+  command_timeout_sec: 15.0
+  stop_on_first_failure: false
+  max_retry_per_step: 2
+  require_hardware_confirm_token: I_UNDERSTAND
+
+logging:
+  save_dir: .artifacts/quick_runs
+  save_images: false
+  save_scene_objects: true
+  save_motion_commands: true

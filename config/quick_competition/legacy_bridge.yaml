@@ -1,0 +1,34 @@
+legacy_topics:
+  left_robot_state: /L/robot_state
+  right_robot_state: /R/robot_state
+  left_robot_move: /L/robot_move
+  right_robot_move: /R/robot_move
+  left_robot_move_cart: /L/robot_move_cart
+  right_robot_move_cart: /R/robot_move_cart
+  left_robot_act: /L/robot_act
+  right_robot_act: /R/robot_act
+  left_gripper_command: /gripper0/epg50_gripper/command
+  right_gripper_command: /gripper1/epg50_gripper/command
+  transform_point: /transform_point
+  left_depth_center_point: /depth_handler/left/visualization
+
+legacy_launch:
+  left_robo_ctrl: robo_ctrl robo_ctrl_L.launch.py
+  right_robo_ctrl: robo_ctrl robo_ctrl_R.launch.py
+  gripper: epg50_gripper_ros epg50_gripper_node
+
+grippers:
+  left:
+    topic: /gripper0/epg50_gripper/command
+    slave_id: 9
+    open_position: 255
+    close_position: 60
+    speed: 80
+    torque: 80
+  right:
+    topic: /gripper1/epg50_gripper/command
+    slave_id: 10
+    open_position: 255
+    close_position: 60
+    speed: 80
+    torque: 80

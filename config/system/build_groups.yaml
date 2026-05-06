@@ -33,6 +33,11 @@ groups:
     description: 比赛任务状态机与流程编排。
     packages:
       - dualarm_task_manager
+      - quick_competition
+  quick:
+    description: quick_competition 快速实机旁路。
+    packages:
+      - quick_competition
   bringup:
     description: 双臂核心 bringup 与聚合节点。
     packages:

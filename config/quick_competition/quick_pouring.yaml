@@ -1,0 +1,28 @@
+pouring:
+  cup_arm: left
+  bottle_arm: right
+  place_sequence: bottle_first
+  sequence:
+    - pick_cup
+    - pick_bottle
+    - move_to_pour_pose
+    - timed_pour
+    - return_bottle_upright
+    - place_bottle
+    - place_cup
+
+  water:
+    tilt_deg: 60
+    hold_sec: 2.5
+    return_upright_sec: 1.0
+
+  cola:
+    tilt_deg: 55
+    hold_sec: 2.2
+    return_upright_sec: 1.0
+
+  liquid_safe_motion:
+    velocity_scale: 0.10
+    acceleration_scale: 0.08
+    keep_cup_upright: true
+    max_cup_roll_pitch_deg: 8

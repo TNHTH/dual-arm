@@ -27,6 +27,7 @@
   <depend>joint_state_aggregator</depend>
   <depend>orbbec_gemini_bridge</depend>
   <depend>planning_scene_sync</depend>
+  <depend>quick_competition</depend>
   <depend>robo_ctrl</depend>
   <depend>scene_fusion</depend>
   <depend>tf_node</depend>
