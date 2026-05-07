@@ -1,0 +1,408 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-05-07T16:22:21",
+  "mode": "no_motion_depth_grasp_precheck",
+  "forbidden_runtime_call_classes": [
+    "right_arm_motion_services",
+    "right_arm_servo_services",
+    "gripper_command_services",
+    "competition_run_action"
+  ],
+  "parameters": {
+    "color_device": "/dev/video14",
+    "depth_device": "/dev/video8",
+    "color_width": 640,
+    "color_height": 480,
+    "depth_width": 640,
+    "depth_height": 480,
+    "capture_frames": 5,
+    "capture_timeout_sec": 3.0,
+    "rotate_180": true,
+    "model_path": "/home/gwh/dual-arm/packages/perception/detector/models/yolov8/yolo_runs/final_dataset_v1/weights/best.pt",
+    "target_class_name": "cocacola",
+    "target_class_id": 2,
+    "confidence_threshold": 0.35,
+    "device": "",
+    "depth_scale_mm_per_raw": 1.0,
+    "min_depth_m": 0.1,
+    "max_depth_m": 2.0,
+    "target_depth_window_m": 0.25,
+    "camera_matrix_file": "/home/gwh/dual-arm/packages/tools/tools/scripts/camera_matrix.json",
+    "camera_matrix_source_width": 1280,
+    "camera_matrix_source_height": 720,
+    "static_transforms_file": "/home/gwh/dual-arm/packages/tools/tools/config/static_transforms.yaml",
+    "right_extrinsic_assumption": "operator_confirmed_same_as_left",
+    "obstacle_margin_px": 80,
+    "obstacle_target_exclusion_px": 12,
+    "obstacle_depth_window_m": 0.35,
+    "support_plane_ignore_height_m": 0.04,
+    "min_clearance_m": 0.06,
+    "target_alignment_mode": "either",
+    "gripper_contact_frame": "Rend",
+    "visual_center_tolerance_m": 0.06,
+    "alignment_desired_camera_xy_m": "0.0,0.0",
+    "alignment_label": "camera_center",
+    "target_pixel_margin_px": 40,
+    "max_points": 20000,
+    "output_dir": ".codex/tmp/runtime/right-arm-grasp-precheck-after-advisory-pregrasp-20260507-162221"
+  },
+  "artifacts": {
+    "color_snapshot": ".codex/tmp/runtime/right-arm-grasp-precheck-after-advisory-pregrasp-20260507-162221/right_color_snapshot.jpg",
+    "depth_raw_visualization": ".codex/tmp/runtime/right-arm-grasp-precheck-after-advisory-pregrasp-20260507-162221/right_depth_raw_vis.jpg",
+    "color_depth_overlay": ".codex/tmp/runtime/right-arm-grasp-precheck-after-advisory-pregrasp-20260507-162221/right_color_depth_precheck_overlay.jpg",
+    "json": ".codex/tmp/runtime/right-arm-grasp-precheck-after-advisory-pregrasp-20260507-162221/right_arm_grasp_precheck.json"
+  },
+  "capture": {
+    "color": {
+      "backend": "opencv_v4l2_mjpg",
+      "device": "/dev/video14",
+      "width": 640,
+      "height": 480,
+      "frames_read": 2,
+      "rotate_180": true,
+      "fallback_errors": [
+        "opencv_v4l2_mjpg: read error: OpenCV(4.13.0) /io/opencv/modules/imgcodecs/src/loadsave.cpp:1310: error: (-215:Assertion failed) !buf.empty() in function 'imdecode_'\n",
+        "opencv_v4l2_mjpg: read error: OpenCV(4.13.0) /io/opencv/modules/imgcodecs/src/loadsave.cpp:1310: error: (-215:Assertion failed) !buf.empty() in function 'imdecode_'\n",
+        "opencv_v4l2_mjpg: read error: OpenCV(4.13.0) /io/opencv/modules/imgcodecs/src/loadsave.cpp:1310: error: (-215:Assertion failed) !buf.empty() in function 'imdecode_'\n"
+      ]
+    },
+    "depth": {
+      "backend": "native_v4l2_mmap",
+      "device": "/dev/video8",
+      "width": 640,
+      "height": 480,
+      "pixelformat": "Z16",
+      "bytesused": 614400,
+      "frames_read": 5,
+      "opencv_fallback_reason": "OpenCV V4L2 无法打开设备",
+      "rotate_180": true
+    }
+  },
+  "model": {
+    "model_path": "/home/gwh/dual-arm/packages/perception/detector/models/yolov8/yolo_runs/final_dataset_v1/weights/best.pt",
+    "device": "cuda:0",
+    "confidence_threshold": 0.35,
+    "class_names": {
+      "0": "basket",
+      "1": "basketball",
+      "2": "cocacola",
+      "3": "cup",
+      "4": "football",
+      "5": "yibao"
+    }
+  },
+  "detections": [
+    {
+      "class_id": 2,
+      "class_name": "cocacola",
+      "score": 0.9073449373245239,
+      "xyxy": [
+        309.39862060546875,
+        292.3233642578125,
+        447.08514404296875,
+        480.0
+      ],
+      "center_xy": [
+        378.24188232421875,
+        386.16168212890625
+      ],
+      "width": 137.6865234375,
+      "height": 187.6766357421875
+    }
+  ],
+  "target_detection": {
+    "class_id": 2,
+    "class_name": "cocacola",
+    "score": 0.9073449373245239,
+    "xyxy": [
+      309.39862060546875,
+      292.3233642578125,
+      447.08514404296875,
+      480.0
+    ],
+    "center_xy": [
+      378.24188232421875,
+      386.16168212890625
+    ],
+    "width": 137.6865234375,
+    "height": 187.6766357421875
+  },
+  "depth_scale": {
+    "depth_scale_mm_per_raw": 1.0,
+    "interpretation": "raw depth unit is millimeter for this run",
+    "status": "operator_selected_not_global_verified"
+  },
+  "intrinsics": {
+    "source_file": "/home/gwh/dual-arm/packages/tools/tools/scripts/camera_matrix.json",
+    "source_width": 1280,
+    "source_height": 720,
+    "scaled_width": 640,
+    "scaled_height": 480,
+    "scaled": {
+      "fx": 345.0026550292969,
+      "fy": 459.8217366536458,
+      "cx": 318.4267578125,
+      "cy": 239.95914713541666
+    },
+    "pixel_coordinate_note": "images were rotated 180 deg for detection/display; geometry maps rotated pixels back to the original camera ray"
+  },
+  "depth_roi": {
+    "xyxy": [
+      309,
+      292,
+      448,
+      480
+    ],
+    "valid_pixel_count": 12397,
+    "target_model_pixel_count": 11711,
+    "target_depth_window_m": [
+      0.1,
+      0.4699999988079071
+    ],
+    "raw_stats": {
+      "valid": true,
+      "count": 12397,
+      "min": 156.0,
+      "p05": 173.0,
+      "p25": 191.0,
+      "median": 220.0,
+      "p75": 334.0,
+      "p95": 474.0,
+      "max": 817.0,
+      "mean": 266.5802917480469
+    },
+    "depth_m_stats": {
+      "valid": true,
+      "count": 12397,
+      "min": 0.15600000321865082,
+      "p05": 0.17299999296665192,
+      "p25": 0.19099999964237213,
+      "median": 0.2199999988079071,
+      "p75": 0.33399999141693115,
+      "p95": 0.4740000069141388,
+      "max": 0.8169999718666077,
+      "mean": 0.2665802836418152
+    }
+  },
+  "target_3d_bbox_unfiltered_camera_m": {
+    "valid": true,
+    "point_count": 12397,
+    "min_xyz": [
+      -0.19128772616386414,
+      -0.422178715467453,
+      0.15600000321865082
+    ],
+    "max_xyz": [
+      0.010835154913365841,
+      -0.025683628395199776,
+      0.8169999718666077
+    ],
+    "center_xyz": [
+      -0.09022628515958786,
+      -0.2239311784505844,
+      0.48649999499320984
+    ],
+    "size_xyz": [
+      0.20212288200855255,
+      0.3964950740337372,
+      0.6609999537467957
+    ]
+  },
+  "target_3d_bbox_camera_m": {
+    "valid": true,
+    "point_count": 11711,
+    "min_xyz": [
+      -0.1722322404384613,
+      -0.19109752774238586,
+      0.15600000321865082
+    ],
+    "max_xyz": [
+      0.010835154913365841,
+      -0.025683628395199776,
+      0.4699999988079071
+    ],
+    "center_xyz": [
+      -0.08069854229688644,
+      -0.10839057713747025,
+      0.31299999356269836
+    ],
+    "size_xyz": [
+      0.18306739628314972,
+      0.16541390120983124,
+      0.3140000104904175
+    ]
+  },
+  "target_center_camera_m": [
+    -0.036938517614056456,
+    -0.07031205708084128,
+    0.2199999988079071
+  ],
+  "candidate_tcp_point_m": [
+    -0.04693851761405646,
+    -0.16031205708084129,
+    0.2759999988079071
+  ],
+  "candidate_extrinsic": {
+    "parent": "right_tcp",
+    "child": "right_camera_link_candidate",
+    "translation_m": [
+      -0.01,
+      -0.09,
+      0.056
+    ],
+    "rpy_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "status": "operator_confirmed_same_as_left_not_calibration_verified",
+    "source": "/home/gwh/dual-arm/packages/tools/tools/config/static_transforms.yaml: Ltcp->camera_link reused for right_tcp->right_camera; assumption=operator_confirmed_same_as_left; not a calibration verification",
+    "semantics": "tf2 parent->child static transform; camera point to TCP uses p_tcp = R_tcp_camera @ p_camera + t_tcp_camera"
+  },
+  "target_alignment": {
+    "image_size_px": [
+      640,
+      480
+    ],
+    "target_center_px": [
+      378.24188232421875,
+      386.16168212890625
+    ],
+    "image_center_px": [
+      319.5,
+      239.5
+    ],
+    "pixel_offset_xy": [
+      58.74188232421875,
+      146.66168212890625
+    ],
+    "bbox_edge_margin_px": 0.0,
+    "target_pixel_margin_threshold_px": 40,
+    "target_alignment_mode": "either",
+    "selected_alignment_label": "camera_center",
+    "alignment_label": "camera_center",
+    "desired_camera_xy_m": [
+      0.0,
+      0.0
+    ],
+    "camera_offset_xy_m": [
+      -0.036938517614056456,
+      -0.07031205708084128
+    ],
+    "camera_xy_norm_m": 0.07942442605687144,
+    "visual_center_tolerance_m": 0.06,
+    "alignment_candidates": {
+      "camera_center": {
+        "alignment_label": "camera_center",
+        "desired_camera_xy_m": [
+          0.0,
+          0.0
+        ],
+        "source": "image_center_optical_axis",
+        "camera_offset_xy_m": [
+          -0.036938517614056456,
+          -0.07031205708084128
+        ],
+        "camera_xy_norm_m": 0.07942442605687144,
+        "center_passes": false,
+        "visible_margin_passes": false,
+        "passes": false
+      },
+      "tcp_contact_projection": {
+        "alignment_label": "tcp_contact_projection",
+        "desired_camera_xy_m": [
+          0.04065,
+          0.082934
+        ],
+        "source": "/home/gwh/dual-arm/packages/tools/tools/config/static_transforms.yaml: right gripper contact frame Rend minus reused Ltcp->camera_link offset",
+        "camera_offset_xy_m": [
+          -0.07758851761405645,
+          -0.15324605708084127
+        ],
+        "camera_xy_norm_m": 0.17176825107210938,
+        "center_passes": false,
+        "visible_margin_passes": false,
+        "passes": false
+      }
+    },
+    "center_passes": false,
+    "visible_margin_passes": false,
+    "passes": false,
+    "recommendation": "run_visual_center_step_before_contact_or_grasp"
+  },
+  "obstacle_model": {
+    "search_window_xyxy": [
+      229,
+      212,
+      528,
+      480
+    ],
+    "target_exclusion_xyxy": [
+      297,
+      280,
+      460,
+      480
+    ],
+    "support_plane_depth_estimate_m": 0.41499999165534973,
+    "support_plane_ignore_height_m": 0.04,
+    "depth_window_m": [
+      0.1,
+      0.5699999988079071
+    ],
+    "valid_obstacle_candidate_pixel_count": 37998,
+    "valid_obstacle_pixel_count": 24754,
+    "obstacle_3d_bbox_camera_m": {
+      "valid": true,
+      "point_count": 12377,
+      "min_xyz": [
+        -0.22377686202526093,
+        -0.10843263566493988,
+        0.1589999943971634
+      ],
+      "max_xyz": [
+        0.09926994144916534,
+        0.016995292156934738,
+        0.375
+      ],
+      "center_xyz": [
+        -0.06225346028804779,
+        -0.04571866989135742,
+        0.2669999897480011
+      ],
+      "size_xyz": [
+        0.32304680347442627,
+        0.12542793154716492,
+        0.2160000056028366
+      ]
+    },
+    "obstacle_min_distance_m": 0.0,
+    "clearance_gate": {
+      "passes": false,
+      "threshold_m": 0.06,
+      "reason": "obstacle_too_close_or_target_invalid"
+    }
+  },
+  "safety_gate": {
+    "passes": false,
+    "auto_grasp_allowed": false,
+    "depth_model_gate": {
+      "passes": true,
+      "reason": "target_3d_bbox_valid"
+    },
+    "clearance_gate": {
+      "passes": false,
+      "threshold_m": 0.06,
+      "reason": "obstacle_too_close_or_target_invalid"
+    },
+    "extrinsic_gate": {
+      "passes": false,
+      "available_for_scripted_candidate_geometry": true,
+      "reason": "not_calibration_verified"
+    },
+    "motion_recommendation": "fail_closed_for_auto_grasp_safe_direction_jog_only",
+    "reasons": [
+      "obstacle_too_close_or_target_invalid",
+      "right_camera_to_right_tcp_extrinsic_not_verified"
+    ]
+  }
+}

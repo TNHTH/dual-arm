@@ -1,0 +1,385 @@
+{
+  "created_at": "2026-05-07T16:25:09+0800",
+  "mode": "right_arm_autonomous_grasp_attempt",
+  "execute_requested": true,
+  "steps": [
+    {
+      "name": "visual_center",
+      "type": "plan_pose",
+      "success": true,
+      "result_code": "success",
+      "failure_stage": "",
+      "message": "MoveIt PlanPose 规划成功",
+      "planning_time_ms": 396.2869873046875,
+      "joint_names": [
+        "right_j1",
+        "right_j2",
+        "right_j3",
+        "right_j4",
+        "right_j5",
+        "right_j6"
+      ],
+      "point_count": 10
+    },
+    {
+      "name": "visual_center",
+      "type": "execute",
+      "accepted": true,
+      "success": true,
+      "result_code": "success",
+      "message": "ServoJ开始执行; 已等待 ServoJ 执行窗口并确认 motion_done=true",
+      "final_primary_joint_state": {
+        "name": [
+          "right_j1",
+          "right_j2",
+          "right_j3",
+          "right_j4",
+          "right_j5",
+          "right_j6"
+        ],
+        "position": [
+          -104.7245101928711,
+          -116.30083465576172,
+          -71.06805419921875,
+          -235.34237670898438,
+          -59.87461853027344,
+          -56.44470977783203
+        ],
+        "stamp": {
+          "sec": 1778142315,
+          "nanosec": 657962289
+        }
+      }
+    }
+  ],
+  "precheck_json": "/home/gwh/dual-arm/.codex/tmp/runtime/right-arm-grasp-precheck-after-second-advisory-pregrasp-20260507-162338/right_arm_grasp_precheck.json",
+  "precheck_age_gate": {
+    "enabled": true,
+    "created_at": "2026-05-07T16:23:38",
+    "threshold_sec": 180.0,
+    "age_sec": 91.347095
+  },
+  "target_alignment_gate": {
+    "image_size_px": [
+      640,
+      480
+    ],
+    "target_center_px": [
+      515.8276977539062,
+      445.1856689453125
+    ],
+    "image_center_px": [
+      319.5,
+      239.5
+    ],
+    "pixel_offset_xy": [
+      196.32769775390625,
+      205.6856689453125
+    ],
+    "bbox_edge_margin_px": 0.18011474609375,
+    "target_pixel_margin_threshold_px": 40,
+    "target_alignment_mode": "camera_center",
+    "selected_alignment_label": "camera_center",
+    "alignment_label": "camera_center",
+    "desired_camera_xy_m": [
+      0.0,
+      0.0
+    ],
+    "camera_offset_xy_m": [
+      -0.45429290116593507,
+      -0.3592244993823831
+    ],
+    "camera_xy_norm_m": 0.5791582521265546,
+    "visual_center_tolerance_m": 0.06,
+    "alignment_candidates": {
+      "camera_center": {
+        "desired_camera_xy_m": [
+          0.0,
+          0.0
+        ],
+        "source": "image_center_optical_axis",
+        "camera_offset_xy_m": [
+          -0.45429290116593507,
+          -0.3592244993823831
+        ],
+        "camera_xy_norm_m": 0.5791582521265546,
+        "alignment_label": "camera_center",
+        "center_passes": false,
+        "visible_margin_passes": false,
+        "passes": false
+      },
+      "tcp_contact_projection": {
+        "desired_camera_xy_m": [
+          0.04065,
+          0.082934
+        ],
+        "source": "/home/gwh/dual-arm/packages/tools/tools/config/static_transforms.yaml: right gripper contact frame Rend minus reused Ltcp->camera_link offset",
+        "camera_offset_xy_m": [
+          -0.4949429011659351,
+          -0.4421584993823831
+        ],
+        "camera_xy_norm_m": 0.6636811086588449,
+        "alignment_label": "tcp_contact_projection",
+        "center_passes": false,
+        "visible_margin_passes": false,
+        "passes": false
+      }
+    },
+    "center_passes": false,
+    "visible_margin_passes": false,
+    "passes": false,
+    "recommendation": "run_visual_center_step_and_recheck_before_contact_or_grasp",
+    "required_for_motion_mode": false,
+    "required_for_gripper": false,
+    "enforcement": "advisory_reference_only",
+    "used_center_tolerance_m": 0.06,
+    "used_pixel_margin_threshold_px": 40
+  },
+  "precheck_gate": {
+    "passes": true,
+    "reasons": []
+  },
+  "initial_robot_state": {
+    "stamp": {
+      "sec": 1778142309,
+      "nanosec": 361005072
+    },
+    "joint_position_deg": [
+      -111.38613891601562,
+      -118.96387481689453,
+      -60.382381439208984,
+      -240.23814392089844,
+      -63.094810485839844,
+      -63.090675354003906
+    ],
+    "tcp_pose_mm_deg": [
+      -258.4542541503906,
+      -256.1530456542969,
+      259.175048828125,
+      -171.214111328125,
+      38.907562255859375,
+      37.372276306152344
+    ],
+    "motion_done": true,
+    "error_code": 0
+  },
+  "service_checks": {
+    "/planning/plan_pose": true,
+    "/execution/execute_trajectory": true
+  },
+  "tf_fallback_reason": "Could not find a connection between 'world' and 'right_tcp' because they are not part of the same tree.Tf has two or more unconnected trees.",
+  "scene_object_model": {
+    "requested_size_m": [
+      0.07,
+      0.07,
+      0.16
+    ],
+    "raw_depth_bbox_size_m": [
+      0.08665710687637329,
+      0.13841387629508972,
+      0.23899996280670166
+    ],
+    "used_collision_size_m": [
+      0.07,
+      0.07,
+      0.16
+    ],
+    "reason": "depth_bbox_clamped_to_operator_task_object_size_for_planning_scene"
+  },
+  "visual_center_selected_alignment": {
+    "selected_alignment_label": "camera_center",
+    "target_alignment_mode": "camera_center",
+    "desired_camera_xy_m": [
+      0.0,
+      0.0
+    ],
+    "camera_xy_norm_m": 0.5791582521265546
+  },
+  "visual_center_control": {
+    "target_center_camera_m": [
+      -0.45429290116593507,
+      -0.3592244993823831,
+      0.8019999861717224
+    ],
+    "desired_camera_xy_m": [
+      0.0,
+      0.0
+    ],
+    "axis": "xy",
+    "gain": -1.0,
+    "correction_camera_m": [
+      0.45429290116593507,
+      0.3592244993823831,
+      -0.0
+    ],
+    "correction_tcp_m": [
+      0.031376080682463656,
+      0.02481011005633654,
+      0.0
+    ],
+    "distance_m": 0.04000000000000001,
+    "extrinsic_status": "operator_confirmed_same_as_left_not_calibration_verified"
+  },
+  "computed_geometry": {
+    "motion_mode": "visual_center_step",
+    "current_tcp_world_m": [
+      -0.25845425415039064,
+      -0.6061530456542968,
+      0.259175048828125
+    ],
+    "target_point_tcp_m": [
+      -0.4642929011659351,
+      -0.44922449938238307,
+      0.8579999861717225
+    ],
+    "target_contact_world_m": [
+      -1.2835813760555264,
+      -0.6655924514313042,
+      -0.0556516752034899
+    ],
+    "contact_offset_tcp_m": [
+      0.03065,
+      -0.007066,
+      0.190848
+    ],
+    "contact_offset_world_m": [
+      -0.09657989791211742,
+      -0.028299043103575783,
+      -0.16517807796044526
+    ],
+    "approach_axis_world": [
+      -0.49932059585574967,
+      -0.14630679230457275,
+      -0.8539749791883868
+    ],
+    "plans": [
+      {
+        "name": "visual_center",
+        "target_contact_world_m": [
+          -0.25845425415039064,
+          -0.6061530456542968,
+          0.259175048828125
+        ],
+        "tcp_goal_world_m": [
+          -0.2260596195641571,
+          -0.6122631170445995,
+          0.23651992407389313
+        ],
+        "distance_m": 0.04000000000000001,
+        "pose": {
+          "frame_id": "world",
+          "position": {
+            "x": -0.2260596195641571,
+            "y": -0.6122631170445995,
+            "z": 0.23651992407389313
+          },
+          "orientation": {
+            "x": 0.8987565397693497,
+            "y": 0.277040353315584,
+            "z": -0.33770310662310443,
+            "w": 0.037972840737897556
+          }
+        }
+      }
+    ]
+  },
+  "post_motion_samples": [
+    {
+      "stamp": {
+        "sec": 1778142315,
+        "nanosec": 858263976
+      },
+      "joint_position_deg": [
+        -104.69796752929688,
+        -116.2943115234375,
+        -71.1032943725586,
+        -235.32583618164062,
+        -59.86656951904297,
+        -56.424041748046875
+      ],
+      "tcp_pose_mm_deg": [
+        -226.13275146484375,
+        -262.2200012207031,
+        236.5133056640625,
+        -171.25119018554688,
+        38.945899963378906,
+        37.35075378417969
+      ],
+      "motion_done": true,
+      "error_code": 0
+    },
+    {
+      "stamp": {
+        "sec": 1778142315,
+        "nanosec": 858263976
+      },
+      "joint_position_deg": [
+        -104.69796752929688,
+        -116.2943115234375,
+        -71.1032943725586,
+        -235.32583618164062,
+        -59.86656951904297,
+        -56.424041748046875
+      ],
+      "tcp_pose_mm_deg": [
+        -226.13275146484375,
+        -262.2200012207031,
+        236.5133056640625,
+        -171.25119018554688,
+        38.945899963378906,
+        37.35075378417969
+      ],
+      "motion_done": true,
+      "error_code": 0
+    },
+    {
+      "stamp": {
+        "sec": 1778142315,
+        "nanosec": 858263976
+      },
+      "joint_position_deg": [
+        -104.69796752929688,
+        -116.2943115234375,
+        -71.1032943725586,
+        -235.32583618164062,
+        -59.86656951904297,
+        -56.424041748046875
+      ],
+      "tcp_pose_mm_deg": [
+        -226.13275146484375,
+        -262.2200012207031,
+        236.5133056640625,
+        -171.25119018554688,
+        38.945899963378906,
+        37.35075378417969
+      ],
+      "motion_done": true,
+      "error_code": 0
+    }
+  ],
+  "status": "completed",
+  "final_robot_state": {
+    "stamp": {
+      "sec": 1778142315,
+      "nanosec": 858263976
+    },
+    "joint_position_deg": [
+      -104.69796752929688,
+      -116.2943115234375,
+      -71.1032943725586,
+      -235.32583618164062,
+      -59.86656951904297,
+      -56.424041748046875
+    ],
+    "tcp_pose_mm_deg": [
+      -226.13275146484375,
+      -262.2200012207031,
+      236.5133056640625,
+      -171.25119018554688,
+      38.945899963378906,
+      37.35075378417969
+    ],
+    "motion_done": true,
+    "error_code": 0
+  }
+}

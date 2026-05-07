@@ -1,0 +1,622 @@
+{
+  "created_at": "2026-05-07T16:23:08+0800",
+  "mode": "right_arm_autonomous_grasp_attempt",
+  "execute_requested": true,
+  "steps": [
+    {
+      "name": "pregrasp",
+      "type": "plan_pose",
+      "success": true,
+      "result_code": "success",
+      "failure_stage": "",
+      "message": "MoveIt PlanPose 规划成功",
+      "planning_time_ms": 407.7070007324219,
+      "joint_names": [
+        "right_j1",
+        "right_j2",
+        "right_j3",
+        "right_j4",
+        "right_j5",
+        "right_j6"
+      ],
+      "point_count": 11
+    },
+    {
+      "name": "enable_before_approach",
+      "type": "set_gripper",
+      "position": 0,
+      "success": true,
+      "message": "夹爪命令完成"
+    },
+    {
+      "name": "open_before_approach",
+      "type": "set_gripper",
+      "position": 0,
+      "success": true,
+      "message": "夹爪命令完成"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 254,
+      "speed": 17,
+      "force": 69,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 238,
+      "speed": 31,
+      "force": 4,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 222,
+      "speed": 30,
+      "force": 0,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 206,
+      "speed": 29,
+      "force": 8,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 189,
+      "speed": 30,
+      "force": 0,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 173,
+      "speed": 28,
+      "force": 15,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 156,
+      "speed": 32,
+      "force": 0,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 140,
+      "speed": 28,
+      "force": 5,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 123,
+      "speed": 32,
+      "force": 0,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 107,
+      "speed": 28,
+      "force": 11,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 91,
+      "speed": 30,
+      "force": 0,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 74,
+      "speed": 29,
+      "force": 2,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 58,
+      "speed": 30,
+      "force": 0,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 41,
+      "speed": 31,
+      "force": 3,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 25,
+      "speed": 30,
+      "force": 0,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 57,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 0,
+      "error": 0,
+      "position": 8,
+      "speed": 32,
+      "force": 11,
+      "object_status": "手指正向指定位置移动",
+      "error_message": "正常"
+    },
+    {
+      "name": "status_after_open_before_approach",
+      "type": "gripper_status",
+      "success": true,
+      "status": 241,
+      "gact": true,
+      "gsta": 3,
+      "gobj": 3,
+      "error": 0,
+      "position": 0,
+      "speed": 0,
+      "force": 4,
+      "object_status": "手指已到达指定位置，但未检测到物体或物体已脱落",
+      "error_message": "正常"
+    },
+    {
+      "name": "pregrasp",
+      "type": "execute",
+      "accepted": true,
+      "success": true,
+      "result_code": "success",
+      "message": "ServoJ开始执行; 已等待 ServoJ 执行窗口并确认 motion_done=true",
+      "final_primary_joint_state": {
+        "name": [
+          "right_j1",
+          "right_j2",
+          "right_j3",
+          "right_j4",
+          "right_j5",
+          "right_j6"
+        ],
+        "position": [
+          -111.3865737915039,
+          -118.96561431884766,
+          -60.378684997558594,
+          -240.2377166748047,
+          -63.093502044677734,
+          -63.090023040771484
+        ],
+        "stamp": {
+          "sec": 1778142200,
+          "nanosec": 633488671
+        }
+      }
+    }
+  ],
+  "precheck_json": "/home/gwh/dual-arm/.codex/tmp/runtime/right-arm-grasp-precheck-after-advisory-pregrasp-20260507-162221/right_arm_grasp_precheck.json",
+  "precheck_age_gate": {
+    "enabled": true,
+    "created_at": "2026-05-07T16:22:21",
+    "threshold_sec": 180.0,
+    "age_sec": 47.248122
+  },
+  "target_alignment_gate": {
+    "image_size_px": [
+      640,
+      480
+    ],
+    "target_center_px": [
+      378.24188232421875,
+      386.16168212890625
+    ],
+    "image_center_px": [
+      319.5,
+      239.5
+    ],
+    "pixel_offset_xy": [
+      58.74188232421875,
+      146.66168212890625
+    ],
+    "bbox_edge_margin_px": 0.0,
+    "target_pixel_margin_threshold_px": 40,
+    "target_alignment_mode": "either",
+    "selected_alignment_label": "camera_center",
+    "alignment_label": "camera_center",
+    "desired_camera_xy_m": [
+      0.0,
+      0.0
+    ],
+    "camera_offset_xy_m": [
+      -0.036938517614056456,
+      -0.07031205708084128
+    ],
+    "camera_xy_norm_m": 0.07942442605687144,
+    "visual_center_tolerance_m": 0.06,
+    "alignment_candidates": {
+      "camera_center": {
+        "desired_camera_xy_m": [
+          0.0,
+          0.0
+        ],
+        "source": "image_center_optical_axis",
+        "camera_offset_xy_m": [
+          -0.036938517614056456,
+          -0.07031205708084128
+        ],
+        "camera_xy_norm_m": 0.07942442605687144,
+        "alignment_label": "camera_center",
+        "center_passes": false,
+        "visible_margin_passes": false,
+        "passes": false
+      },
+      "tcp_contact_projection": {
+        "desired_camera_xy_m": [
+          0.04065,
+          0.082934
+        ],
+        "source": "/home/gwh/dual-arm/packages/tools/tools/config/static_transforms.yaml: right gripper contact frame Rend minus reused Ltcp->camera_link offset",
+        "camera_offset_xy_m": [
+          -0.07758851761405645,
+          -0.15324605708084127
+        ],
+        "camera_xy_norm_m": 0.17176825107210938,
+        "alignment_label": "tcp_contact_projection",
+        "center_passes": false,
+        "visible_margin_passes": false,
+        "passes": false
+      }
+    },
+    "center_passes": false,
+    "visible_margin_passes": false,
+    "passes": false,
+    "recommendation": "run_visual_center_step_and_recheck_before_contact_or_grasp",
+    "required_for_motion_mode": true,
+    "required_for_gripper": true,
+    "enforcement": "advisory_reference_only",
+    "used_center_tolerance_m": 0.035,
+    "used_pixel_margin_threshold_px": 40
+  },
+  "precheck_gate": {
+    "passes": true,
+    "reasons": []
+  },
+  "initial_robot_state": {
+    "stamp": {
+      "sec": 1778142188,
+      "nanosec": 284054003
+    },
+    "joint_position_deg": [
+      -99.46194458007812,
+      -117.54783630371094,
+      -66.98701477050781,
+      -241.0496063232422,
+      -57.61186981201172,
+      -50.942840576171875
+    ],
+    "tcp_pose_mm_deg": [
+      -204.53736877441406,
+      -280.970458984375,
+      250.22523498535156,
+      -171.25387573242188,
+      38.925052642822266,
+      37.38642883300781
+    ],
+    "motion_done": true,
+    "error_code": 0
+  },
+  "service_checks": {
+    "/planning/plan_pose": true,
+    "/execution/execute_trajectory": true,
+    "/execution/set_gripper": true,
+    "/gripper1/epg50_gripper/status": true
+  },
+  "tf_fallback_reason": "Could not find a connection between 'world' and 'right_tcp' because they are not part of the same tree.Tf has two or more unconnected trees.",
+  "scene_object_model": {
+    "requested_size_m": [
+      0.07,
+      0.07,
+      0.16
+    ],
+    "raw_depth_bbox_size_m": [
+      0.18306739628314972,
+      0.16541390120983124,
+      0.3140000104904175
+    ],
+    "used_collision_size_m": [
+      0.07,
+      0.07,
+      0.16
+    ],
+    "reason": "depth_bbox_clamped_to_operator_task_object_size_for_planning_scene"
+  },
+  "computed_geometry": {
+    "motion_mode": "contact_approach",
+    "current_tcp_world_m": [
+      -0.20453736877441406,
+      -0.630970458984375,
+      0.25022523498535154
+    ],
+    "target_point_tcp_m": [
+      -0.04693851761405646,
+      -0.16031205708084129,
+      0.2759999988079071
+    ],
+    "target_contact_world_m": [
+      -0.4792560551859688,
+      -0.5886705853134621,
+      0.08645850012446665
+    ],
+    "contact_offset_tcp_m": [
+      0.03065,
+      -0.007066,
+      0.190848
+    ],
+    "contact_offset_world_m": [
+      -0.09654643201164731,
+      -0.028466479587537088,
+      -0.16516887105539196
+    ],
+    "approach_axis_world": [
+      -0.49914757627584916,
+      -0.14717244330179813,
+      -0.8539273792486831
+    ],
+    "plans": [
+      {
+        "name": "pregrasp",
+        "target_contact_world_m": [
+          -0.4792560551859688,
+          -0.5886705853134621,
+          0.08645850012446665
+        ],
+        "tcp_goal_world_m": [
+          -0.2584268799465536,
+          -0.6061447870556196,
+          0.2591474880031523
+        ],
+        "distance_m": 0.06000000000000002,
+        "pose": {
+          "frame_id": "world",
+          "position": {
+            "x": -0.2584268799465536,
+            "y": -0.6061447870556196,
+            "z": 0.2591474880031523
+          },
+          "orientation": {
+            "x": 0.8986645664980065,
+            "y": 0.27724187633771874,
+            "z": -0.33773690328992334,
+            "w": 0.038376074340975654
+          }
+        }
+      }
+    ]
+  },
+  "post_motion_samples": [
+    {
+      "stamp": {
+        "sec": 1778142200,
+        "nanosec": 833751622
+      },
+      "joint_position_deg": [
+        -111.38809967041016,
+        -118.96561431884766,
+        -60.378684997558594,
+        -240.23793029785156,
+        -63.095027923583984,
+        -63.09111022949219
+      ],
+      "tcp_pose_mm_deg": [
+        -258.4671936035156,
+        -256.1557922363281,
+        259.1773681640625,
+        -171.21542358398438,
+        38.90925979614258,
+        37.369937896728516
+      ],
+      "motion_done": true,
+      "error_code": 0
+    },
+    {
+      "stamp": {
+        "sec": 1778142200,
+        "nanosec": 833751622
+      },
+      "joint_position_deg": [
+        -111.38809967041016,
+        -118.96561431884766,
+        -60.378684997558594,
+        -240.23793029785156,
+        -63.095027923583984,
+        -63.09111022949219
+      ],
+      "tcp_pose_mm_deg": [
+        -258.4671936035156,
+        -256.1557922363281,
+        259.1773681640625,
+        -171.21542358398438,
+        38.90925979614258,
+        37.369937896728516
+      ],
+      "motion_done": true,
+      "error_code": 0
+    },
+    {
+      "stamp": {
+        "sec": 1778142200,
+        "nanosec": 833751622
+      },
+      "joint_position_deg": [
+        -111.38809967041016,
+        -118.96561431884766,
+        -60.378684997558594,
+        -240.23793029785156,
+        -63.095027923583984,
+        -63.09111022949219
+      ],
+      "tcp_pose_mm_deg": [
+        -258.4671936035156,
+        -256.1557922363281,
+        259.1773681640625,
+        -171.21542358398438,
+        38.90925979614258,
+        37.369937896728516
+      ],
+      "motion_done": true,
+      "error_code": 0
+    }
+  ],
+  "status": "completed",
+  "final_robot_state": {
+    "stamp": {
+      "sec": 1778142200,
+      "nanosec": 833751622
+    },
+    "joint_position_deg": [
+      -111.38809967041016,
+      -118.96561431884766,
+      -60.378684997558594,
+      -240.23793029785156,
+      -63.095027923583984,
+      -63.09111022949219
+    ],
+    "tcp_pose_mm_deg": [
+      -258.4671936035156,
+      -256.1557922363281,
+      259.1773681640625,
+      -171.21542358398438,
+      38.90925979614258,
+      37.369937896728516
+    ],
+    "motion_done": true,
+    "error_code": 0
+  }
+}
