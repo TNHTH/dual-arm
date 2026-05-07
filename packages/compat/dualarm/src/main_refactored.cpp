@@ -191,10 +191,9 @@ private:
     ) {
         RCLCPP_INFO(parent_node_->get_logger(), "Processing robot move request for robot %s", robot_id.c_str());
 
-        // 这里应该转发到实际的机器人控制器
-        // 暂时模拟成功响应
-        response->success = true;
-        response->message = "Robot move command received for robot " + robot_id;
+        (void)request;
+        response->success = false;
+        response->message = "robot_main_refactored 未验证转发链路，拒绝假成功 RobotMove: " + robot_id;
     }
 
     void handleRobotMoveCartRequest(
@@ -204,8 +203,9 @@ private:
     ) {
         RCLCPP_INFO(parent_node_->get_logger(), "Processing robot move cart request for robot %s", robot_id.c_str());
 
-        response->success = true;
-        response->message = "Robot move cart command received for robot " + robot_id;
+        (void)request;
+        response->success = false;
+        response->message = "robot_main_refactored 未验证转发链路，拒绝假成功 RobotMoveCart: " + robot_id;
     }
 
     void handleRobotActRequest(
@@ -220,8 +220,8 @@ private:
             request->command_type
         );
 
-        response->success = true;
-        response->message = "Robot act command received for robot " + robot_id;
+        response->success = false;
+        response->message = "robot_main_refactored 未验证转发链路，拒绝假成功 RobotAct: " + robot_id;
     }
 
     void handleRobotActJRequest(
@@ -236,8 +236,8 @@ private:
             request->command_type
         );
 
-        response->success = true;
-        response->message = "Robot act j command received for robot " + robot_id;
+        response->success = false;
+        response->message = "robot_main_refactored 未验证转发链路，拒绝假成功 RobotActJ: " + robot_id;
     }
 
     void handleGripperCommandRequest(
@@ -252,8 +252,8 @@ private:
             request->position
         );
 
-        response->success = true;
-        response->message = "Gripper command received";
+        response->success = false;
+        response->message = "robot_main_refactored 未验证转发链路，拒绝假成功 GripperCommand";
     }
 };
 

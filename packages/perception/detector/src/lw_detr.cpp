@@ -1,5 +1,7 @@
 #include "detector/lw_detr.hpp"
 
+#include <cstring>
+
 // 定义Logger
 static class Logger: public nvinfer1::ILogger {
     void log(Severity severity, const char* msg) noexcept override {
@@ -17,6 +19,25 @@ void destroy_trt_object(T*& object) {
     if (object != nullptr) {
         delete object;
         object = nullptr;
+    }
+}
+
+bool check_cuda(cudaError_t result, const char* operation) {
+    if (result == cudaSuccess) {
+        return true;
+    }
+    std::cerr << "CUDA错误: " << operation << " failed: " << cudaGetErrorString(result) << std::endl;
+    return false;
+}
+
+template <typename T>
+void free_cuda_buffer(T*& pointer) {
+    if (pointer != nullptr) {
+        cudaError_t result = cudaFree(pointer);
+        if (result != cudaSuccess) {
+            std::cerr << "CUDA错误: cudaFree failed: " << cudaGetErrorString(result) << std::endl;
+        }
+        pointer = nullptr;
     }
 }
 
@@ -84,33 +105,44 @@ detector::LwDetr::LwDetr() {
 }
 
 detector::LwDetr::~LwDetr() {
-    // 释放CPU和GPU内存
-    delete[] host_inputs;
-    delete[] host_dets;
-    delete[] host_labels;
-
-    cudaFree(cuda_inputs);
-    cudaFree(cuda_dets);
-    cudaFree(cuda_labels);
-
-    // 销毁CUDA流
-    cudaStreamDestroy(stream);
-
-    // 释放TensorRT资源
+    // 先停止推理入口关联的流，再按 TensorRT -> buffer -> stream -> plugin 的顺序释放。
+    if (stream != nullptr) {
+        check_cuda(cudaStreamSynchronize(stream), "cudaStreamSynchronize");
+    }
     destroy_trt_object(context);
     destroy_trt_object(engine);
     destroy_trt_object(runtime);
 
-    // 释放绑定
+    free_cuda_buffer(cuda_inputs);
+    free_cuda_buffer(cuda_dets);
+    free_cuda_buffer(cuda_labels);
+
+    delete[] host_inputs;
+    host_inputs = nullptr;
+    delete[] host_dets;
+    host_dets = nullptr;
+    delete[] host_labels;
+    host_labels = nullptr;
+
+    if (stream != nullptr) {
+        check_cuda(cudaStreamDestroy(stream), "cudaStreamDestroy");
+        stream = nullptr;
+    }
     delete[] bindings;
+    bindings = nullptr;
+
+    if (plugin_handle != nullptr) {
+        dlclose(plugin_handle);
+        plugin_handle = nullptr;
+    }
 }
 
 int detector::LwDetr::init(std::string engine_path, std::string plugin_path) {
     // 加载插件库
 #ifndef PLUGIN_REGIST
     #define PLUGIN_REGIST
-    void* handle = dlopen(plugin_path.c_str(), RTLD_LAZY);
-    if (!handle) {
+    plugin_handle = dlopen(plugin_path.c_str(), RTLD_LAZY);
+    if (!plugin_handle) {
         std::cerr << "错误: 加载插件库失败: " << dlerror() << std::endl;
         return -1;
     }
@@ -128,9 +160,21 @@ int detector::LwDetr::init(std::string engine_path, std::string plugin_path) {
 
     // 加载和反序列化引擎
     runtime = nvinfer1::createInferRuntime(gLogger);
+    if (runtime == nullptr) {
+        std::cerr << "错误: 无法创建 TensorRT runtime" << std::endl;
+        return -1;
+    }
     std::vector<char> engine_data((std::istreambuf_iterator<char>(engine_file)), std::istreambuf_iterator<char>());
     engine  = deserialize_engine(runtime, engine_data);
+    if (engine == nullptr) {
+        std::cerr << "错误: 无法反序列化 TensorRT engine" << std::endl;
+        return -1;
+    }
     context = engine->createExecutionContext();
+    if (context == nullptr) {
+        std::cerr << "错误: 无法创建 TensorRT execution context" << std::endl;
+        return -1;
+    }
 
     // 验证引擎输入输出
     const int binding_count = get_binding_count(engine);
@@ -141,12 +185,16 @@ int detector::LwDetr::init(std::string engine_path, std::string plugin_path) {
     }
 
     // 分配GPU内存
-    cudaMalloc((void**)&cuda_inputs, batch_size * 3 * input_h * input_w * sizeof(float));
-    cudaMalloc((void**)&cuda_dets, batch_size * num_boxes * 4 * sizeof(float));
-    cudaMalloc((void**)&cuda_labels, batch_size * num_boxes * num_classes * sizeof(float));
+    if (!check_cuda(cudaMalloc((void**)&cuda_inputs, batch_size * 3 * input_h * input_w * sizeof(float)), "cudaMalloc input")
+        || !check_cuda(cudaMalloc((void**)&cuda_dets, batch_size * num_boxes * 4 * sizeof(float)), "cudaMalloc dets")
+        || !check_cuda(cudaMalloc((void**)&cuda_labels, batch_size * num_boxes * num_classes * sizeof(float)), "cudaMalloc labels")) {
+        return -1;
+    }
 
     // 创建CUDA流
-    cudaStreamCreate(&stream);
+    if (!check_cuda(cudaStreamCreate(&stream), "cudaStreamCreate")) {
+        return -1;
+    }
 
     // 设置输入输出绑定
     bindings    = new void*[3]; // 1个输入 + 2个输出
@@ -169,9 +217,21 @@ int detector::LwDetr::init(std::string engine_path) {
 
     // 加载和反序列化引擎
     runtime = nvinfer1::createInferRuntime(gLogger);
+    if (runtime == nullptr) {
+        std::cerr << "错误: 无法创建 TensorRT runtime" << std::endl;
+        return -1;
+    }
     std::vector<char> engine_data((std::istreambuf_iterator<char>(engine_file)), std::istreambuf_iterator<char>());
     engine  = deserialize_engine(runtime, engine_data);
+    if (engine == nullptr) {
+        std::cerr << "错误: 无法反序列化 TensorRT engine" << std::endl;
+        return -1;
+    }
     context = engine->createExecutionContext();
+    if (context == nullptr) {
+        std::cerr << "错误: 无法创建 TensorRT execution context" << std::endl;
+        return -1;
+    }
 
     // 验证引擎输入输出
     const int binding_count = get_binding_count(engine);
@@ -182,12 +242,16 @@ int detector::LwDetr::init(std::string engine_path) {
     }
 
     // 分配GPU内存
-    cudaMalloc((void**)&cuda_inputs, batch_size * 3 * input_h * input_w * sizeof(float));
-    cudaMalloc((void**)&cuda_dets, batch_size * num_boxes * 4 * sizeof(float));
-    cudaMalloc((void**)&cuda_labels, batch_size * num_boxes * num_classes * sizeof(float));
+    if (!check_cuda(cudaMalloc((void**)&cuda_inputs, batch_size * 3 * input_h * input_w * sizeof(float)), "cudaMalloc input")
+        || !check_cuda(cudaMalloc((void**)&cuda_dets, batch_size * num_boxes * 4 * sizeof(float)), "cudaMalloc dets")
+        || !check_cuda(cudaMalloc((void**)&cuda_labels, batch_size * num_boxes * num_classes * sizeof(float)), "cudaMalloc labels")) {
+        return -1;
+    }
 
     // 创建CUDA流
-    cudaStreamCreate(&stream);
+    if (!check_cuda(cudaStreamCreate(&stream), "cudaStreamCreate")) {
+        return -1;
+    }
 
     // 设置输入输出绑定
     bindings    = new void*[3]; // 1个输入 + 2个输出
@@ -211,6 +275,22 @@ detector::LwDetr::infer(std::vector<cv::Mat>& raw_image_generator) {
     std::vector<int> batch_origin_h      = {};
     std::vector<int> batch_origin_w      = {};
     std::vector<float> batch_input_image(batch_size * 3 * input_h * input_w);
+    auto empty_result = [&batch_image_raw]() {
+        return std::make_tuple(
+            batch_image_raw,
+            0.0,
+            std::vector<std::vector<float>> {},
+            std::vector<std::vector<float>> {},
+            std::vector<std::vector<int>> {},
+            std::vector<std::vector<float>> {}
+        );
+    };
+
+    if (context == nullptr || engine == nullptr || stream == nullptr || bindings == nullptr || cuda_inputs == nullptr
+        || cuda_dets == nullptr || cuda_labels == nullptr || host_dets == nullptr || host_labels == nullptr) {
+        std::cerr << "错误: LwDetr 尚未完成 CUDA/TensorRT 初始化" << std::endl;
+        return empty_result();
+    }
 
     // 处理每张输入图像
     for (size_t i = 0; i < raw_image_generator.size() && i < batch_size; ++i) {
@@ -234,39 +314,27 @@ detector::LwDetr::infer(std::vector<cv::Mat>& raw_image_generator) {
         );
     }
     // 将输入数据传输到GPU
-    cudaMemcpyAsync(
+    if (!check_cuda(cudaMemcpyAsync(
         cuda_inputs,
         batch_input_image.data(),
         batch_size * 3 * input_h * input_w * sizeof(float),
         cudaMemcpyHostToDevice,
         stream
-    );
+    ), "cudaMemcpyAsync input H2D")) {
+        return empty_result();
+    }
 
     // 设置输入张量的维度
     nvinfer1::Dims4 inputDims { batch_size, 3, input_h, input_w };
     if (!set_input_shape(context, engine, 0, inputDims)) {
         std::cerr << "错误: 无法设置输入张量维度" << std::endl;
-        return std::make_tuple(
-            batch_image_raw,
-            0.0,
-            std::vector<std::vector<float>> {},
-            std::vector<std::vector<float>> {},
-            std::vector<std::vector<int>> {},
-            std::vector<std::vector<float>> {}
-        );
+        return empty_result();
     }
 
     // 检查维度是否有效
     if (!context->allInputDimensionsSpecified()) {
         std::cerr << "错误: 未能正确指定所有输入维度" << std::endl;
-        return std::make_tuple(
-            batch_image_raw,
-            0.0,
-            std::vector<std::vector<float>> {},
-            std::vector<std::vector<float>> {},
-            std::vector<std::vector<int>> {},
-            std::vector<std::vector<float>> {}
-        );
+        return empty_result();
     }
 
     // 执行推理
@@ -274,24 +342,39 @@ detector::LwDetr::infer(std::vector<cv::Mat>& raw_image_generator) {
     bool status = enqueue_inference(context, engine, bindings, stream);
     if (!status) {
         std::cerr << "错误: 推理执行失败" << std::endl;
+        return empty_result();
     }
 
     // 将结果从GPU复制回主机
-    cudaMemcpyAsync(host_dets, cuda_dets, batch_size * num_boxes * 4 * sizeof(float), cudaMemcpyDeviceToHost, stream);
+    if (!check_cuda(
+            cudaMemcpyAsync(
+                host_dets,
+                cuda_dets,
+                batch_size * num_boxes * 4 * sizeof(float),
+                cudaMemcpyDeviceToHost,
+                stream),
+            "cudaMemcpyAsync dets D2H")) {
+        return empty_result();
+    }
 
-    cudaMemcpyAsync(
+    if (!check_cuda(cudaMemcpyAsync(
         host_labels,
         cuda_labels,
         batch_size * num_boxes * num_classes * sizeof(float),
         cudaMemcpyDeviceToHost,
         stream
-    );
+    ), "cudaMemcpyAsync labels D2H")) {
+        return empty_result();
+    }
 
     // 同步等待推理和数据传输完成
-    cudaStreamSynchronize(stream);
+    if (!check_cuda(cudaStreamSynchronize(stream), "cudaStreamSynchronize")) {
+        return empty_result();
+    }
     auto err = cudaGetLastError();
     if (err != cudaSuccess) {
         std::cerr << "CUDA 错误: " << cudaGetErrorString(err) << std::endl;
+        return empty_result();
     }
     auto end                               = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;

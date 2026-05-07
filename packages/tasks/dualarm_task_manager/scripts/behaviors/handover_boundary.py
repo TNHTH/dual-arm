@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple
 
 from behavior_contract import BehaviorGripperCommand, BehaviorPlanExecutionCall, BehaviorPrimitiveCall
 from dualarm_interfaces.msg import GraspTarget
+from task_contract import handover_ball_semantic_for_state
 
 
 HANDOVER_BEHAVIOR_STATES = {
@@ -24,7 +25,7 @@ def build_handover_behavior_call(
     if state not in HANDOVER_BEHAVIOR_STATES:
         return None, None
 
-    object_id = assignments.get("basketball" if state.endswith("1") else "soccer_ball", "")
+    object_id = assignments.get(handover_ball_semantic_for_state(state), "")
     if not object_id:
         return None, f"{state} 缺少已分配球体 object_id"
 
@@ -59,7 +60,6 @@ def build_handover_behavior_call(
                 secondary_arm_group="right_arm",
                 object_id=object_id,
                 hold_duration_s=3.0,
-                synchronized=True,
             ),
             None,
         )
@@ -73,6 +73,7 @@ def build_handover_behavior_call(
                 secondary_arm_group="right_arm",
                 object_id=object_id,
                 synchronized=True,
+                execute_last_plan=True,
             ),
             None,
         )

@@ -18,11 +18,13 @@
   <depend>depth_handler</depend>
   <depend>detector</depend>
   <depend>detector_adapter</depend>
+  <depend>dualarm_simulation</depend>
   <depend>dualarm_task_manager</depend>
   <depend>epg50_gripper_ros</depend>
   <depend>execution_adapter</depend>
   <depend>fairino_dualarm_planner</depend>
   <depend>fairino_dualarm_moveit_config</depend>
+  <depend>gazebo_ros</depend>
   <depend>grasp_pose_generator</depend>
   <depend>joint_state_aggregator</depend>
   <depend>orbbec_gemini_bridge</depend>

@@ -2,17 +2,28 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from pathlib import Path
 
 
 SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
 
 
+def _find_repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in [current.parent, *current.parents]:
+        if (parent / "STATE.md").exists() and (parent / "packages").is_dir():
+            return parent
+    return Path.cwd()
+
+
 def generate_launch_description():
+    default_object_geometry_file = str(_find_repo_root() / "config" / "competition" / "object_geometry.yaml")
     return LaunchDescription(
         [
             DeclareLaunchArgument("camera_info_topic", default_value="/camera/depth/camera_info"),
             DeclareLaunchArgument("depth_topic", default_value="/camera/depth/image_raw"),
             DeclareLaunchArgument("detection_topic", default_value="/perception/detection_2d"),
+            DeclareLaunchArgument("object_geometry_file", default_value=default_object_geometry_file),
             DeclareLaunchArgument("bbox3d_topic", default_value="/depth_handler/bbox3d"),
             DeclareLaunchArgument("pointcloud_topic", default_value="/depth_handler/pointcloud"),
             DeclareLaunchArgument("visualization_topic", default_value="/depth_handler/visualization"),
@@ -37,6 +48,7 @@ def generate_launch_description():
                         "camera_info_topic": LaunchConfiguration("camera_info_topic"),
                         "depth_topic": LaunchConfiguration("depth_topic"),
                         "detection_topic": LaunchConfiguration("detection_topic"),
+                        "object_geometry_file": LaunchConfiguration("object_geometry_file"),
                         "bbox3d_topic": LaunchConfiguration("bbox3d_topic"),
                         "scene_objects_topic": LaunchConfiguration("scene_objects_topic"),
                         "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),

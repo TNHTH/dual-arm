@@ -177,11 +177,12 @@ class PlanningSceneSyncNode(Node):
         self.get_logger().info(f"planning_scene_sync 已启动，输入: {input_topic}，输出: {output_topic}")
 
     def _handle_scene(self, message: SceneObjectArray) -> None:
-        self._raw_scene = message
         now_monotonic = time.monotonic()
-        for scene_object in message.objects:
-            self._object_cache[scene_object.id] = deepcopy(scene_object)
-            self._object_last_seen_monotonic[scene_object.id] = now_monotonic
+        with self._sync_lock:
+            self._raw_scene = deepcopy(message)
+            for scene_object in message.objects:
+                self._object_cache[scene_object.id] = deepcopy(scene_object)
+                self._object_last_seen_monotonic[scene_object.id] = now_monotonic
         self._publish_and_sync(wait_for_result=False)
 
     def _handle_reserve(self, request: ReserveObject.Request, response: ReserveObject.Response):
@@ -301,12 +302,13 @@ class PlanningSceneSyncNode(Node):
             return sync_ok
 
     def _has_live_object(self, object_id: str) -> bool:
-        if object_id not in self._object_cache:
-            return False
-        last_seen = self._object_last_seen_monotonic.get(object_id)
-        if last_seen is None:
-            return False
-        return (time.monotonic() - last_seen) <= self._object_retention_timeout
+        with self._sync_lock:
+            if object_id not in self._object_cache:
+                return False
+            last_seen = self._object_last_seen_monotonic.get(object_id)
+            if last_seen is None:
+                return False
+            return (time.monotonic() - last_seen) <= self._object_retention_timeout
 
     def _run_transaction(self, mutator) -> bool:
         with self._sync_lock:
@@ -385,8 +387,8 @@ class PlanningSceneSyncNode(Node):
         return managed
 
     def _sync_planning_scene(self, managed: SceneObjectArray, wait_for_result: bool) -> bool:
-        if not self._wait_for_pending_apply(timeout=5.0):
-            return False
+        if not self._wait_for_pending_apply(timeout=5.0 if wait_for_result else 0.0):
+            return not wait_for_result
 
         desired_world: Dict[str, CollisionEntry] = {}
         desired_attached: Dict[str, CollisionEntry] = {}
@@ -445,7 +447,10 @@ class PlanningSceneSyncNode(Node):
             return False
 
         self._log_diff_summary(request.scene)
-        if not self._call_apply_scene_blocking(request, timeout=5.0 if wait_for_result else 0.5):
+        if wait_for_result:
+            if not self._call_apply_scene_blocking(request, timeout=5.0):
+                return False
+        elif not self._call_apply_scene_async(request):
             return False
 
         self._last_world_ids = set(desired_world.keys())
@@ -517,6 +522,8 @@ class PlanningSceneSyncNode(Node):
         pending = self._pending_apply_future
         if pending is None:
             return True
+        if timeout <= 0.0 and not pending.done():
+            return False
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline and not pending.done():
             time.sleep(0.02)
@@ -527,6 +534,27 @@ class PlanningSceneSyncNode(Node):
         if self._reconcile_needed:
             self._reconcile_from_moveit()
             self._reconcile_needed = False
+        return True
+
+    def _call_apply_scene_async(self, request: ApplyPlanningScene.Request) -> bool:
+        if not self._apply_scene_client.wait_for_service(timeout_sec=0.2):
+            self.get_logger().warn("apply_planning_scene 服务不可用，暂不推送 MoveIt world model")
+            return False
+        future = self._apply_scene_client.call_async(request)
+        self._pending_apply_future = future
+
+        def _on_done(done_future):
+            try:
+                result = done_future.result()
+            except Exception as exc:  # pylint: disable=broad-except
+                self.get_logger().warn(f"异步 apply_planning_scene 结果异常: {exc}")
+                self._reconcile_needed = True
+                return
+            if result is None or not result.success:
+                self.get_logger().warn("异步 apply_planning_scene 调用失败，等待下一轮 reconcile")
+                self._reconcile_needed = True
+
+        future.add_done_callback(_on_done)
         return True
 
     def _call_apply_scene_blocking(self, request: ApplyPlanningScene.Request, timeout: float) -> bool:
@@ -913,7 +941,7 @@ class PlanningSceneSyncNode(Node):
 def main() -> None:
     rclpy.init()
     node = PlanningSceneSyncNode()
-    executor = MultiThreadedExecutor()
+    executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
     try:
         executor.spin()

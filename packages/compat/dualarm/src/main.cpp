@@ -401,15 +401,17 @@ int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
     rclcpp::NodeOptions options;
     options.use_intra_process_comms(true);
-    rclcpp::executors::MultiThreadedExecutor executor();
     auto node = std::make_shared<RobotMain>(options);
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
     RCLCPP_INFO(node->get_logger(), "Waiting for object detection data...");
     auto start_time = node->get_clock()->now();
     while (rclcpp::ok()) {
-        rclcpp::spin_some(node);
+        executor.spin_some();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         break;
     }
+    executor.remove_node(node);
     // 等待所有必要的服务可用 - 使用增强的等待函数
     RCLCPP_INFO(node->get_logger(), "Waiting for all required services...");
 
@@ -2508,4 +2510,4 @@ int L_fix(
 // f. u. c. k.  a. l. l. 
 
 
-// Q.E.D.  
+// Q.E.D.

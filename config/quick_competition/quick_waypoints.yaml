@@ -8,6 +8,7 @@ defaults:
 left_arm:
   home: null
   observe_table: null
+  safe_stow: null
   pregrasp_cup: null
   cup_lift: null
   cup_pour_hold:
@@ -31,6 +32,7 @@ left_arm:
 right_arm:
   home: null
   observe_table: null
+  safe_stow: null
   pregrasp_bottle: null
   bottle_lift: null
   bottle_pour_above_cup: null
@@ -66,8 +68,8 @@ right_arm:
 
 required_groups:
   critical:
-    left_arm: [home]
-    right_arm: [home]
+    left_arm: [home, safe_stow]
+    right_arm: [home, safe_stow]
   pouring:
     left_arm: [observe_table, pregrasp_cup, cup_lift, cup_pour_hold, cup_place]
     right_arm: [observe_table, pregrasp_bottle, bottle_lift, bottle_pour_above_cup, bottle_pour_tilt, bottle_upright_after_pour, bottle_place]

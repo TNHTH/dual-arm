@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 from copy import deepcopy
+import math
 from pathlib import Path
 from typing import Dict
 
@@ -169,7 +170,40 @@ class GraspPoseGeneratorNode(Node):
                 target.target_type = "release"
                 target.guarded_motion = True
 
+        self._apply_tcp_orientation(target)
         return target
+
+    def _apply_tcp_orientation(self, target: GraspTarget) -> None:
+        arm_mode = target.arm_mode
+        if arm_mode == "dual_arm":
+            # 双臂目标在 planner 中拆成左右 TCP，那里会分别写入左右默认姿态。
+            return
+        orientation = self._default_tcp_orientation(arm_mode)
+        for pose_name in ("pregrasp", "grasp", "operate", "retreat", "place", "release"):
+            getattr(target, pose_name).pose.orientation = deepcopy(orientation)
+
+    def _default_tcp_orientation(self, arm_mode: str):
+        yaw_deg = -90.0 if arm_mode == "left_arm" else 90.0
+        return self._quaternion_from_rpy_deg(180.0, 0.0, yaw_deg)
+
+    def _quaternion_from_rpy_deg(self, roll_deg: float, pitch_deg: float, yaw_deg: float):
+        from geometry_msgs.msg import Quaternion
+
+        roll = math.radians(roll_deg)
+        pitch = math.radians(pitch_deg)
+        yaw = math.radians(yaw_deg)
+        cr = math.cos(roll * 0.5)
+        sr = math.sin(roll * 0.5)
+        cp = math.cos(pitch * 0.5)
+        sp = math.sin(pitch * 0.5)
+        cy = math.cos(yaw * 0.5)
+        sy = math.sin(yaw * 0.5)
+        msg = Quaternion()
+        msg.w = cr * cp * cy + sr * sp * sy
+        msg.x = sr * cp * cy - cr * sp * sy
+        msg.y = cr * sp * cy + sr * cp * sy
+        msg.z = cr * cp * sy - sr * sp * cy
+        return msg
 
     def _select_arm_mode(self, semantic_type: str) -> str:
         if semantic_type in ("basketball", "soccer_ball"):

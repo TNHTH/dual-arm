@@ -59,6 +59,8 @@ def test_planning_scene_subframes_are_written_as_object_local():
     assert "collision_object.subframe_names.extend(collision_entry.subframe_names)" in source
     assert "collision_object.subframe_poses.extend(collision_entry.subframe_poses)" in source
     assert "_local_subframes_for(scene_object, object_pose)" in source
+    assert "def _call_apply_scene_async" in source
+    assert "MultiThreadedExecutor(num_threads=4)" in source
 
 
 def test_execution_adapter_uses_planner_first_cartesian_and_vendor_double_gate():
@@ -104,7 +106,7 @@ def test_task_manager_uses_guarded_grasp_and_table_gate():
     assert "POURING_TABLE_REQUIRED_STATES" in source
     assert "def _require_table_surface" in source
     assert 'primitive_id="guarded_grasp"' in source
-    direct_grasp = source[source.index("def _direct_grasp") : source.index("def _place_object")]
+    direct_grasp = source[source.index("def _direct_grasp") : source.index("def _execute_sim_pouring_state")]
     assert "_execute_primitive_action" in direct_grasp
     assert "self._release(scene_object.id)" in direct_grasp
     assert "_set_gripper(" not in direct_grasp

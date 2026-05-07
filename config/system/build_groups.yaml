@@ -34,6 +34,10 @@ groups:
     packages:
       - dualarm_task_manager
       - quick_competition
+  simulation:
+    description: Gazebo/语义仿真辅助节点。
+    packages:
+      - dualarm_simulation
   quick:
     description: quick_competition 快速实机旁路。
     packages:

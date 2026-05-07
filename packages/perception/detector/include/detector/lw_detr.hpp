@@ -97,15 +97,16 @@ private:
      */
     float bbox_iou(const cv::Rect& box1, const cv::Rect& box2);
 
-    nvinfer1::IExecutionContext* context;
-    cudaStream_t stream;
-    void** bindings;
-    float* host_inputs;
-    float* cuda_inputs;
-    float* host_dets;   // 检测框输出
-    float* host_labels; // 标签输出
-    float* cuda_dets;   // GPU检测框
-    float* cuda_labels; // GPU标签
+    nvinfer1::IExecutionContext* context {nullptr};
+    cudaStream_t stream {nullptr};
+    void** bindings {nullptr};
+    float* host_inputs {nullptr};
+    float* cuda_inputs {nullptr};
+    float* host_dets {nullptr};   // 检测框输出
+    float* host_labels {nullptr}; // 标签输出
+    float* cuda_dets {nullptr};   // GPU检测框
+    float* cuda_labels {nullptr}; // GPU标签
+    void* plugin_handle {nullptr};
 
     int batch_size      = 1;
     int input_h         = 640;
@@ -114,8 +115,8 @@ private:
     int num_classes     = 91;  // DETR支持的类别数量
     float THRESHOLD     = 0.5; // 置信度阈值
     float NMS_THRESHOLD = 0.4; // NMS阈值
-    nvinfer1::ICudaEngine* engine;
-    nvinfer1::IRuntime* runtime;
+    nvinfer1::ICudaEngine* engine {nullptr};
+    nvinfer1::IRuntime* runtime {nullptr};
 };
 
 } // namespace detector

@@ -215,6 +215,8 @@ class CompetitionConsoleApiNode(Node):
         )
         self._core_process: Optional[subprocess.Popen[str]] = None
         self._core_log_handle: Optional[TextIO] = None
+        self._core_process_lock = threading.Lock()
+        self._core_process_stopping = False
         self._acceptance_results: dict[str, Any] = {}
         self._left_robot_state: Optional[RobotState] = None
         self._right_robot_state: Optional[RobotState] = None
@@ -1682,34 +1684,71 @@ class CompetitionConsoleApiNode(Node):
         self._cleanup_stale_core_processes()
         cmd = self._build_core_launch_cmd(request)
         self._launch_log.parent.mkdir(parents=True, exist_ok=True)
-        self._core_log_handle = self._launch_log.open("a", encoding="utf-8")
-        self._core_process = subprocess.Popen(  # pylint: disable=consider-using-with
-            cmd,
-            cwd=self._repo_root,
-            env=env,
-            stdout=self._core_log_handle,
-            stderr=subprocess.STDOUT,
-            text=True,
-            start_new_session=True,
-        )
-        self._last_bringup_request = request.model_dump() if hasattr(request, "model_dump") else request.dict()
-        return {"started": True, "status": "started", "pid": self._core_process.pid, "request": self._last_bringup_request}
+        with self._core_process_lock:
+            if self._core_process_stopping:
+                return {"started": False, "status": "stopping"}
+            if is_process_running(self._core_process):
+                return {"started": False, "status": "already_running", "pid": running_process_pid(self._core_process)}
+            self._core_log_handle = self._launch_log.open("a", encoding="utf-8")
+            self._core_process = subprocess.Popen(  # pylint: disable=consider-using-with
+                cmd,
+                cwd=self._repo_root,
+                env=env,
+                stdout=self._core_log_handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
+            self._last_bringup_request = request.model_dump() if hasattr(request, "model_dump") else request.dict()
+            return {"started": True, "status": "started", "pid": self._core_process.pid, "request": self._last_bringup_request}
 
     def _stop_core_process(self) -> None:
         self._stop_all_jog_sessions("core_stopped")
-        if self._core_process is None or self._core_process.poll() is not None:
-            return
-        os.killpg(os.getpgid(self._core_process.pid), signal.SIGINT)
-        try:
-            self._core_process.wait(timeout=5.0)
-        except subprocess.TimeoutExpired:
-            os.killpg(os.getpgid(self._core_process.pid), signal.SIGTERM)
-            self._core_process.wait(timeout=5.0)
-        finally:
+        with self._core_process_lock:
+            if self._core_process_stopping:
+                return
+            process = self._core_process
+            log_handle = self._core_log_handle
             self._core_process = None
-            if self._core_log_handle is not None:
-                self._core_log_handle.close()
-                self._core_log_handle = None
+            self._core_log_handle = None
+            self._core_process_stopping = process is not None and process.poll() is None
+
+        if process is None:
+            if log_handle is not None:
+                log_handle.close()
+            with self._core_process_lock:
+                self._core_process_stopping = False
+            return
+        if process.poll() is not None:
+            if log_handle is not None:
+                log_handle.close()
+            with self._core_process_lock:
+                self._core_process_stopping = False
+            return
+
+        try:
+            try:
+                os.killpg(os.getpgid(process.pid), signal.SIGINT)
+            except ProcessLookupError:
+                return
+            try:
+                process.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    return
+                try:
+                    process.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    self.get_logger().warn(f"competition core pid={process.pid} SIGTERM 后仍未退出")
+        except ProcessLookupError:
+            return
+        finally:
+            with self._core_process_lock:
+                self._core_process_stopping = False
+            if log_handle is not None:
+                log_handle.close()
 
     def _cleanup_stale_core_processes(self) -> None:
         patterns = [

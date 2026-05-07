@@ -28,6 +28,14 @@ def normalize_task_sequence(raw_sequence: str, allowed_tasks: Sequence[str] = AL
     return ",".join(parse_task_sequence(raw_sequence, allowed_tasks))
 
 
+def handover_ball_semantic_for_state(state: str) -> str:
+    if "BALL_1" in state:
+        return "basketball"
+    if "BALL_2" in state:
+        return "soccer_ball"
+    raise ValueError(f"handover state 缺少 BALL_1/BALL_2 标记: {state}")
+
+
 def rank_scene_objects(objects: Iterable[object]) -> list[object]:
     def sort_key(scene_object: object) -> tuple[int, float, int, str]:
         lifecycle_state = str(getattr(scene_object, "lifecycle_state", ""))

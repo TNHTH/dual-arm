@@ -23,6 +23,7 @@ setup(
         "console_scripts": [
             "quick_competition_orchestrator = quick_competition.quick_competition_orchestrator:main",
             "quick_motion_executor = quick_competition.quick_motion_executor:main",
+            "quick_computed_motion_executor = quick_competition.quick_computed_motion_executor:main",
             "legacy_fairino_bridge = quick_competition.legacy_fairino_bridge:main",
             "quick_scene_provider = quick_competition.quick_scene_provider:main",
             "quick_pose_filter = quick_competition.quick_pose_filter:main",

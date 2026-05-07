@@ -172,7 +172,8 @@ void PoseGoalPlanner::poseGoalCallback(
 }
 
 bool PoseGoalPlanner::planToPose(
-    const geometry_msgs::msg::PoseStamped& target_pose
+    const geometry_msgs::msg::PoseStamped& target_pose,
+    moveit::planning_interface::MoveGroupInterface::Plan* planned_output
 ) {
     moveit::core::RobotStatePtr current_robot_state =
         move_group_->getCurrentState();
@@ -204,8 +205,9 @@ bool PoseGoalPlanner::planToPose(
     move_group_->setPoseTarget(target_pose);
 
     // 进行运动规划
+    moveit::planning_interface::MoveGroupInterface::Plan planned_plan;
     bool success =
-        (move_group_->plan(current_plan_)
+        (move_group_->plan(planned_plan)
          == moveit::core::MoveItErrorCode::SUCCESS);
 
     // 发布规划结果状态
@@ -222,8 +224,8 @@ bool PoseGoalPlanner::planToPose(
 
         // 发布轨迹用于显示
         moveit_msgs::msg::DisplayTrajectory display_trajectory;
-        display_trajectory.trajectory_start = current_plan_.start_state_;
-        display_trajectory.trajectory.push_back(current_plan_.trajectory_);
+        display_trajectory.trajectory_start = planned_plan.start_state_;
+        display_trajectory.trajectory.push_back(planned_plan.trajectory_);
         if (debug_) {
             RCLCPP_DEBUG(
                 this->get_logger(),
@@ -235,7 +237,7 @@ bool PoseGoalPlanner::planToPose(
 
         // 提取并发布轨迹关键点
         geometry_msgs::msg::PoseArray trajectory_poses =
-            extractTrajectoryPoses(current_plan_.trajectory_);
+            extractTrajectoryPoses(planned_plan.trajectory_);
         trajectory_poses.header.stamp = this->now();
         trajectory_poses.header.frame_id = target_pose.header.frame_id;
 
@@ -255,6 +257,13 @@ bool PoseGoalPlanner::planToPose(
         }
 
         // 不再发布轨迹关键点，改为通过服务提供
+        {
+            std::lock_guard<std::mutex> lock(current_plan_mutex_);
+            current_plan_ = planned_plan;
+        }
+        if (planned_output != nullptr) {
+            *planned_output = planned_plan;
+        }
     } else {
         RCLCPP_ERROR(this->get_logger(), "运动规划失败");
     }
@@ -265,8 +274,13 @@ bool PoseGoalPlanner::planToPose(
 bool PoseGoalPlanner::executePlan() {
     RCLCPP_INFO(this->get_logger(), "执行运动计划");
 
+    moveit::planning_interface::MoveGroupInterface::Plan plan_snapshot;
+    {
+        std::lock_guard<std::mutex> lock(current_plan_mutex_);
+        plan_snapshot = current_plan_;
+    }
     bool success =
-        (move_group_->execute(current_plan_)
+        (move_group_->execute(plan_snapshot)
          == moveit::core::MoveItErrorCode::SUCCESS);
 
     if (success) {
@@ -449,7 +463,8 @@ void PoseGoalPlanner::handleGetTrajectoryPoses(
     }
 
     // 进行运动规划
-    bool planning_success = planToPose(target_pose);
+    moveit::planning_interface::MoveGroupInterface::Plan planned_plan;
+    bool planning_success = planToPose(target_pose, &planned_plan);
 
     // 设置响应
     response->success = planning_success;
@@ -457,7 +472,7 @@ void PoseGoalPlanner::handleGetTrajectoryPoses(
     if (planning_success) {
         // 提取并返回轨迹关键点
         response->trajectory_poses =
-            extractTrajectoryPoses(current_plan_.trajectory_);
+            extractTrajectoryPoses(planned_plan.trajectory_);
         response->trajectory_poses.header.stamp = this->now();
         response->trajectory_poses.header.frame_id =
             target_pose.header.frame_id;
@@ -521,7 +536,8 @@ void PoseGoalPlanner::handleGetJointStates(
     }
 
     // 进行运动规划
-    bool planning_success = planToPose(target_pose);
+    moveit::planning_interface::MoveGroupInterface::Plan planned_plan;
+    bool planning_success = planToPose(target_pose, &planned_plan);
 
     // 设置响应
     response->success = planning_success;
@@ -530,9 +546,9 @@ void PoseGoalPlanner::handleGetJointStates(
         // 获取规划结果中的关节状态
         try {
             // 从轨迹中提取每个关键点的关节状态
-            if (!current_plan_.trajectory_.joint_trajectory.points.empty()) {
+            if (!planned_plan.trajectory_.joint_trajectory.points.empty()) {
                 const auto& joint_trajectory =
-                    current_plan_.trajectory_.joint_trajectory;
+                    planned_plan.trajectory_.joint_trajectory;
                 const auto& joint_names = joint_trajectory.joint_names;
                 const auto& trajectory_points = joint_trajectory.points;
 

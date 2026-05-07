@@ -33,15 +33,17 @@ class QuickBallCagePrimitives:
         return Result.fail(f"{ball_type} 不稳定，等待或人工确认", code="ball_unstable")
 
     def move_both_to_pre_cage(self, ball_type: str) -> Result:
-        return self.executor.execute_dual_waypoints("ball_left_pre_cage", "ball_right_pre_cage")
+        return self.executor.execute_dual_waypoints("ball_left_pre_cage", "ball_right_pre_cage", object_id_override=ball_type)
 
     def open_both_grippers(self) -> Result:
-        self.executor.bridge.open_gripper("left_arm")
-        self.executor.bridge.open_gripper("right_arm")
+        left = self.executor.bridge.open_gripper("left_arm")
+        right = self.executor.bridge.open_gripper("right_arm")
+        if not left.success or not right.success:
+            return Result.fail(f"open grippers failed: left={left.message}, right={right.message}", code="gripper_open_failed")
         return Result.ok("both grippers opened")
 
     def move_both_to_cage(self, ball_type: str) -> Result:
-        return self.executor.execute_dual_waypoints("ball_left_cage", "ball_right_cage")
+        return self.executor.execute_dual_waypoints("ball_left_cage", "ball_right_cage", object_id_override=ball_type)
 
     def wait_for_human_release(self) -> Result:
         wait_s = float((self.config.get("handover") or {}).get("wait_for_human_release_s", 0.5))
@@ -49,8 +51,8 @@ class QuickBallCagePrimitives:
             time.sleep(wait_s)
         return Result.ok(f"waited human release {wait_s}s")
 
-    def lift_ball(self) -> Result:
-        return self.executor.execute_dual_waypoints("ball_left_lift", "ball_right_lift")
+    def lift_ball(self, ball_type: str) -> Result:
+        return self.executor.execute_dual_waypoints("ball_left_lift", "ball_right_lift", object_id_override=ball_type)
 
     def hold_ball_3_sec(self) -> Result:
         hold_s = float((self.config.get("handover") or {}).get("hold_duration_after_cage_s", 3.2))
@@ -58,28 +60,34 @@ class QuickBallCagePrimitives:
             time.sleep(hold_s)
         return Result.ok(f"hold ball {hold_s}s")
 
-    def move_ball_to_basket_top(self, basket_pose=None) -> Result:
-        return self.executor.execute_dual_waypoints("ball_left_basket_top", "ball_right_basket_top")
+    def move_ball_to_basket_top(self, ball_type: str, basket_pose=None) -> Result:
+        return self.executor.execute_dual_waypoints("ball_left_basket_top", "ball_right_basket_top", object_id_override=ball_type)
 
-    def release_before_contact(self) -> Result:
-        self.executor.execute_dual_waypoints("ball_left_release_retreat", "ball_right_release_retreat")
-        self.executor.bridge.open_gripper("left_arm")
-        self.executor.bridge.open_gripper("right_arm")
+    def release_before_contact(self, ball_type: str) -> Result:
+        retreat = self.executor.execute_dual_waypoints("ball_left_release_retreat", "ball_right_release_retreat", object_id_override=ball_type)
+        if not retreat.success:
+            return retreat
+        left = self.executor.bridge.open_gripper("left_arm")
+        right = self.executor.bridge.open_gripper("right_arm")
+        if not left.success or not right.success:
+            return Result.fail(f"release grippers failed: left={left.message}, right={right.message}", code="gripper_release_failed")
         return Result.ok("released before basket contact")
 
     def run_ball_to_basket(self, ball_type: str) -> Result:
         print(f"[INFO] 请举起{ball_type}")
-        stable = self.wait_ball_stable(ball_type)
-        if not stable.success:
-            return stable
-        self.move_both_to_pre_cage(ball_type)
-        self.open_both_grippers()
-        self.move_both_to_cage(ball_type)
-        self.wait_for_human_release()
-        self.lift_ball()
-        self.hold_ball_3_sec()
-        self.move_ball_to_basket_top()
-        self.release_before_contact()
+        for step in [
+            self.wait_ball_stable(ball_type),
+            self.move_both_to_pre_cage(ball_type),
+            self.open_both_grippers(),
+            self.move_both_to_cage(ball_type),
+            self.wait_for_human_release(),
+            self.lift_ball(ball_type),
+            self.hold_ball_3_sec(),
+            self.move_ball_to_basket_top(ball_type),
+            self.release_before_contact(ball_type),
+        ]:
+            if not step.success:
+                return step
         return Result.ok(f"{ball_type} ball cage sequence simulated")
 
 

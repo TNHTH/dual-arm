@@ -100,6 +100,7 @@ def build_cap_pour_behavior_call(
                 primary_waypoints=bottle_waypoints,
                 secondary_waypoints=cup_hold_waypoints,
                 execution_profile=bottle_target.execution_profile,
+                hold_duration_s=2.0,
                 synchronized=True,
             ),
             None,

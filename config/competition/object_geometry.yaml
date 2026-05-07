@@ -1,7 +1,7 @@
-# v4 比赛对象几何配置。
+# v5 比赛对象几何配置。
 # 单位统一为 SI；体积按 ml 记录，便于倒水任务直接使用。
-schema_version: competition_object_geometry_v4
-updated_at: "2026-04-20"
+schema_version: competition_object_geometry_v5
+updated_at: "2026-05-06"
 
 units:
   length: m
@@ -75,6 +75,10 @@ objects:
       color_hint: clear_pet
     planning:
       collision_proxy_shape: cylinder
+      task_subframes:
+        cap_clearance_m: 0.012
+        cap_pregrasp_offset_m: 0.040
+        pour_pivot_offset_m: 0.015
       grasp_regions:
         body_mid_upper:
           z_range_m: [0.070, 0.120]
@@ -127,6 +131,10 @@ objects:
       color_hint: red_label_dark_liquid
     planning:
       collision_proxy_shape: cylinder
+      task_subframes:
+        cap_clearance_m: 0.015
+        cap_pregrasp_offset_m: 0.040
+        pour_pivot_offset_m: 0.020
       grasp_regions:
         body_mid:
           z_range_m: [0.050, 0.095]
@@ -180,6 +188,9 @@ objects:
       color_hint: translucent_black
     planning:
       collision_proxy_shape: cylinder
+      task_subframes:
+        cup_side_grasp_inset_m: 0.0125
+        cup_fill_offset_m: 0.020
       grasp_regions:
         wall_mid_upper:
           z_range_m: [0.045, 0.080]

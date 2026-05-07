@@ -77,6 +77,9 @@ private:
     // 运动前准备：退出拖动，并按配置决定是否切自动，再上使能
     bool prepare_robot_for_motion(std::string& error_message);
 
+    // 急停 gate：状态线程确认急停解除前，所有运动/伺服/速度服务 fail-closed
+    bool motion_blocked_by_emergency_stop(const std::string& operation, std::string& error_message) const;
+
     // 发布TF变换
     void publish_tf_transforms(const robo_ctrl::msg::TCPPose& tcp_pose);
 
@@ -99,6 +102,8 @@ private:
     double max_velocity_percent_ = 100.0;
     double max_acceleration_percent_ = 100.0;
     double max_ovl_percent_ = 100.0;
+    std::atomic<bool> e_stop_active_ { true };
+    std::atomic<bool> e_stop_state_known_ { false };
 
     // 服务
     rclcpp::Service<robo_ctrl::srv::RobotMove>::SharedPtr robot_move_service_;

@@ -18,6 +18,11 @@ def generate_launch_description():
             DeclareLaunchArgument("gripper_command_timeout_s", default_value="8.0"),
             DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
             DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value=""),
+            DeclareLaunchArgument("execution_backend", default_value="hardware"),
+            DeclareLaunchArgument("sim_grasp_contact_threshold_m", default_value="0.04"),
+            DeclareLaunchArgument("sim_contact_retry_max", default_value="2"),
+            DeclareLaunchArgument("sim_robot_state_freshness_max_age_s", default_value="0.5"),
+            DeclareLaunchArgument("sim_visual_playback_rate_hz", default_value="20.0"),
             Node(
                 package="execution_adapter",
                 executable="execution_adapter_node.py",
@@ -35,6 +40,11 @@ def generate_launch_description():
                         "gripper_command_timeout_s": LaunchConfiguration("gripper_command_timeout_s"),
                         "allow_vendor_direct_cartesian": LaunchConfiguration("allow_vendor_direct_cartesian"),
                         "vendor_direct_cartesian_profiles": LaunchConfiguration("vendor_direct_cartesian_profiles"),
+                        "execution_backend": LaunchConfiguration("execution_backend"),
+                        "sim_grasp_contact_threshold_m": LaunchConfiguration("sim_grasp_contact_threshold_m"),
+                        "sim_contact_retry_max": LaunchConfiguration("sim_contact_retry_max"),
+                        "sim_robot_state_freshness_max_age_s": LaunchConfiguration("sim_robot_state_freshness_max_age_s"),
+                        "sim_visual_playback_rate_hz": LaunchConfiguration("sim_visual_playback_rate_hz"),
                     }
                 ],
                 output="screen",

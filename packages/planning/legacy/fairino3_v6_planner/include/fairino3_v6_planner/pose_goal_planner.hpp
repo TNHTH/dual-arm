@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "fairino3_v6_planner/srv/get_joint_states.hpp"
@@ -40,7 +41,10 @@ private:
         planning_scene_interface_;
 
     // 规划和执行运动计划
-    bool planToPose(const geometry_msgs::msg::PoseStamped& target_pose);
+    bool planToPose(
+        const geometry_msgs::msg::PoseStamped& target_pose,
+        moveit::planning_interface::MoveGroupInterface::Plan* planned_output = nullptr
+    );
     bool executePlan();
 
     // ROS 2订阅者
@@ -88,6 +92,7 @@ private:
 
     // 当前运动计划
     moveit::planning_interface::MoveGroupInterface::Plan current_plan_;
+    mutable std::mutex current_plan_mutex_;
 
     // 提取轨迹关键点的工具函数
     geometry_msgs::msg::PoseArray

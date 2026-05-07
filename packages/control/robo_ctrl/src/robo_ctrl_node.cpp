@@ -215,6 +215,18 @@ bool RoboCtrlNode::prepare_robot_for_motion(std::string& error_message) {
     return true;
 }
 
+bool RoboCtrlNode::motion_blocked_by_emergency_stop(const std::string& operation, std::string& error_message) const {
+    if (!e_stop_state_known_.load()) {
+        error_message = robot_name_ + " 臂急停状态未确认，拒绝执行 " + operation;
+        return true;
+    }
+    if (e_stop_active_.load()) {
+        error_message = robot_name_ + " 臂急停已激活，拒绝执行 " + operation;
+        return true;
+    }
+    return false;
+}
+
 void RoboCtrlNode::handle_robot_move(
     const std::shared_ptr<robo_ctrl::srv::RobotMove::Request> request,
     std::shared_ptr<robo_ctrl::srv::RobotMove::Response> response
@@ -224,6 +236,13 @@ void RoboCtrlNode::handle_robot_move(
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
+        return;
+    }
+
+    std::string e_stop_error;
+    if (motion_blocked_by_emergency_stop("RobotMove", e_stop_error)) {
+        response->success = false;
+        response->message = e_stop_error;
         return;
     }
 
@@ -368,6 +387,13 @@ void RoboCtrlNode::handle_robot_move_cart(
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
+        return;
+    }
+
+    std::string e_stop_error;
+    if (motion_blocked_by_emergency_stop("RobotMoveCart", e_stop_error)) {
+        response->success = false;
+        response->message = e_stop_error;
         return;
     }
 
@@ -545,6 +571,13 @@ void RoboCtrlNode::handle_robot_servo(
         return;
     }
 
+    std::string e_stop_error;
+    if (request->command_type != 1 && motion_blocked_by_emergency_stop("RobotServo", e_stop_error)) {
+        response->success = false;
+        response->message = e_stop_error;
+        return;
+    }
+
     try {
         int ret = 0;
 
@@ -711,6 +744,12 @@ void RoboCtrlNode::handle_robot_servo_line(
         response->message = "机器人未连接";
         return;
     }
+    std::string e_stop_error;
+    if (request->command_type != 1 && motion_blocked_by_emergency_stop("RobotServoLine", e_stop_error)) {
+        response->success = false;
+        response->message = e_stop_error;
+        return;
+    }
     try {
         switch (request->command_type) {
             case 0: { // ServoLineStart
@@ -813,7 +852,9 @@ void RoboCtrlNode::handle_robot_servo_line(
                 return;
         }
     } catch (const std::exception& e) {
-        RCLCPP_ERROR(this->get_logger(), e.what());
+        response->success = false;
+        response->message = e.what();
+        RCLCPP_ERROR(this->get_logger(), "RobotServoLine异常: %s", e.what());
     }
 }
 
@@ -829,6 +870,12 @@ void RoboCtrlNode::handle_robot_servo_joint(
     if (!robot_ || !is_connected_) {
         response->success = false;
         response->message = "机器人未连接";
+        return;
+    }
+    std::string e_stop_error;
+    if (request->command_type != 1 && motion_blocked_by_emergency_stop("RobotServoJoint", e_stop_error)) {
+        response->success = false;
+        response->message = e_stop_error;
         return;
     }
     try {
@@ -960,7 +1007,8 @@ void RoboCtrlNode::handle_robot_servo_joint(
                             int ret = 0;
                             {
                                 std::lock_guard<std::mutex> robot_lock(robot_mutex_);
-                                ret = robot_->ServoJ(const_cast<JointPos*>(&target_pose), acc, vel, cmdT, filterT, gain);
+                                JointPos mutable_target_pose = target_pose;
+                                ret = robot_->ServoJ(&mutable_target_pose, acc, vel, cmdT, filterT, gain);
                             }
                             if (ret != 0) {
                                 RCLCPP_ERROR(this->get_logger(), "ServoJ路径跟踪失败，错误码: %d", ret);
@@ -1013,7 +1061,9 @@ void RoboCtrlNode::handle_robot_servo_joint(
                 return;
         }
     } catch (const std::exception& e) {
-        RCLCPP_ERROR(this->get_logger(), e.what());
+        response->success = false;
+        response->message = e.what();
+        RCLCPP_ERROR(this->get_logger(), "RobotServoJoint异常: %s", e.what());
     }
 }
 
@@ -1503,6 +1553,26 @@ void RoboCtrlNode::robot_state_thread_func() {
                     }
                 }
 
+                // 急停状态作为运动服务 fail-closed gate 的唯一运行时输入；查询失败时保持阻断。
+                uint8_t e_stop_state = 1;
+                ret = robot_->GetRobotEmergencyStopState(&e_stop_state);
+                if (ret == 0) {
+                    const bool active = e_stop_state != 0;
+                    const bool previous = e_stop_active_.exchange(active);
+                    e_stop_state_known_.store(true);
+                    if (active && !previous) {
+                        RCLCPP_ERROR(this->get_logger(), "检测到机器人急停激活，后续运动服务将被拒绝");
+                    }
+                } else {
+                    e_stop_state_known_.store(false);
+                    e_stop_active_.store(true);
+                    auto current_time = thread_clock.now();
+                    if ((current_time - last_warn_time).seconds() > 5.0) {
+                        RCLCPP_WARN(this->get_logger(), "获取急停状态失败，错误码: %d；按 fail-closed 拒绝运动", ret);
+                        last_warn_time = current_time;
+                    }
+                }
+
                 // 发布机器人状态
                 if (has_data) {
                     rclcpp::Time now              = this->now();
@@ -1559,6 +1629,12 @@ void RoboCtrlNode::handle_robot_set_speed(
     }
 
     try {
+        std::string e_stop_error;
+        if (motion_blocked_by_emergency_stop("RobotSetSpeed", e_stop_error)) {
+            response->success = false;
+            response->message = e_stop_error;
+            return;
+        }
         std::string validation_error;
         if (!safety::validate_percent_value(static_cast<double>(request->speed), max_velocity_percent_, "speed", validation_error)) {
             response->success = false;

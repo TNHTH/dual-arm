@@ -22,7 +22,10 @@ def read_robot_state_once(arm: str, timeout_s: float = 2.0) -> Optional[dict]:
     def callback(msg):
         result["message"] = msg
 
-    rclpy.init()
+    started_rclpy = False
+    if not rclpy.ok():
+        rclpy.init()
+        started_rclpy = True
     node = rclpy.create_node(f"quick_waypoint_recorder_{normalize_arm(arm)}")
     sub = node.create_subscription(RobotState, _arm_topic(arm), callback, 10)
     started = time.monotonic()
@@ -53,7 +56,8 @@ def read_robot_state_once(arm: str, timeout_s: float = 2.0) -> Optional[dict]:
     finally:
         node.destroy_subscription(sub)
         node.destroy_node()
-        rclpy.shutdown()
+        if started_rclpy:
+            rclpy.shutdown()
 
 
 def record_waypoint(arm: str, name: str, dry_run: bool = False) -> None:

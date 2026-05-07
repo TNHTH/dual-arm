@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from .quick_depth_source_manager import depth_check_lines
+from .quick_computed_motion_executor import QuickComputedMotionExecutor
 from .quick_motion_executor import QuickMotionExecutor
 from .quick_types import PreflightIssue, deep_get, find_repo_root, load_quick_configs, load_yaml, quick_config_path
 
@@ -14,9 +15,11 @@ class PreflightReport:
     passed: bool
     issues: List[PreflightIssue] = field(default_factory=list)
     skipped_items: List[str] = field(default_factory=list)
+    computed_solutions: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    computed_evidence: List[Dict[str, Any]] = field(default_factory=list)
 
-    def add(self, level: str, message: str, key: str = "") -> None:
-        self.issues.append(PreflightIssue(level, message, key))
+    def add(self, level: str, message: str, key: str = "", **data: Any) -> None:
+        self.issues.append(PreflightIssue(level, message, key, data))
 
     def has_critical(self) -> bool:
         return any(issue.level == "CRITICAL" for issue in self.issues)
@@ -46,17 +49,58 @@ class QuickPreflightCheck:
             report.add("WARN", "manual 模式 depth 检查为 WARN，且禁止用 depth 生成最终 3D pose", "depth")
         else:
             report.add("CRITICAL", "depth/scene_fusion 模式需要现场 topic/frame/stamp 自检通过", "depth")
+        tasks = ["pouring", "handover"] if task == "full" else [task]
+        mode = str(self.profile.get("motion_generation_mode", "manual_waypoints")).strip()
+        executor = QuickMotionExecutor(dry_run=dry_run)
+        if mode not in {"manual_waypoints", "computed_templates", "hybrid"}:
+            report.add("CRITICAL", f"未知 motion_generation_mode={mode}", "motion_generation_mode")
+        elif mode == "manual_waypoints":
+            if not dry_run:
+                self._check_manual_waypoints(report, tasks, executor)
+        else:
+            self._check_computed_or_hybrid(report, tasks, mode, executor, hardware=not dry_run)
         if not dry_run:
-            tasks = ["pouring", "handover"] if task == "full" else [task]
-            executor = QuickMotionExecutor(dry_run=False)
-            for task_name in tasks:
-                errors = executor.prevalidate_waypoints(task_name, hardware=True)
-                for error in errors:
-                    report.add("CRITICAL", error, f"waypoint.{task_name}")
-                    report.skipped_items.append(task_name)
             self._check_pouring_assignment(report, executor)
         report.passed = not report.has_critical()
         return report
+
+    def _check_manual_waypoints(self, report: PreflightReport, tasks: List[str], executor: QuickMotionExecutor) -> None:
+        for task_name in tasks:
+            errors = executor.prevalidate_waypoints(task_name, hardware=True)
+            for error in errors:
+                report.add("CRITICAL", error, f"waypoint.{task_name}")
+                report.skipped_items.append(task_name)
+
+    def _check_computed_or_hybrid(
+        self,
+        report: PreflightReport,
+        tasks: List[str],
+        mode: str,
+        executor: QuickMotionExecutor,
+        hardware: bool,
+    ) -> None:
+        computed = QuickComputedMotionExecutor()
+        result = computed.evaluate(tasks, mode=mode, motion_executor=executor, hardware=hardware)
+        report.computed_solutions.update(result.data.get("solutions", {}))
+        report.computed_evidence.extend(result.data.get("step_evidence", []))
+        for issue in result.data.get("issues", []):
+            report.add("CRITICAL", issue, "computed_templates.static_inputs")
+        for item in result.data.get("step_evidence", []):
+            item_data = dict(item)
+            item_data.pop("message", None)
+            item_data.pop("key", None)
+            if item.get("passed"):
+                report.add("OK", item.get("message", ""), item.get("key", "computed.step"), **item_data)
+            else:
+                report.add(
+                    "CRITICAL",
+                    f"{item.get('key')}: {item.get('message')} -> SKIPPED_BY_PREFLIGHT",
+                    item.get("key", "computed.step"),
+                    **item_data,
+                )
+        for task_name in result.data.get("skipped_tasks", []):
+            if task_name not in report.skipped_items:
+                report.skipped_items.append(task_name)
 
     def _check_pouring_assignment(self, report: PreflightReport, executor: QuickMotionExecutor) -> None:
         pouring = self.pouring.get("pouring", {})

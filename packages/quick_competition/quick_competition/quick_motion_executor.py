@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .legacy_fairino_bridge import LegacyFairinoBridge
+from .quick_scene_provider import QuickSceneProvider
 from .quick_types import (
     PAYLOAD_BALL,
     PAYLOAD_EMPTY,
@@ -74,14 +75,21 @@ class MotionSafety:
 
 
 class QuickMotionExecutor:
-    def __init__(self, dry_run: bool = True, log_dir: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        dry_run: bool = True,
+        log_dir: Optional[Path] = None,
+        computed_solutions: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> None:
         self.repo_root = find_repo_root()
         self.profile = load_yaml(quick_config_path(self.repo_root, "quick_profile.yaml"))
         self.waypoints = load_yaml(quick_config_path(self.repo_root, "quick_waypoints.yaml"))
         self.limits = load_yaml(quick_config_path(self.repo_root, "quick_motion_limits.yaml"))
         self.safety = MotionSafety(self.limits)
         self.dry_run = dry_run
+        self.computed_solutions = computed_solutions or {}
         self.bridge = LegacyFairinoBridge(dry_run=dry_run, log_dir=log_dir)
+        self.scene = QuickSceneProvider(scene_source_override=self.profile.get("scene_source_override", "manual"))
         self.manual_offset_nonzero = is_nonzero_xyz(self.profile.get("manual_offset_xyz", [0.0, 0.0, 0.0]))
 
     def required_waypoints_for_task(self, task: str) -> Dict[str, List[str]]:
@@ -98,24 +106,58 @@ class QuickMotionExecutor:
         required = self.required_waypoints_for_task(task)
         for arm, names in required.items():
             for name in names:
-                variants = waypoint_variants(self.waypoints, arm, name)
-                if not variants:
-                    errors.append(f"{arm}.{name} missing")
-                    continue
-                usable = False
-                for entry in variants:
-                    check = self._static_ik_check(entry, hardware=hardware)
-                    if check.success:
-                        usable = True
-                        break
-                if not usable:
-                    errors.append(f"{arm}.{name} has no validated IK/waypoint solution")
+                check = self.validate_waypoint_step(arm, name, hardware=hardware)
+                if not check.success:
+                    errors.append(check.message)
         return errors
 
-    def _static_ik_check(self, entry: Dict[str, Any], hardware: bool) -> Result:
+    def validate_waypoint_step(
+        self,
+        arm: str,
+        waypoint_name: str,
+        hardware: bool,
+        object_ids: Optional[Iterable[str]] = None,
+    ) -> Result:
+        variants = waypoint_variants(self.waypoints, arm, waypoint_name)
+        if not variants:
+            return Result.fail(f"{arm}.{waypoint_name} missing", code="waypoint_missing")
+        required_object_ids = [str(item) for item in object_ids or [] if str(item)]
+        for entry in variants:
+            if required_object_ids:
+                if all(self._static_ik_check(entry, hardware=hardware, object_id_override=object_id).success for object_id in required_object_ids):
+                    return Result.ok(f"{arm}.{waypoint_name} fallback waypoint OK")
+                continue
+            check = self._static_ik_check(entry, hardware=hardware)
+            if check.success:
+                return Result.ok(f"{arm}.{waypoint_name} fallback waypoint OK")
+        return Result.fail(f"{arm}.{waypoint_name} has no validated IK/waypoint solution", code="waypoint_unavailable")
+
+    def install_computed_solutions(self, solutions: Dict[str, Dict[str, Any]]) -> None:
+        self.computed_solutions = dict(solutions or {})
+
+    def has_waypoint_or_computed(self, arm: str, waypoint_name: str, object_id_override: Optional[str] = None) -> bool:
+        if self._computed_solution_for(arm, waypoint_name, object_id_override=object_id_override):
+            return True
+        return bool(waypoint_primary(self.waypoints, arm, waypoint_name))
+
+    def _static_ik_check(self, entry: Dict[str, Any], hardware: bool, object_id_override: Optional[str] = None) -> Result:
         if not waypoint_is_usable(entry):
             return Result.fail("waypoint 缺少 joint_deg 或 tcp_pose_table_frame", code="waypoint_empty")
-        xyz = waypoint_xyz(entry)
+        object_ids = entry.get("object_ids")
+        if isinstance(object_ids, list) and object_ids and object_id_override is None:
+            for object_id in object_ids:
+                check = self._static_ik_check(entry, hardware=hardware, object_id_override=str(object_id))
+                if not check.success:
+                    return check
+            return Result.ok("object-relative variants static IK precheck OK")
+        pose_result = self.resolve_waypoint_pose(entry, object_id_override=object_id_override)
+        if not pose_result.success and (
+            isinstance(entry.get("object_relative_tcp_offset"), list)
+            or isinstance(entry.get("tcp_pose_table_frame") or entry.get("tcp_pose"), list)
+        ):
+            return pose_result
+        pose = pose_result.data.get("pose") if pose_result.success else None
+        xyz = (float(pose[0]), float(pose[1]), float(pose[2])) if isinstance(pose, list) and len(pose) >= 3 else waypoint_xyz(entry)
         if xyz:
             workspace_result = self.safety.check_workspace_xyz(xyz)
             if not workspace_result.success:
@@ -143,19 +185,71 @@ class QuickMotionExecutor:
             return Result.fail(f"{left_wp}/{right_wp} TCP 距离 {dist:.3f}m 低于 {min_dist:.3f}m", code="tcp_too_close")
         return Result.ok("dual tcp distance OK", distance_m=dist)
 
-    def move_to_waypoint(self, arm: str, waypoint_name: str) -> Result:
+    def resolve_waypoint_pose(self, entry: Dict[str, Any], object_id_override: Optional[str] = None) -> Result:
+        relative = entry.get("object_relative_tcp_offset")
+        object_id = object_id_override or entry.get("object_id")
+        if isinstance(relative, list) and len(relative) >= 3:
+            if not isinstance(object_id, str) or not object_id:
+                return Result.fail("object-relative waypoint 缺少 object_id", code="object_id_missing")
+            obj = self.scene.get_object(object_id)
+            if not obj:
+                return Result.fail(f"找不到对象 {object_id}，请更新 quick_objects.yaml 或启用稳定 scene source", code="object_missing")
+            object_pose = obj.get("pose")
+            if not isinstance(object_pose, list) or len(object_pose) < 3:
+                return Result.fail(f"对象 {object_id} 缺少 pose", code="object_pose_missing")
+            # quick v1 的 object_relative_tcp_offset 只做 table-frame 平移叠加；
+            # 姿态取 offset 的 rx/ry/rz，避免把 manual quaternion 当作 TCP 欧拉角误用。
+            rx_ry_rz = [float(relative[i]) for i in range(3, 6)] if len(relative) >= 6 else [0.0, 0.0, 0.0]
+            pose = [
+                float(object_pose[0]) + float(relative[0]),
+                float(object_pose[1]) + float(relative[1]),
+                float(object_pose[2]) + float(relative[2]),
+                *rx_ry_rz,
+            ]
+            return Result.ok("object-relative waypoint resolved", pose=pose, object_id=object_id)
+        pose = entry.get("tcp_pose_table_frame") or entry.get("tcp_pose")
+        if isinstance(pose, list) and len(pose) >= 6:
+            return Result.ok("absolute tcp waypoint resolved", pose=[float(item) for item in pose[:6]])
+        return Result.fail("waypoint 没有可解析 TCP pose", code="waypoint_pose_missing")
+
+    def move_to_waypoint(self, arm: str, waypoint_name: str, object_id_override: Optional[str] = None) -> Result:
+        computed = self._computed_solution_for(arm, waypoint_name, object_id_override=object_id_override)
+        if computed is not None:
+            pose = computed.get("pose_table")
+            if isinstance(pose, list) and len(pose) >= 6:
+                timeout_s = float(self.limits.get("timeouts", {}).get("action_timeout_s", 15.0))
+                return self.bridge.movel(arm, [float(item) for item in pose[:6]], self._cart_vel(), self._cart_acc(), timeout_s=timeout_s)
+            return Result.fail(f"computed solution {arm}.{waypoint_name} 缺少 pose_table", code="computed_solution_invalid")
         entry = waypoint_primary(self.waypoints, arm, waypoint_name)
         if not entry:
+            if self._blocks_runtime_first_ik():
+                return Result.fail(
+                    f"{arm}.{waypoint_name} 没有 preflight computed solution 或 manual fallback，禁止 runtime 首次 IK",
+                    code="runtime_first_ik_blocked",
+                )
             if self.dry_run:
                 return Result.ok(f"dry-run skipped missing waypoint {arm}.{waypoint_name}")
             return Result.fail(f"缺少 waypoint {arm}.{waypoint_name}", code="waypoint_missing")
         joint = entry.get("joint_deg")
         timeout_s = float(self.limits.get("timeouts", {}).get("action_timeout_s", 15.0))
+        has_object_relative = isinstance(entry.get("object_relative_tcp_offset"), list)
+        if has_object_relative:
+            resolved = self.resolve_waypoint_pose(entry, object_id_override=object_id_override)
+            if not resolved.success:
+                return resolved
+            pose = resolved.data["pose"]
+            return self.bridge.movel(arm, [float(item) for item in pose[:6]], self._cart_vel(), self._cart_acc(), timeout_s=timeout_s)
         if isinstance(joint, list) and len(joint) == 6 and not self.manual_offset_nonzero:
             return self.bridge.movej(arm, [float(item) for item in joint], self._vel(), self._acc(), timeout_s=timeout_s)
-        pose = entry.get("tcp_pose_table_frame") or entry.get("tcp_pose")
-        if isinstance(pose, list) and len(pose) >= 6:
+        resolved = self.resolve_waypoint_pose(entry, object_id_override=object_id_override)
+        if resolved.success:
+            pose = resolved.data["pose"]
             return self.bridge.movel(arm, [float(item) for item in pose[:6]], self._cart_vel(), self._cart_acc(), timeout_s=timeout_s)
+        if self._blocks_runtime_first_ik():
+            return Result.fail(
+                f"{arm}.{waypoint_name} 没有可执行 fallback，禁止 runtime 首次 IK",
+                code="runtime_first_ik_blocked",
+            )
         if self.dry_run:
             return Result.ok(f"dry-run waypoint {arm}.{waypoint_name}")
         return Result.fail(f"waypoint {arm}.{waypoint_name} 不可执行", code="waypoint_unusable")
@@ -183,10 +277,24 @@ class QuickMotionExecutor:
             return z_result
         return self.move_final_approach(arm, (target[0], target[1], current_z), target)
 
-    def execute_dual_waypoints(self, left_wp: str, right_wp: str) -> Result:
+    def execute_dual_waypoints(self, left_wp: str, right_wp: str, object_id_override: Optional[str] = None) -> Result:
         timeout_s = float(self.limits.get("timeouts", {}).get("bimanual_sync_timeout_s", 20.0))
-        left = self.move_to_waypoint("left_arm", left_wp)
-        right = self.move_to_waypoint("right_arm", right_wp)
+        left = self.move_to_waypoint("left_arm", left_wp, object_id_override=object_id_override)
+        right = self.move_to_waypoint("right_arm", right_wp, object_id_override=object_id_override)
+        if left.success and right.success:
+            return Result.ok(f"dual waypoint OK within {timeout_s}s")
+        return Result.fail(f"dual waypoint failed: left={left.message}, right={right.message}", code="dual_waypoint_failed")
+
+    def execute_dual_waypoints_for_objects(
+        self,
+        left_wp: str,
+        right_wp: str,
+        left_object_id: Optional[str] = None,
+        right_object_id: Optional[str] = None,
+    ) -> Result:
+        timeout_s = float(self.limits.get("timeouts", {}).get("bimanual_sync_timeout_s", 20.0))
+        left = self.move_to_waypoint("left_arm", left_wp, object_id_override=left_object_id)
+        right = self.move_to_waypoint("right_arm", right_wp, object_id_override=right_object_id)
         if left.success and right.success:
             return Result.ok(f"dual waypoint OK within {timeout_s}s")
         return Result.fail(f"dual waypoint failed: left={left.message}, right={right.message}", code="dual_waypoint_failed")
@@ -220,6 +328,34 @@ class QuickMotionExecutor:
 
     def _cart_acc(self) -> float:
         return float(self.limits.get("global", {}).get("cartesian_acc", 5))
+
+    def _blocks_runtime_first_ik(self) -> bool:
+        mode = str(self.profile.get("motion_generation_mode", "manual_waypoints")).strip()
+        allow_runtime_first_ik = bool(self.profile.get("execution", {}).get("allow_runtime_first_ik", False))
+        return mode in {"computed_templates", "hybrid"} and not allow_runtime_first_ik
+
+    def _computed_solution_for(
+        self,
+        arm: str,
+        waypoint_name: str,
+        object_id_override: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        normalized_arm = "left_arm" if arm in {"left", "left_arm", "l"} else "right_arm"
+        object_ids = [object_id_override] if object_id_override else []
+        object_ids.append("")
+        for object_id in object_ids:
+            key = self._computed_key(normalized_arm, waypoint_name, object_id or "")
+            if key in self.computed_solutions:
+                return self.computed_solutions[key]
+        prefix = f"{normalized_arm}.{waypoint_name}."
+        for key in sorted(self.computed_solutions):
+            if key.startswith(prefix):
+                return self.computed_solutions[key]
+        return None
+
+    @staticmethod
+    def _computed_key(arm: str, waypoint_name: str, object_id: str = "") -> str:
+        return f"{arm}.{waypoint_name}.{object_id}".rstrip(".")
 
 
 def spin_motion_executor() -> None:

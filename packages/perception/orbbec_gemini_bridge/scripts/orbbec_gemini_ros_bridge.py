@@ -41,6 +41,7 @@ class StreamState:
     depth_backend: str
     color_device: str
     depth_device: str
+    shared_obsensor: bool = False
 
 
 @dataclass
@@ -90,11 +91,7 @@ class OrbbecGeminiRosBridge(Node):
         self._v4l2_depth_unit_to_mm_scale = float(self.get_parameter("v4l2_depth_unit_to_mm_scale").value)
         self._camera_model = self._load_camera_model(str(self.get_parameter("camera_matrix_file").value))
 
-        resolved_color_device = self._resolve_color_device(requested_color_device)
-        color_cap = self._open_color_capture(resolved_color_device)
-        if not color_cap.isOpened():
-            raise RuntimeError(f"无法打开 Orbbec 彩色设备: {resolved_color_device}")
-
+        # 先尝试打开深度（obsensor 模式下 color/depth 可能共享设备）
         if self._enable_depth:
             depth_cap, depth_backend, resolved_depth_device = self._open_depth_capture(
                 requested_depth_backend,
@@ -106,12 +103,34 @@ class OrbbecGeminiRosBridge(Node):
             depth_backend = "disabled"
             resolved_depth_device = "disabled"
 
+        shared_obsensor = False
+        if requested_color_device == "auto" and depth_backend == "obsensor" and depth_cap is not None:
+            # V4L2 无法打开 Orbbec Gemini 335，直接用同一个 obsensor 设备提供彩色流
+            color_cap = depth_cap
+            resolved_color_device = f"obsensor:{depth_obsensor_index}"
+            shared_obsensor = True
+            self.get_logger().info(f"彩色流复用 OBSENSOR 设备 idx={depth_obsensor_index}")
+        else:
+            resolved_color_device = self._resolve_color_device(requested_color_device)
+            color_cap = self._open_color_capture(resolved_color_device)
+            if not color_cap.isOpened():
+                if depth_backend == "obsensor" and depth_cap is not None:
+                    color_cap = depth_cap
+                    resolved_color_device = f"obsensor:{depth_obsensor_index}"
+                    shared_obsensor = True
+                    self.get_logger().warn(
+                        f"V4L2 彩色设备 {resolved_color_device} 无法打开，回退到 OBSENSOR idx={depth_obsensor_index}"
+                    )
+                else:
+                    raise RuntimeError(f"无法打开 Orbbec 彩色设备: {resolved_color_device}")
+
         self._streams = StreamState(
             color_cap=color_cap,
             depth_cap=depth_cap,
             depth_backend=depth_backend,
             color_device=resolved_color_device,
             depth_device=resolved_depth_device,
+            shared_obsensor=shared_obsensor,
         )
         self._bridge = CvBridge()
         self._color_pub = self.create_publisher(Image, str(self.get_parameter("color_topic").value), 10)
@@ -146,8 +165,17 @@ class OrbbecGeminiRosBridge(Node):
             return super().destroy_node()
 
     def _tick(self) -> None:
-        color_ok, color = self._streams.color_cap.read()
-        depth_ok, depth = self._read_depth_frame() if self._enable_depth else (True, None)
+        if self._streams.shared_obsensor:
+            cap = self._streams.color_cap
+            grabbed = cap.grab()
+            if not grabbed:
+                self.get_logger().warn("OBSENSOR grab 失败", throttle_duration_sec=2.0)
+                return
+            color_ok, color = cap.retrieve()
+            depth_ok, depth = self._read_depth_frame() if self._enable_depth else (True, None)
+        else:
+            color_ok, color = self._streams.color_cap.read()
+            depth_ok, depth = self._read_depth_frame() if self._enable_depth else (True, None)
 
         if not color_ok:
             self.get_logger().warn("读取彩色图失败", throttle_duration_sec=2.0)
@@ -238,6 +266,13 @@ class OrbbecGeminiRosBridge(Node):
                 0.0,
                 float(np.iinfo(np.uint16).max),
             ).astype(np.uint16)
+            return True, depth
+
+        # 共享 obsensor 模式下 _tick 已调用 grab()，这里只需 retrieve
+        if self._streams.shared_obsensor:
+            depth_ok, depth = self._streams.depth_cap.retrieve(None, cv2.CAP_OBSENSOR_DEPTH_MAP)
+            if not depth_ok or depth is None:
+                return False, None
             return True, depth
 
         depth_ok = self._streams.depth_cap.grab()

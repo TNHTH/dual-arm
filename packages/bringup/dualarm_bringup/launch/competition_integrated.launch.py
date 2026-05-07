@@ -101,6 +101,8 @@ def generate_launch_description():
             DeclareLaunchArgument("robot_state_age_limit_ms", default_value="100"),
             DeclareLaunchArgument("planning_time", default_value="5.0"),
             DeclareLaunchArgument("planning_attempts", default_value="10"),
+            DeclareLaunchArgument("allow_dual_arm_sequential_fallback", default_value="false"),
+            DeclareLaunchArgument("apply_default_tcp_orientation_to_dual_pose_targets", default_value="false"),
             DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
             DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value=""),
             _include(
@@ -169,6 +171,10 @@ def generate_launch_description():
                     "robot_state_age_limit_ms": LaunchConfiguration("robot_state_age_limit_ms"),
                     "planning_time": LaunchConfiguration("planning_time"),
                     "planning_attempts": LaunchConfiguration("planning_attempts"),
+                    "allow_dual_arm_sequential_fallback": LaunchConfiguration("allow_dual_arm_sequential_fallback"),
+                    "apply_default_tcp_orientation_to_dual_pose_targets": LaunchConfiguration(
+                        "apply_default_tcp_orientation_to_dual_pose_targets"
+                    ),
                     "allow_vendor_direct_cartesian": LaunchConfiguration("allow_vendor_direct_cartesian"),
                     "vendor_direct_cartesian_profiles": LaunchConfiguration("vendor_direct_cartesian_profiles"),
                 }.items(),

@@ -4,11 +4,14 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <stdexcept>
+#include <unordered_map>
 
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <sensor_msgs/msg/point_field.hpp>
 #include <tf2/LinearMath/Quaternion.h>
+#include <yaml-cpp/yaml.h>
 
 #include "dualarm_interfaces/msg/scene_object.hpp"
 #include "dualarm_interfaces/msg/subframe.hpp"
@@ -16,76 +19,6 @@
 namespace depth_handler {
 
 namespace {
-
-struct SemanticPrior {
-    std::array<float, 3> size;
-    float cap_clearance;
-    float cap_pregrasp_offset;
-    float pour_pivot_offset;
-    float cup_side_grasp_inset;
-    float cup_fill_offset;
-};
-
-constexpr SemanticPrior kYibao350Prior {
-    {0.060f, 0.060f, 0.175f},
-    0.012f,
-    0.040f,
-    0.015f,
-    0.0f,
-    0.0f,
-};
-constexpr SemanticPrior kCocaCola300Prior {
-    {0.060f, 0.060f, 0.145f},
-    0.015f,
-    0.040f,
-    0.020f,
-    0.0f,
-    0.0f,
-};
-constexpr SemanticPrior kCupPrior {
-    {0.075f, 0.075f, 0.115f},
-    0.0f,
-    0.0f,
-    0.0f,
-    0.0125f,
-    0.020f,
-};
-
-const SemanticPrior* priorForSemantic(const std::string& semantic_type) {
-    if (semantic_type == "water_bottle") {
-        return &kYibao350Prior;
-    }
-    if (semantic_type == "cola_bottle") {
-        return &kCocaCola300Prior;
-    }
-    if (semantic_type.find("cup") != std::string::npos) {
-        return &kCupPrior;
-    }
-    return nullptr;
-}
-
-std::array<float, 3> guessSize(const std::string& semantic_type, const Eigen::Vector3f& observed_size) {
-    if (const auto* prior = priorForSemantic(semantic_type)) {
-        return prior->size;
-    }
-    return {observed_size.x(), observed_size.y(), observed_size.z()};
-}
-
-std::string shapeTypeForSemantic(const std::string& semantic_type) {
-    if (semantic_type == "water_bottle" || semantic_type == "cola_bottle" || semantic_type.find("cup") != std::string::npos) {
-        return "cylinder";
-    }
-    if (semantic_type == "basketball" || semantic_type == "soccer_ball") {
-        return "sphere";
-    }
-    if (semantic_type == "basket") {
-        return "box";
-    }
-    if (semantic_type == "table_surface") {
-        return "plane";
-    }
-    return "unknown";
-}
 
 float clamp01(float value) {
     return std::max(0.0f, std::min(1.0f, value));
@@ -157,6 +90,7 @@ DepthProcessorNode::DepthProcessorNode(const rclcpp::NodeOptions& options)
     : Node("depth_processor_node", options) {
     declareParameters();
     loadParameters();
+    loadObjectGeometry();
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -200,6 +134,7 @@ void DepthProcessorNode::declareParameters() {
     declare_parameter("camera_info_topic", "/camera/depth/camera_info");
     declare_parameter("depth_topic", "/camera/depth/image_raw");
     declare_parameter("detection_topic", "/perception/detection_2d");
+    declare_parameter("object_geometry_file", "");
     declare_parameter("bbox3d_topic", "/depth_handler/bbox3d");
     declare_parameter("scene_objects_topic", "/perception/scene_objects");
     declare_parameter("pointcloud_topic", "/depth_handler/pointcloud");
@@ -231,6 +166,7 @@ void DepthProcessorNode::loadParameters() {
     camera_info_topic_ = get_parameter("camera_info_topic").as_string();
     depth_topic_ = get_parameter("depth_topic").as_string();
     detection_topic_ = get_parameter("detection_topic").as_string();
+    object_geometry_file_ = get_parameter("object_geometry_file").as_string();
     bbox3d_topic_ = get_parameter("bbox3d_topic").as_string();
     scene_objects_topic_ = get_parameter("scene_objects_topic").as_string();
     pointcloud_topic_ = get_parameter("pointcloud_topic").as_string();
@@ -252,6 +188,177 @@ void DepthProcessorNode::loadParameters() {
     allowed_semantic_types_ = get_parameter("allowed_semantic_types").as_string_array();
 }
 
+void DepthProcessorNode::loadObjectGeometry() {
+    if (object_geometry_file_.empty()) {
+        throw std::runtime_error("object_geometry_file 不能为空，depth_handler 需要仓内 canonical 几何配置");
+    }
+
+    YAML::Node root;
+    try {
+        root = YAML::LoadFile(object_geometry_file_);
+    } catch (const YAML::Exception& exception) {
+        throw std::runtime_error(
+            std::string("读取 object_geometry_file 失败: ") + object_geometry_file_ + " (" + exception.what() + ")");
+    }
+
+    const auto objects = root["objects"];
+    if (!objects || !objects.IsMap()) {
+        throw std::runtime_error("object_geometry_file 缺少 objects 映射");
+    }
+
+    auto require_scalar = [](const YAML::Node& node, const std::string& path) -> const YAML::Node {
+        if (!node) {
+            throw std::runtime_error("object_geometry 缺少字段: " + path);
+        }
+        return node;
+    };
+
+    auto read_float = [&](const YAML::Node& parent, const std::string& key, const std::string& path) -> float {
+        const auto value = require_scalar(parent[key], path);
+        try {
+            const float result = value.as<float>();
+            if (!std::isfinite(result)) {
+                throw std::runtime_error("object_geometry 字段不是有限数值: " + path);
+            }
+            return result;
+        } catch (const YAML::Exception& exception) {
+            throw std::runtime_error("读取 object_geometry 数值失败: " + path + " (" + exception.what() + ")");
+        }
+    };
+
+    auto read_string = [&](const YAML::Node& parent, const std::string& key, const std::string& path) -> std::string {
+        const auto value = require_scalar(parent[key], path);
+        try {
+            const auto result = value.as<std::string>();
+            if (result.empty()) {
+                throw std::runtime_error("object_geometry 字段不能为空: " + path);
+            }
+            return result;
+        } catch (const YAML::Exception& exception) {
+            throw std::runtime_error("读取 object_geometry 字符串失败: " + path + " (" + exception.what() + ")");
+        }
+    };
+
+    auto read_size = [&](const YAML::Node& parent, const std::string& path) -> std::array<float, 3> {
+        const auto node = require_scalar(parent, path);
+        if (!node.IsSequence() || node.size() != 3) {
+            throw std::runtime_error("object_geometry 尺寸必须是长度为 3 的数组: " + path);
+        }
+        std::array<float, 3> size {};
+        for (size_t index = 0; index < 3; ++index) {
+            try {
+                size[index] = node[index].as<float>();
+            } catch (const YAML::Exception& exception) {
+                throw std::runtime_error("读取 object_geometry 尺寸失败: " + path + " (" + exception.what() + ")");
+            }
+            if (!std::isfinite(size[index]) || size[index] <= 0.0f) {
+                throw std::runtime_error("object_geometry 尺寸必须为正且有限: " + path);
+            }
+        }
+        return size;
+    };
+
+    auto read_task_offsets = [&](const YAML::Node& object_node, const std::string& semantic_type, ObjectGeometrySpec& spec) {
+        const bool needs_bottle_offsets = semantic_type == "water_bottle" || semantic_type == "cola_bottle";
+        const bool needs_cup_offsets = semantic_type.find("cup") != std::string::npos;
+        if (!needs_bottle_offsets && !needs_cup_offsets) {
+            return;
+        }
+        const auto planning = object_node["planning"];
+        if (!planning || !planning.IsMap()) {
+            throw std::runtime_error("object_geometry 缺少 planning: objects." + semantic_type);
+        }
+        const auto task_subframes = planning["task_subframes"];
+        if (!task_subframes || !task_subframes.IsMap()) {
+            throw std::runtime_error("object_geometry 缺少 planning.task_subframes: objects." + semantic_type);
+        }
+
+        if (needs_bottle_offsets) {
+            spec.cap_clearance = read_float(
+                task_subframes,
+                "cap_clearance_m",
+                "objects." + semantic_type + ".planning.task_subframes.cap_clearance_m");
+            spec.cap_pregrasp_offset = read_float(
+                task_subframes,
+                "cap_pregrasp_offset_m",
+                "objects." + semantic_type + ".planning.task_subframes.cap_pregrasp_offset_m");
+            spec.pour_pivot_offset = read_float(
+                task_subframes,
+                "pour_pivot_offset_m",
+                "objects." + semantic_type + ".planning.task_subframes.pour_pivot_offset_m");
+        } else if (needs_cup_offsets) {
+            spec.cup_side_grasp_inset = read_float(
+                task_subframes,
+                "cup_side_grasp_inset_m",
+                "objects." + semantic_type + ".planning.task_subframes.cup_side_grasp_inset_m");
+            spec.cup_fill_offset = read_float(
+                task_subframes,
+                "cup_fill_offset_m",
+                "objects." + semantic_type + ".planning.task_subframes.cup_fill_offset_m");
+        }
+    };
+
+    std::unordered_map<std::string, ObjectGeometrySpec> loaded_specs;
+    for (const auto& entry : objects) {
+        const std::string semantic_type = entry.first.as<std::string>();
+        const auto object_node = entry.second;
+        const auto geometry = object_node["geometry"];
+        if (!geometry || !geometry.IsMap()) {
+            throw std::runtime_error("object_geometry 缺少 geometry: objects." + semantic_type);
+        }
+
+        ObjectGeometrySpec spec;
+        spec.size = read_size(geometry["bounding_box_m"], "objects." + semantic_type + ".geometry.bounding_box_m");
+
+        const auto proxy_shape = geometry["proxy_shape"];
+        if (proxy_shape && proxy_shape.IsMap() && proxy_shape["type"]) {
+            spec.shape_type = read_string(proxy_shape, "type", "objects." + semantic_type + ".geometry.proxy_shape.type");
+        } else {
+            const auto planning = object_node["planning"];
+            if (planning && planning.IsMap() && planning["collision_proxy_shape"]) {
+                spec.shape_type = read_string(
+                    planning,
+                    "collision_proxy_shape",
+                    "objects." + semantic_type + ".planning.collision_proxy_shape");
+            }
+        }
+        if (spec.shape_type == "unknown") {
+            throw std::runtime_error("object_geometry 缺少 shape_type: objects." + semantic_type);
+        }
+
+        read_task_offsets(object_node, semantic_type, spec);
+        loaded_specs.emplace(semantic_type, spec);
+    }
+
+    for (const auto& required_semantic : {"water_bottle", "cola_bottle", "cup"}) {
+        if (loaded_specs.find(required_semantic) == loaded_specs.end()) {
+            throw std::runtime_error(std::string("object_geometry 缺少 canonical object: ") + required_semantic);
+        }
+    }
+
+    object_geometry_specs_ = std::move(loaded_specs);
+    RCLCPP_INFO(
+        get_logger(),
+        "已加载 object_geometry_file: %s，canonical objects=%zu",
+        object_geometry_file_.c_str(),
+        object_geometry_specs_.size());
+}
+
+const DepthProcessorNode::ObjectGeometrySpec* DepthProcessorNode::objectSpecForSemantic(
+    const std::string& semantic_type) const {
+    const auto direct = object_geometry_specs_.find(semantic_type);
+    if (direct != object_geometry_specs_.end()) {
+        return &direct->second;
+    }
+    if (semantic_type.find("cup") != std::string::npos) {
+        const auto cup = object_geometry_specs_.find("cup");
+        if (cup != object_geometry_specs_.end()) {
+            return &cup->second;
+        }
+    }
+    return nullptr;
+}
+
 rcl_interfaces::msg::SetParametersResult DepthProcessorNode::onParametersChanged(
     const std::vector<rclcpp::Parameter>&) {
     loadParameters();
@@ -261,24 +368,33 @@ rcl_interfaces::msg::SetParametersResult DepthProcessorNode::onParametersChanged
 }
 
 void DepthProcessorNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr message) {
-    camera_info_ = message;
+    std::lock_guard<std::mutex> lock(perception_state_mutex_);
+    camera_info_ = std::make_shared<const sensor_msgs::msg::CameraInfo>(*message);
 }
 
 void DepthProcessorNode::tableSceneCallback(const dualarm_interfaces::msg::SceneObjectArray::SharedPtr message) {
-    table_scene_ = message;
+    std::lock_guard<std::mutex> lock(perception_state_mutex_);
+    table_scene_ = std::make_shared<const dualarm_interfaces::msg::SceneObjectArray>(*message);
 }
 
 void DepthProcessorNode::synchronizedCallback(
     const DetectionArray::ConstSharedPtr& detections,
     const DepthImage::ConstSharedPtr& depth_image) {
-    if (!camera_info_) {
+    std::shared_ptr<const sensor_msgs::msg::CameraInfo> camera_info;
+    std::shared_ptr<const dualarm_interfaces::msg::SceneObjectArray> table_scene;
+    {
+        std::lock_guard<std::mutex> lock(perception_state_mutex_);
+        camera_info = camera_info_;
+        table_scene = table_scene_;
+    }
+    if (!camera_info) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "尚未收到 camera_info，跳过本帧");
         return;
     }
 
     const auto source_frame =
-        depth_image->header.frame_id.empty() ? camera_info_->header.frame_id : depth_image->header.frame_id;
-    if (require_camera_info_depth_frame_ && camera_info_->header.frame_id != source_frame) {
+        depth_image->header.frame_id.empty() ? camera_info->header.frame_id : depth_image->header.frame_id;
+    if (require_camera_info_depth_frame_ && camera_info->header.frame_id != source_frame) {
         RCLCPP_WARN_THROTTLE(
             get_logger(),
             *get_clock(),
@@ -335,7 +451,14 @@ void DepthProcessorNode::synchronizedCallback(
                 allowed_semantic_types_.end()) {
             continue;
         }
-        const auto geometry = buildGeometry(detection, depth_image, transform_matrix, output_frame);
+        if (objectSpecForSemantic(detection.semantic_type) == nullptr) {
+            RCLCPP_WARN(
+                get_logger(),
+                "检测到未在 object_geometry 中定义的语义类型: %s，跳过发布",
+                detection.semantic_type.c_str());
+            continue;
+        }
+        const auto geometry = buildGeometry(detection, depth_image, *camera_info, table_scene, transform_matrix, output_frame);
         if (!geometry) {
             continue;
         }
@@ -361,12 +484,10 @@ void DepthProcessorNode::synchronizedCallback(
 std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGeometry(
     const dualarm_interfaces::msg::Detection2D& detection,
     const DepthImage::ConstSharedPtr& depth_image,
+    const sensor_msgs::msg::CameraInfo& camera_info,
+    const std::shared_ptr<const dualarm_interfaces::msg::SceneObjectArray>& table_scene,
     const Eigen::Isometry3d& transform,
     const std::string& output_frame) const {
-    if (!camera_info_) {
-        return std::nullopt;
-    }
-
     const int image_width = static_cast<int>(depth_image->width);
     const int image_height = static_cast<int>(depth_image->height);
     const int margin_x = static_cast<int>(detection.width * roi_margin_ratio_);
@@ -382,13 +503,13 @@ std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGe
     }
 
     const auto source_frame =
-        depth_image->header.frame_id.empty() ? camera_info_->header.frame_id : depth_image->header.frame_id;
-    auto points = extractRoiPoints(depth_image, x0, y0, x1, y1);
+        depth_image->header.frame_id.empty() ? camera_info.header.frame_id : depth_image->header.frame_id;
+    auto points = extractRoiPoints(depth_image, camera_info, x0, y0, x1, y1);
     if (static_cast<int>(points.size()) < min_points_) {
         return std::nullopt;
     }
 
-    const auto table_object = latestTableObject(output_frame);
+    const auto table_object = latestTableObject(output_frame, table_scene);
     std::optional<Eigen::Vector3f> table_point_source_frame;
     std::optional<Eigen::Vector3f> table_normal_source_frame;
     std::optional<Eigen::Vector3f> table_point_output_frame;
@@ -432,16 +553,16 @@ std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGe
 
     if (static_cast<int>(transformed_points.size()) < min_points_) {
         if (table_point_source_frame && table_normal_source_frame && table_point_output_frame && table_normal_output_frame) {
-            if (const auto* prior = priorForSemantic(detection.semantic_type)) {
+            if (const auto* prior = objectSpecForSemantic(detection.semantic_type)) {
                 Eigen::Vector3f support_normal_source = *table_normal_source_frame;
                 if (support_normal_source.dot(*table_point_source_frame) > 0.0f) {
                     support_normal_source = -support_normal_source;
                 }
 
-                const float fx = static_cast<float>(camera_info_->k[0]);
-                const float fy = static_cast<float>(camera_info_->k[4]);
-                const float cx = static_cast<float>(camera_info_->k[2]);
-                const float cy = static_cast<float>(camera_info_->k[5]);
+                const float fx = static_cast<float>(camera_info.k[0]);
+                const float fy = static_cast<float>(camera_info.k[4]);
+                const float cx = static_cast<float>(camera_info.k[2]);
+                const float cy = static_cast<float>(camera_info.k[5]);
                 if (std::abs(fx) > 1e-6f && std::abs(fy) > 1e-6f) {
                     const float support_u = 0.5f * static_cast<float>(x0 + x1);
                     const float support_v = static_cast<float>(std::max(y0, y1 - 1));
@@ -513,19 +634,17 @@ std::optional<DepthProcessorNode::DetectionGeometry> DepthProcessorNode::buildGe
 
 std::vector<Eigen::Vector3f> DepthProcessorNode::extractRoiPoints(
     const DepthImage::ConstSharedPtr& depth_image,
+    const sensor_msgs::msg::CameraInfo& camera_info,
     int x0,
     int y0,
     int x1,
     int y1) const {
     std::vector<Eigen::Vector3f> points;
-    if (!camera_info_) {
-        return points;
-    }
 
-    const double fx = camera_info_->k[0];
-    const double fy = camera_info_->k[4];
-    const double cx = camera_info_->k[2];
-    const double cy = camera_info_->k[5];
+    const double fx = camera_info.k[0];
+    const double fy = camera_info.k[4];
+    const double cx = camera_info.k[2];
+    const double cy = camera_info.k[5];
 
     for (int v = y0; v < y1; ++v) {
         for (int u = x0; u < x1; ++u) {
@@ -568,16 +687,17 @@ std::optional<float> DepthProcessorNode::readDepthMeters(
 }
 
 std::optional<dualarm_interfaces::msg::SceneObject> DepthProcessorNode::latestTableObject(
-    const std::string& output_frame) const {
-    if (!use_table_plane_ || !table_scene_) {
+    const std::string& output_frame,
+    const std::shared_ptr<const dualarm_interfaces::msg::SceneObjectArray>& table_scene) const {
+    if (!use_table_plane_ || !table_scene) {
         return std::nullopt;
     }
-    for (const auto& object : table_scene_->objects) {
+    for (const auto& object : table_scene->objects) {
         if (object.semantic_type != "table_surface") {
             continue;
         }
         const auto frame_id = object.pose.header.frame_id.empty()
-            ? table_scene_->header.frame_id
+            ? table_scene->header.frame_id
             : object.pose.header.frame_id;
         if (!output_frame.empty() && frame_id != output_frame) {
             RCLCPP_WARN(
@@ -691,7 +811,11 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
     object.pose.pose.orientation.w = 1.0;
 
     const auto observed_size = geometry.max_point - geometry.min_point;
-    const auto size = guessSize(geometry.semantic_type, observed_size);
+    const auto* spec = objectSpecForSemantic(geometry.semantic_type);
+    if (spec == nullptr) {
+        throw std::runtime_error("缺少 canonical object_geometry，无法发布 scene object: " + geometry.semantic_type);
+    }
+    const auto& size = spec->size;
     object.size.x = size[0];
     object.size.y = size[1];
     object.size.z = size[2];
@@ -700,7 +824,7 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
     object.movable = true;
     object.source = source_name_;
     object.source_views = {source_name_};
-    object.shape_type = shapeTypeForSemantic(geometry.semantic_type);
+    object.shape_type = spec->shape_type;
     object.pose_source = geometry.support_points.size() <= 1 ? "depth_roi_prior_fallback" : "depth_roi_primitive_fit";
     object.quality_score = estimateQualityScore(geometry.confidence, geometry.support_points, observed_size, min_points_);
     object.last_seen = header.stamp;
@@ -723,7 +847,7 @@ dualarm_interfaces::msg::SceneObject DepthProcessorNode::makeSceneObject(
     };
 
     add_subframe("object_center", geometry.center);
-    const auto* prior = priorForSemantic(geometry.semantic_type);
+    const auto* prior = objectSpecForSemantic(geometry.semantic_type);
     if (geometry.semantic_type.find("bottle") != std::string::npos && prior != nullptr) {
         const float half_height = size[2] * 0.5f;
         const float cap_center_z = geometry.center.z() + half_height - prior->cap_clearance;

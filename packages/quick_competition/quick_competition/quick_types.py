@@ -20,6 +20,7 @@ QUICK_CONFIG_FILES = [
     "quick_motion_limits.yaml",
     "quick_pouring.yaml",
     "quick_ball_cage.yaml",
+    "quick_grasp_templates.yaml",
     "legacy_bridge.yaml",
 ]
 
@@ -186,7 +187,13 @@ def waypoint_is_usable(entry: Optional[Dict[str, Any]]) -> bool:
         return False
     joint = entry.get("joint_deg")
     tcp = entry.get("tcp_pose_table_frame") or entry.get("tcp_pose")
-    return isinstance(joint, list) and len(joint) == 6 or isinstance(tcp, list) and len(tcp) >= 3
+    relative = entry.get("object_relative_tcp_offset")
+    object_id = entry.get("object_id")
+    return (
+        (isinstance(joint, list) and len(joint) == 6)
+        or (isinstance(tcp, list) and len(tcp) >= 3)
+        or (isinstance(object_id, str) and isinstance(relative, list) and len(relative) >= 3)
+    )
 
 
 def waypoint_xyz(entry: Dict[str, Any]) -> Optional[Tuple[float, float, float]]:

@@ -139,6 +139,19 @@ class SceneFusionNode(Node):
         return track_id
 
     def _find_matching_track(self, scene_object: SceneObject) -> Optional[str]:
+        source = str(scene_object.source or "")
+        source_id = str(scene_object.id or "")
+        if source == "sim_truth" and source_id:
+            if source_id in self._tracks and self._tracks[source_id].semantic_type == scene_object.semantic_type:
+                return source_id
+            prefixed_matches = [
+                track_id
+                for track_id, track in self._tracks.items()
+                if track.semantic_type == scene_object.semantic_type and track_id.startswith(f"{source_id}_")
+            ]
+            if len(prefixed_matches) == 1:
+                return prefixed_matches[0]
+
         best_track = None
         best_distance = float("inf")
         gate = self._position_gate_for(scene_object.semantic_type)

@@ -460,9 +460,9 @@ void KeyboardTCPController::send_incremental_pose(const std::vector<double>& del
 
     // 创建增量位姿
     geometry_msgs::msg::Pose pose;
-    pose.position.x = delta_pose[0]; // mm转m
-    pose.position.y = delta_pose[1];
-    pose.position.z = delta_pose[2];
+    pose.position.x = delta_pose[0] / 1000.0; // mm转m
+    pose.position.y = delta_pose[1] / 1000.0;
+    pose.position.z = delta_pose[2] / 1000.0;
 
     // 角度转弧度
     tf2::Quaternion q;

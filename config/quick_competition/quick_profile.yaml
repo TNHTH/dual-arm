@@ -1,6 +1,7 @@
 mode: quick_competition
 dry_run_default: true
 scene_source_override: manual
+motion_generation_mode: hybrid
 execution_frame: table_frame_corrected
 manual_offset_xyz: [0.0, 0.0, 0.0]
 
@@ -42,6 +43,8 @@ depth:
 execution:
   prefer_legacy_bridge: true
   use_moveit_for_quick_mode: false
+  use_formal_scene_sync: false
+  allow_runtime_first_ik: false
   command_timeout_sec: 15.0
   stop_on_first_failure: false
   max_retry_per_step: 2

@@ -1,9 +1,11 @@
 #pragma once
 
+#include <array>
 #include <memory>
+#include <mutex>
 #include <optional>
-#include <vector>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -50,8 +52,20 @@ private:
         float confidence {0.0f};
     };
 
+    struct ObjectGeometrySpec {
+        std::array<float, 3> size {{0.0f, 0.0f, 0.0f}};
+        std::string shape_type {"unknown"};
+        float cap_clearance {0.0f};
+        float cap_pregrasp_offset {0.0f};
+        float pour_pivot_offset {0.0f};
+        float cup_side_grasp_inset {0.0f};
+        float cup_fill_offset {0.0f};
+    };
+
     void declareParameters();
     void loadParameters();
+    void loadObjectGeometry();
+    const ObjectGeometrySpec* objectSpecForSemantic(const std::string& semantic_type) const;
     rcl_interfaces::msg::SetParametersResult onParametersChanged(
         const std::vector<rclcpp::Parameter>& parameters);
 
@@ -63,10 +77,13 @@ private:
     std::optional<DetectionGeometry> buildGeometry(
         const dualarm_interfaces::msg::Detection2D& detection,
         const DepthImage::ConstSharedPtr& depth_image,
+        const sensor_msgs::msg::CameraInfo& camera_info,
+        const std::shared_ptr<const dualarm_interfaces::msg::SceneObjectArray>& table_scene,
         const Eigen::Isometry3d& transform,
         const std::string& output_frame) const;
     std::vector<Eigen::Vector3f> extractRoiPoints(
         const DepthImage::ConstSharedPtr& depth_image,
+        const sensor_msgs::msg::CameraInfo& camera_info,
         int x0,
         int y0,
         int x1,
@@ -80,7 +97,9 @@ private:
         const std::string& source_frame,
         const builtin_interfaces::msg::Time& stamp) const;
     void tableSceneCallback(const dualarm_interfaces::msg::SceneObjectArray::SharedPtr message);
-    std::optional<dualarm_interfaces::msg::SceneObject> latestTableObject(const std::string& output_frame) const;
+    std::optional<dualarm_interfaces::msg::SceneObject> latestTableObject(
+        const std::string& output_frame,
+        const std::shared_ptr<const dualarm_interfaces::msg::SceneObjectArray>& table_scene) const;
     float signedDistanceToTable(
         const Eigen::Vector3f& point,
         const dualarm_interfaces::msg::SceneObject& table_object) const;
@@ -111,6 +130,7 @@ private:
     std::string table_scene_topic_;
     std::string target_frame_;
     std::string source_name_;
+    std::string object_geometry_file_;
     bool enable_visualization_ {true};
     bool enable_pointcloud_ {true};
     bool allow_source_frame_fallback_ {false};
@@ -123,9 +143,11 @@ private:
     bool use_table_plane_ {true};
     std::string expected_detection_frame_;
     std::vector<std::string> allowed_semantic_types_;
+    std::unordered_map<std::string, ObjectGeometrySpec> object_geometry_specs_;
 
-    sensor_msgs::msg::CameraInfo::SharedPtr camera_info_;
-    dualarm_interfaces::msg::SceneObjectArray::SharedPtr table_scene_;
+    std::shared_ptr<const sensor_msgs::msg::CameraInfo> camera_info_;
+    std::shared_ptr<const dualarm_interfaces::msg::SceneObjectArray> table_scene_;
+    mutable std::mutex perception_state_mutex_;
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
     rclcpp::Subscription<dualarm_interfaces::msg::SceneObjectArray>::SharedPtr table_scene_sub_;
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

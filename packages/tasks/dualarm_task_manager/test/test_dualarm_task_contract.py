@@ -6,7 +6,7 @@ import sys
 SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from task_contract import normalize_task_sequence, parse_task_sequence, rank_scene_objects  # noqa: E402
+from task_contract import handover_ball_semantic_for_state, normalize_task_sequence, parse_task_sequence, rank_scene_objects  # noqa: E402
 
 
 def test_task_sequence_allows_only_competition_tasks():
@@ -38,3 +38,27 @@ def test_rank_scene_objects_prefers_stable_confident_recent_objects():
     ranked = rank_scene_objects([reserved, old_stable, recent_stable, high_confidence])
 
     assert [item.id for item in ranked] == ["cup_high", "cup_recent", "cup_old", "cup_reserved"]
+
+
+def test_handover_ball_semantic_parses_full_state_names():
+    assert handover_ball_semantic_for_state("GRASP_BALL_1") == "basketball"
+    assert handover_ball_semantic_for_state("HOLD_BALL_1_3S") == "basketball"
+    assert handover_ball_semantic_for_state("VERIFY_BALL_1_DROP") == "basketball"
+    assert handover_ball_semantic_for_state("GRASP_BALL_2") == "soccer_ball"
+    assert handover_ball_semantic_for_state("HOLD_BALL_2_3S") == "soccer_ball"
+    assert handover_ball_semantic_for_state("VERIFY_BALL_2_DROP") == "soccer_ball"
+
+
+def test_handover_hold_verify_is_not_marked_synchronized():
+    source = (SCRIPT_DIR / "behaviors" / "handover_boundary.py").read_text(encoding="utf-8")
+    hold_block = source[source.index('if state.startswith("HOLD_BALL_")') : source.index('if state.startswith("RELEASE_BALL_")')]
+    assert 'primitive_id="hold_verify"' in hold_block
+    assert "synchronized=True" not in hold_block
+
+
+def test_handover_release_executes_last_plan_before_release_guard():
+    source = (SCRIPT_DIR / "behaviors" / "handover_boundary.py").read_text(encoding="utf-8")
+    release_block = source[source.index('if state.startswith("RELEASE_BALL_")') :]
+
+    assert 'primitive_id="release_guard"' in release_block
+    assert "execute_last_plan=True" in release_block

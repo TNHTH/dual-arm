@@ -19,6 +19,7 @@ class BehaviorPrimitiveCall:
     execution_profile: str = "default"
     hold_duration_s: float = 0.0
     synchronized: bool = False
+    execute_last_plan: bool = False
 
 
 @dataclass
@@ -65,4 +66,5 @@ def summarize_behavior_call(state: str, call) -> Dict[str, object]:
         "execution_profile": call.execution_profile,
         "hold_duration_s": call.hold_duration_s,
         "synchronized": call.synchronized,
+        "execute_last_plan": call.execute_last_plan,
     }

@@ -58,9 +58,13 @@ class QuickCompetitionOrchestrator:
                 self.scoreboard.skip_preflight(item, "preflight failed")
             self._export_summary(preflight_passed=False)
             return Result.fail("preflight failed", code="preflight_failed")
+        self.executor.install_computed_solutions(preflight.computed_solutions)
         print("[OK] preflight passed")
         self.executor.execute_dual_waypoints("home", "home")
-        self.executor.execute_dual_waypoints("observe_table", "observe_table")
+        if self.executor.has_waypoint_or_computed("left_arm", "observe_table") and self.executor.has_waypoint_or_computed("right_arm", "observe_table"):
+            self.executor.execute_dual_waypoints("observe_table", "observe_table")
+        else:
+            print("[WARN] observe_table skipped: no preflight solution or manual fallback in manual quick mode")
         if self.task in {"full", "pouring"}:
             self._run_pouring()
         if self.task in {"full", "handover"}:

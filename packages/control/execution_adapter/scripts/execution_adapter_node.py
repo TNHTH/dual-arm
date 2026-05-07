@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+import json
 import time
+from copy import deepcopy
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import rclpy
 import yaml
@@ -17,6 +19,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import String
 
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory
 from dualarm_interfaces.msg import SceneObjectArray
@@ -78,6 +81,14 @@ class ExecutionAdapterNode(Node):
         self.declare_parameter("world_frame", "world")
         self.declare_parameter("allow_vendor_direct_cartesian", False)
         self.declare_parameter("vendor_direct_cartesian_profiles", "", profile_list_descriptor)
+        self.declare_parameter("execution_backend", "hardware")
+        self.declare_parameter("sim_grasp_contact_threshold_m", 0.04)
+        self.declare_parameter("sim_contact_retry_max", 2)
+        self.declare_parameter("sim_robot_state_freshness_max_age_s", 0.5)
+        self.declare_parameter("sim_visual_playback_rate_hz", 20.0)
+        self.declare_parameter("sim_truth_command_topic", "/simulation/truth_command")
+        self.declare_parameter("sim_pour_event_topic", "/simulation/pour_event")
+        self.declare_parameter("sim_pour_state_topic", "/competition/pour_state")
         self._left_gripper_slave_id = int(self.get_parameter("left_gripper_slave_id").value)
         self._right_gripper_slave_id = int(self.get_parameter("right_gripper_slave_id").value)
         self._left_gripper_command_service = str(self.get_parameter("left_gripper_command_service").value)
@@ -93,6 +104,14 @@ class ExecutionAdapterNode(Node):
         self._vendor_direct_cartesian_profiles = self._parse_profile_list(
             self.get_parameter("vendor_direct_cartesian_profiles").value
         )
+        self._execution_backend = str(self.get_parameter("execution_backend").value).strip().lower()
+        if self._execution_backend not in {"hardware", "sim"}:
+            self.get_logger().warn(f"未知 execution_backend={self._execution_backend}，回退 hardware")
+            self._execution_backend = "hardware"
+        self._sim_grasp_contact_threshold_m = float(self.get_parameter("sim_grasp_contact_threshold_m").value)
+        self._sim_contact_retry_max = int(self.get_parameter("sim_contact_retry_max").value)
+        self._sim_robot_state_freshness_max_age_s = float(self.get_parameter("sim_robot_state_freshness_max_age_s").value)
+        self._sim_visual_playback_rate_hz = max(float(self.get_parameter("sim_visual_playback_rate_hz").value), 1.0)
         self._reentrant_group = ReentrantCallbackGroup()
 
         self._robot_move_clients: Dict[str, any] = {
@@ -144,6 +163,22 @@ class ExecutionAdapterNode(Node):
         self._right_robot_state: Optional[RobotState] = None
         self._scene_cache = SceneObjectArray()
         self._gripper_status_cache: Dict[int, GripperStatus] = {}
+        self._latest_pour_state: Dict[str, object] = {}
+        self._sim_tcp_pose_by_arm: Dict[str, Optional[any]] = {"left_arm": None, "right_arm": None}
+        self._sim_left_setpoint_pub = self.create_publisher(JointState, "/simulation/left_joint_state_setpoint", 10)
+        self._sim_right_setpoint_pub = self.create_publisher(JointState, "/simulation/right_joint_state_setpoint", 10)
+        self._sim_left_gripper_pub = self.create_publisher(GripperStatus, self._left_gripper_status_topic, 10)
+        self._sim_right_gripper_pub = self.create_publisher(GripperStatus, self._right_gripper_status_topic, 10)
+        self._sim_truth_command_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("sim_truth_command_topic").value),
+            10,
+        )
+        self._sim_pour_event_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("sim_pour_event_topic").value),
+            10,
+        )
 
         self.create_subscription(RobotState, "/L/robot_state", self._handle_left_state, 10, callback_group=self._reentrant_group)
         self.create_subscription(RobotState, "/R/robot_state", self._handle_right_state, 10, callback_group=self._reentrant_group)
@@ -161,6 +196,13 @@ class ExecutionAdapterNode(Node):
             GripperStatus,
             self._right_gripper_status_topic,
             self._handle_gripper_status,
+            10,
+            callback_group=self._reentrant_group,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("sim_pour_state_topic").value),
+            self._handle_pour_state,
             10,
             callback_group=self._reentrant_group,
         )
@@ -184,7 +226,7 @@ class ExecutionAdapterNode(Node):
             cancel_callback=self._cancel_callback,
             callback_group=self._reentrant_group,
         )
-        self.get_logger().info("execution_adapter 已启动")
+        self.get_logger().info(f"execution_adapter 已启动，backend={self._execution_backend}")
 
     def _parse_profile_list(self, value) -> set[str]:
         if isinstance(value, str):
@@ -245,6 +287,35 @@ class ExecutionAdapterNode(Node):
     def _handle_gripper_status(self, message: GripperStatus) -> None:
         self._gripper_status_cache[int(message.slave_id)] = message
 
+    def _handle_pour_state(self, message: String) -> None:
+        try:
+            self._latest_pour_state = json.loads(message.data)
+        except json.JSONDecodeError:
+            self.get_logger().warn(f"忽略非法 /competition/pour_state JSON: {message.data}")
+
+    def _sim_mode(self) -> bool:
+        return self._execution_backend == "sim"
+
+    def _robot_state_fresh(self, state: Optional[RobotState]) -> bool:
+        if state is None:
+            return False
+        stamp = time.time()
+        msg_stamp = float(state.header.stamp.sec) + float(state.header.stamp.nanosec) * 1e-9
+        return msg_stamp > 0.0 and (stamp - msg_stamp) <= self._sim_robot_state_freshness_max_age_s
+
+    def _sim_robot_state_gate(self, require_dual: bool = True) -> PrimitiveExecutionOutcome:
+        outcome = PrimitiveExecutionOutcome(success=True, message="sim robot_state fresh", result_code=RESULT_SUCCESS)
+        left_ok = self._robot_state_fresh(self._left_robot_state)
+        right_ok = self._robot_state_fresh(self._right_robot_state)
+        if require_dual and not (left_ok and right_ok):
+            outcome.success = False
+            outcome.message = (
+                "sim robot_state 过期或缺失: "
+                f"left={left_ok}, right={right_ok}, max_age={self._sim_robot_state_freshness_max_age_s:.3f}s"
+            )
+            outcome.result_code = RESULT_TIMEOUT
+        return outcome
+
     def _goal_callback(self, goal_request: ExecuteTrajectory.Goal) -> GoalResponse:
         if goal_request.arm_group not in ("left_arm", "right_arm", "dual_arm"):
             self.get_logger().warn(f"拒绝未知 arm_group: {goal_request.arm_group}")
@@ -299,6 +370,9 @@ class ExecutionAdapterNode(Node):
             message = "轨迹为空，拒绝执行"
             result_code = "cancelled"
 
+        if self._sim_mode() and success:
+            self._sim_update_tcp_from_trajectory_goal(goal)
+
         feedback.progress = 1.0
         feedback.state = "finished" if success else "failed"
         goal_handle.publish_feedback(feedback)
@@ -335,7 +409,13 @@ class ExecutionAdapterNode(Node):
 
         started_at = time.monotonic()
         valid, validation_code, validation_message, contract = validate_primitive_goal(goal)
-        if valid and contract is not None:
+        if valid and contract is not None and self._sim_mode():
+            gate = self._sim_robot_state_gate(require_dual=True)
+            if not gate.success:
+                outcome = gate
+            else:
+                outcome = self._dispatch_primitive(goal, contract)
+        elif valid and contract is not None:
             outcome = self._dispatch_primitive(goal, contract)
         else:
             outcome = PrimitiveExecutionOutcome(
@@ -450,7 +530,21 @@ class ExecutionAdapterNode(Node):
             )
         elif goal.primitive_id == "pour_tilt":
             outcome = self._execute_dual_or_single_cartesian(goal)
-            if outcome.success and not has_pour_evidence(goal.stop_condition_id):
+            if outcome.success and self._sim_mode():
+                self._sim_publish_pour_event(goal)
+                if self._wait_for_sim_pour_evidence(goal):
+                    outcome.fill_target_reached = True
+                    outcome.spill_detected = False
+                    outcome.estimated_poured_mass_g = float(self._latest_pour_state.get("estimated_poured_mass_g", 120.0))
+                    outcome.evidence_confidence = float(self._latest_pour_state.get("evidence_confidence", 0.9))
+                    outcome.evidence_sources = ("/competition/pour_state",)
+                    outcome.result_code = RESULT_SUCCESS
+                    outcome.message = "sim pour_tilt 运动和倒水证据均通过"
+                else:
+                    outcome.success = False
+                    outcome.message = "sim pour_tilt 运动完成，但 /competition/pour_state 未确认 fill_target_reached"
+                    outcome.result_code = RESULT_UNVERIFIED_EVIDENCE
+            elif outcome.success and not has_pour_evidence(goal.stop_condition_id):
                 outcome.success = False
                 outcome.message = "pour_tilt 运动完成，但缺少 fill/spill evidence，不能判定成功"
                 outcome.result_code = RESULT_UNVERIFIED_EVIDENCE
@@ -486,15 +580,34 @@ class ExecutionAdapterNode(Node):
                 outcome.secondary_completed = secondary_success
                 outcome.success = secondary_success
             if outcome.success:
-                outcome.detach_verified = self._set_object_interaction(
+                release_pose = self._sim_release_pose_for_goal(goal) if self._sim_mode() else None
+                if release_pose is not None:
+                    self._sim_publish_truth_pose(goal.object_id, release_pose, lifecycle_state="observed")
+                interaction_detached = self._set_object_interaction(
                     object_id=goal.object_id,
                     interaction_mode="dual_contact" if goal.synchronized or goal.arm_group == "dual_arm" else "free",
                     owner="handover",
                     primary_link="",
                     secondary_link="",
                     enable=False,
+                    timeout_sec=3.0,
                 )
-            outcome.detach_verified = outcome.detach_verified and self._verify_released(goal.object_id)
+                if self._sim_mode():
+                    if release_pose is not None:
+                        self._sim_publish_truth_pose(goal.object_id, release_pose, lifecycle_state="observed")
+                    sim_release_verified = self._wait_for_sim_release_evidence(
+                        goal.object_id,
+                        release_pose,
+                        timeout_sec=10.0,
+                    )
+                    if sim_release_verified and not interaction_detached:
+                        self.get_logger().warn(
+                            f"{goal.object_id} sim release 使用 managed scene evidence 兜底；"
+                            "MoveIt PlanningScene interaction 同步未在超时内确认"
+                        )
+                    outcome.detach_verified = (interaction_detached or sim_release_verified) and self._verify_released(goal.object_id)
+                else:
+                    outcome.detach_verified = interaction_detached and self._verify_released(goal.object_id)
             outcome.success = outcome.success and outcome.detach_verified
             outcome.message = "释放保护动作完成" if outcome.success else "释放保护动作失败"
             outcome.result_code = RESULT_SUCCESS if outcome.success else RESULT_DETACH_FAILED
@@ -535,6 +648,23 @@ class ExecutionAdapterNode(Node):
             outcome.message = f"guarded_grasp approach 失败: {approach_message}"
             outcome.result_code = RESULT_DRIVER_FAILURE
             return outcome
+
+        if self._sim_mode():
+            contact_distance = self._sim_contact_distance(primary_arm, grasp)
+            if contact_distance > self._sim_grasp_contact_threshold_m:
+                for _ in range(max(self._sim_contact_retry_max, 0)):
+                    retry_ok, _retry_message = self._execute_cartesian_sequence(primary_arm, [grasp], goal.execution_profile)
+                    if retry_ok:
+                        contact_distance = self._sim_contact_distance(primary_arm, grasp)
+                    if contact_distance <= self._sim_grasp_contact_threshold_m:
+                        break
+                if contact_distance > self._sim_grasp_contact_threshold_m:
+                    outcome.message = (
+                        f"sim guarded_grasp contact_failed: distance={contact_distance:.3f}m "
+                        f"> threshold={self._sim_grasp_contact_threshold_m:.3f}m"
+                    )
+                    outcome.result_code = RESULT_CONTACT_FAILED
+                    return outcome
 
         gripper_ok = self._set_gripper_internal(primary_arm, command=2, position=255)
         if not gripper_ok:
@@ -660,6 +790,9 @@ class ExecutionAdapterNode(Node):
                 if result_code == RESULT_SYNC_VIOLATION:
                     return False, message, max_skew_ms, primary_started, secondary_started, primary_completed, secondary_completed
                 return False, f"双臂 cartesian step {index} 执行失败: {message}", max_skew_ms, primary_started, secondary_started, primary_completed, secondary_completed
+            if self._sim_mode():
+                self._sim_tcp_pose_by_arm[primary_arm] = primary_waypoints[index]
+                self._sim_tcp_pose_by_arm[secondary_arm] = secondary_waypoints[index]
         return True, "双臂 cartesian primitive 经 MoveIt 规划后执行成功", max_skew_ms, True, True, True, True
 
     def _execute_vendor_dual_cartesian(
@@ -728,6 +861,8 @@ class ExecutionAdapterNode(Node):
         if not bool(response.success) or response.result_code != RESULT_SUCCESS:
             return False, f"cartesian planning 失败: {response.result_code}"
         success, message = self._execute_joint(arm_group, response.joint_trajectory)
+        if self._sim_mode() and success and waypoints:
+            self._sim_tcp_pose_by_arm[arm_group] = waypoints[-1]
         return success, message if not success else "cartesian sequence 经 MoveIt 规划后执行成功"
 
     def _execute_vendor_cartesian_sequence(self, arm_group: str, waypoints) -> tuple[bool, str]:
@@ -748,6 +883,16 @@ class ExecutionAdapterNode(Node):
     def _cartesian_waypoint_frame_valid(self, pose_stamped) -> bool:
         frame_id = pose_stamped.header.frame_id.strip()
         return bool(frame_id) and frame_id == self._world_frame
+
+    def _sim_update_tcp_from_trajectory_goal(self, goal) -> None:
+        if not goal.cartesian_waypoints:
+            return
+        if goal.arm_group == "dual_arm" and len(goal.cartesian_waypoints) >= 2:
+            self._sim_tcp_pose_by_arm["left_arm"] = goal.cartesian_waypoints[0]
+            self._sim_tcp_pose_by_arm["right_arm"] = goal.cartesian_waypoints[1]
+            return
+        arm = goal.arm_group if goal.arm_group in ("left_arm", "right_arm") else "left_arm"
+        self._sim_tcp_pose_by_arm[arm] = goal.cartesian_waypoints[-1]
 
     def _execute_cartesian(self, arm_group: str, pose_stamped) -> tuple[bool, str]:
         client = self._robot_move_cart_clients.get(arm_group)
@@ -783,6 +928,10 @@ class ExecutionAdapterNode(Node):
         return request
 
     def _execute_joint(self, arm_group: str, joint_trajectory) -> tuple[bool, str]:
+        if self._sim_mode():
+            if not joint_trajectory.points:
+                return False, "关节轨迹为空"
+            return self._sim_play_joint_trajectory(arm_group, joint_trajectory)
         client = self._robot_servo_joint_clients.get(arm_group)
         if client is None or not client.wait_for_service(timeout_sec=0.5):
             return False, f"{arm_group} 的 /robot_servo_joint 服务不可用"
@@ -797,6 +946,11 @@ class ExecutionAdapterNode(Node):
         return bool(response.success), response.message
 
     def _execute_dual_arm(self, primary_joint_trajectory, secondary_joint_trajectory) -> tuple[bool, str, str, bool, bool, bool, bool, float]:
+        if self._sim_mode():
+            if not primary_joint_trajectory.points or not secondary_joint_trajectory.points:
+                return False, "双臂轨迹不完整", "cancelled", False, False, False, False, 0.0
+            success, message = self._sim_play_dual_joint_trajectories(primary_joint_trajectory, secondary_joint_trajectory)
+            return success, message, "success" if success else "driver_failure", True, True, success, success, 0.0
         primary_client = self._robot_servo_joint_clients.get("left_arm")
         secondary_client = self._robot_servo_joint_clients.get("right_arm")
         if primary_client is None or secondary_client is None:
@@ -828,6 +982,121 @@ class ExecutionAdapterNode(Node):
         if not right_success:
             return False, right_response.message, "secondary_abort", True, True, left_success, False, sync_skew_ms
         return True, "双臂执行成功", "success", True, True, True, True, sync_skew_ms
+
+    def _sim_play_joint_trajectory(self, arm_group: str, joint_trajectory) -> tuple[bool, str]:
+        start = self._current_joint_positions_rad(arm_group)
+        duration_s = self._trajectory_duration_s(joint_trajectory)
+        steps = max(int(math.ceil(duration_s * self._sim_visual_playback_rate_hz)), 1)
+        interval_s = duration_s / float(steps)
+        for step in range(steps + 1):
+            t = duration_s * float(step) / float(steps)
+            self._sim_publish_joint_positions(
+                arm_group,
+                self._sim_joint_names(arm_group, joint_trajectory),
+                self._sim_positions_at_time(joint_trajectory, start, t),
+            )
+            if step < steps:
+                time.sleep(interval_s)
+        return True, f"{arm_group} sim joint trajectory visual playback completed in {duration_s:.2f}s"
+
+    def _sim_play_dual_joint_trajectories(self, left_trajectory, right_trajectory) -> tuple[bool, str]:
+        left_start = self._current_joint_positions_rad("left_arm")
+        right_start = self._current_joint_positions_rad("right_arm")
+        duration_s = max(self._trajectory_duration_s(left_trajectory), self._trajectory_duration_s(right_trajectory))
+        steps = max(int(math.ceil(duration_s * self._sim_visual_playback_rate_hz)), 1)
+        interval_s = duration_s / float(steps)
+        left_names = self._sim_joint_names("left_arm", left_trajectory)
+        right_names = self._sim_joint_names("right_arm", right_trajectory)
+        for step in range(steps + 1):
+            t = duration_s * float(step) / float(steps)
+            self._sim_publish_joint_positions(
+                "left_arm",
+                left_names,
+                self._sim_positions_at_time(left_trajectory, left_start, t),
+            )
+            self._sim_publish_joint_positions(
+                "right_arm",
+                right_names,
+                self._sim_positions_at_time(right_trajectory, right_start, t),
+            )
+            if step < steps:
+                time.sleep(interval_s)
+        return True, f"双臂 sim 可视化轨迹执行成功，duration={duration_s:.2f}s"
+
+    def _sim_publish_joint_setpoint(self, arm_group: str, joint_trajectory) -> None:
+        self._sim_publish_joint_positions(
+            arm_group,
+            self._sim_joint_names(arm_group, joint_trajectory),
+            self._normalize_joint_positions(joint_trajectory.points[-1].positions, self._current_joint_positions_rad(arm_group)),
+        )
+
+    def _sim_publish_joint_positions(self, arm_group: str, names: List[str], positions: List[float]) -> None:
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = list(names)
+        msg.position = list(positions)
+        msg.velocity = [0.0] * len(msg.position)
+        msg.effort = [0.0] * len(msg.position)
+        if arm_group == "right_arm":
+            self._sim_right_setpoint_pub.publish(msg)
+        else:
+            self._sim_left_setpoint_pub.publish(msg)
+
+    def _sim_positions_at_time(self, joint_trajectory, start: List[float], t: float) -> List[float]:
+        previous_time = 0.0
+        previous_positions = list(start)
+        for point in joint_trajectory.points:
+            point_time = self._point_time_s(point)
+            target_positions = self._normalize_joint_positions(point.positions, previous_positions)
+            if t <= point_time:
+                span = max(point_time - previous_time, 1e-6)
+                alpha = min(max((t - previous_time) / span, 0.0), 1.0)
+                return [
+                    previous + (target - previous) * alpha
+                    for previous, target in zip(previous_positions, target_positions)
+                ]
+            previous_time = point_time
+            previous_positions = target_positions
+        return previous_positions
+
+    def _current_joint_positions_rad(self, arm_group: str) -> List[float]:
+        state = self._right_robot_state if arm_group == "right_arm" else self._left_robot_state
+        if state is None:
+            return [0.0] * 6
+        return [
+            math.radians(float(state.joint_position.j1)),
+            math.radians(float(state.joint_position.j2)),
+            math.radians(float(state.joint_position.j3)),
+            math.radians(float(state.joint_position.j4)),
+            math.radians(float(state.joint_position.j5)),
+            math.radians(float(state.joint_position.j6)),
+        ]
+
+    @staticmethod
+    def _normalize_joint_positions(positions, fallback: List[float]) -> List[float]:
+        normalized = list(fallback[:6])
+        while len(normalized) < 6:
+            normalized.append(0.0)
+        for index, value in enumerate(list(positions)[:6]):
+            normalized[index] = float(value)
+        return normalized
+
+    @staticmethod
+    def _trajectory_duration_s(joint_trajectory) -> float:
+        if not joint_trajectory.points:
+            return 0.1
+        return max(ExecutionAdapterNode._point_time_s(joint_trajectory.points[-1]), 0.1)
+
+    @staticmethod
+    def _point_time_s(point) -> float:
+        return float(point.time_from_start.sec) + float(point.time_from_start.nanosec) * 1e-9
+
+    @staticmethod
+    def _sim_joint_names(arm_group: str, joint_trajectory) -> List[str]:
+        if joint_trajectory.joint_names:
+            return list(joint_trajectory.joint_names)
+        prefix = "right" if arm_group == "right_arm" else "left"
+        return [f"{prefix}_j{index}" for index in range(1, 7)]
 
     def _build_servo_joint_request(self, joint_trajectory) -> RobotServoJoint.Request:
         request = RobotServoJoint.Request()
@@ -877,6 +1146,29 @@ class ExecutionAdapterNode(Node):
     ) -> bool:
         resolved_slave_id = self._resolve_gripper_slave_id(arm_name, slave_id)
         gripper_arm = self._resolve_gripper_arm(arm_name, resolved_slave_id)
+        if self._sim_mode():
+            status = GripperStatus()
+            status.slave_id = resolved_slave_id
+            status.gact = True
+            status.gsta = 3
+            status.gobj = 2 if int(position) > 0 else 3
+            status.position = int(position)
+            status.speed = int(speed)
+            status.force = int(torque)
+            status.object_status = "sim_contact" if int(position) > 0 else "sim_open"
+            self._gripper_status_cache[resolved_slave_id] = status
+            if gripper_arm == "right_arm":
+                self._sim_right_gripper_pub.publish(status)
+            else:
+                self._sim_left_gripper_pub.publish(status)
+            if attach_on_success and object_id and link_name:
+                if not self._call_attach(object_id, link_name):
+                    return False
+            if detach_on_success and object_id:
+                if not self._call_detach(object_id):
+                    return False
+                self._sim_publish_truth_release(object_id, arm_name)
+            return True
         gripper_client = self._gripper_command_clients.get(gripper_arm)
         if gripper_client is None or not gripper_client.wait_for_service(timeout_sec=0.5):
             return False
@@ -922,6 +1214,88 @@ class ExecutionAdapterNode(Node):
             return True
         return self._fallback_free_interaction(object_id)
 
+    def _sim_publish_truth_release(self, object_id: str, arm_name: str = "") -> None:
+        pose_stamped = self._sim_tcp_pose_by_arm.get(arm_name) if arm_name else None
+        if pose_stamped is None:
+            scene_object = self._find_scene_object(object_id)
+            pose_stamped = scene_object.pose if scene_object is not None else None
+        if pose_stamped is None:
+            return
+        self._sim_publish_truth_pose(object_id, pose_stamped, lifecycle_state="observed")
+
+    def _sim_publish_truth_pose(self, object_id: str, pose_stamped, lifecycle_state: str = "observed") -> None:
+        msg = String()
+        msg.data = json.dumps(
+            {
+                "action": "set_pose",
+                "object_id": object_id,
+                "pose": self._pose_stamped_to_list(pose_stamped),
+                "lifecycle_state": lifecycle_state,
+                "attached_link": "",
+                "reserved_by": "none",
+            },
+            ensure_ascii=False,
+        )
+        self._sim_truth_command_pub.publish(msg)
+
+    def _sim_release_pose_for_goal(self, goal: ExecutePrimitive.Goal):
+        basket = self._find_scene_object(goal.reference_object_id or "basket")
+        if basket is None:
+            basket = self._find_scene_object("basket")
+        if basket is None:
+            return None
+        release_pose = deepcopy(basket.pose)
+        release_pose.pose.position.z = float(basket.pose.pose.position.z)
+        return release_pose
+
+    def _pose_stamped_to_list(self, pose_stamped) -> list[float]:
+        return [
+            float(pose_stamped.pose.position.x),
+            float(pose_stamped.pose.position.y),
+            float(pose_stamped.pose.position.z),
+            float(pose_stamped.pose.orientation.x),
+            float(pose_stamped.pose.orientation.y),
+            float(pose_stamped.pose.orientation.z),
+            float(pose_stamped.pose.orientation.w),
+        ]
+
+    def _sim_contact_distance(self, arm_name: str, target_pose) -> float:
+        tcp_pose = self._sim_tcp_pose_by_arm.get(arm_name)
+        if tcp_pose is None:
+            return float("inf")
+        dx = float(tcp_pose.pose.position.x - target_pose.pose.position.x)
+        dy = float(tcp_pose.pose.position.y - target_pose.pose.position.y)
+        dz = float(tcp_pose.pose.position.z - target_pose.pose.position.z)
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    def _sim_publish_pour_event(self, goal: ExecutePrimitive.Goal) -> None:
+        msg = String()
+        msg.data = json.dumps(
+            {
+                "object_id": goal.object_id,
+                "reference_object_id": goal.reference_object_id,
+                "bottle": goal.object_id,
+                "cup": goal.reference_object_id,
+                "hold_duration_s": float(goal.hold_duration_s),
+                "tilt_waypoint_count": len(goal.primary_cartesian_waypoints),
+                "motion_success": True,
+                "evidence_confidence": 0.9,
+            },
+            ensure_ascii=False,
+        )
+        self._sim_pour_event_pub.publish(msg)
+
+    def _wait_for_sim_pour_evidence(self, goal: ExecutePrimitive.Goal, timeout_s: float = 1.5) -> bool:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            if bool(self._latest_pour_state.get("fill_target_reached", False)):
+                bottle = str(self._latest_pour_state.get("bottle", ""))
+                cup = str(self._latest_pour_state.get("cup", ""))
+                if not bottle or bottle == goal.object_id or cup == goal.reference_object_id:
+                    return True
+            time.sleep(0.02)
+        return False
+
     def _verify_detached(self, object_id: str) -> bool:
         if not object_id:
             return False
@@ -962,6 +1336,28 @@ class ExecutionAdapterNode(Node):
                 return scene_object.lifecycle_state not in {"held_dual_contact", "attached", "opened_split_active"}
         return False
 
+    def _wait_for_sim_release_evidence(self, object_id: str, release_pose, timeout_sec: float) -> bool:
+        if release_pose is None:
+            return False
+        deadline = time.monotonic() + max(timeout_sec, 0.1)
+        while time.monotonic() < deadline:
+            for scene_object in self._scene_cache.objects:
+                if scene_object.id != object_id:
+                    continue
+                if scene_object.attached_link:
+                    break
+                if scene_object.lifecycle_state in {"held_dual_contact", "attached", "opened_split_active"}:
+                    break
+                if scene_object.source != "sim_truth":
+                    break
+                dx = float(scene_object.pose.pose.position.x - release_pose.pose.position.x)
+                dy = float(scene_object.pose.pose.position.y - release_pose.pose.position.y)
+                dz = float(scene_object.pose.pose.position.z - release_pose.pose.position.z)
+                if (dx * dx + dy * dy + dz * dz) ** 0.5 <= 0.08:
+                    return True
+            time.sleep(0.05)
+        return False
+
     def _verify_object_attached_or_hidden(self, object_id: str) -> bool:
         if not object_id:
             return False
@@ -978,6 +1374,7 @@ class ExecutionAdapterNode(Node):
         primary_link: str,
         secondary_link: str,
         enable: bool,
+        timeout_sec: float = 2.0,
     ) -> bool:
         if not self._set_interaction_client.wait_for_service(timeout_sec=0.5):
             return False
@@ -989,7 +1386,7 @@ class ExecutionAdapterNode(Node):
         request.secondary_link = secondary_link
         request.enable = enable
         future = self._set_interaction_client.call_async(request)
-        response = self._wait_future(future, 2.0)
+        response = self._wait_future(future, timeout_sec)
         return response is not None and bool(response.success)
 
     def _tool_link_for_arm(self, arm_name: str) -> str:
@@ -1022,7 +1419,7 @@ class ExecutionAdapterNode(Node):
 
     def _find_scene_object(self, object_id: str):
         for scene_object in self._scene_cache.objects:
-            if scene_object.id == object_id:
+            if scene_object.id == object_id or scene_object.semantic_type == object_id:
                 return scene_object
         return None
 

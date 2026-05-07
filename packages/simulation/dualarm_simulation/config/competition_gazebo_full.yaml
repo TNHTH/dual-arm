@@ -1,0 +1,68 @@
+schema_version: competition_gazebo_full.v1
+frame_id: world
+
+sim:
+  grasp_contact_threshold_m: 0.04
+  contact_retry_max: 2
+  robot_state_freshness_max_age_s: 0.5
+  basket_accept_radius_m: 0.15
+  basket_accept_z_below_rim_m: 0.05
+  publish_rate_hz: 20.0
+  use_moveit_fk_service: true
+  fk_service_name: /compute_fk
+  fk_frame_id: world
+  pour_min_hold_duration_s: 1.5
+  pour_min_evidence_confidence: 0.65
+  pour_nominal_mass_g: 120.0
+  use_gazebo_model_states: true
+  gazebo_model_states_topic: /gazebo/model_states
+
+objects:
+  table_surface:
+    semantic_type: table_surface
+    pose: [0.55, 0.0, -0.02, 0.0, 0.0, 0.0, 1.0]
+    size_m: [1.0, 0.8, 0.04]
+    confidence: 1.0
+    shape_type: box
+  water_bottle:
+    semantic_type: water_bottle
+    pose: [0.45, -0.18, 0.09, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.06, 0.06, 0.18]
+    confidence: 0.95
+    shape_type: cylinder
+  cola_bottle:
+    semantic_type: cola_bottle
+    pose: [0.45, 0.18, 0.075, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.06, 0.06, 0.15]
+    confidence: 0.95
+    shape_type: cylinder
+  cup_1:
+    semantic_type: cup
+    pose: [0.66, -0.14, 0.045, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.07, 0.07, 0.09]
+    confidence: 0.95
+    shape_type: cylinder
+  cup_2:
+    semantic_type: cup
+    pose: [0.66, 0.14, 0.045, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.07, 0.07, 0.09]
+    confidence: 0.95
+    shape_type: cylinder
+  basketball:
+    semantic_type: basketball
+    pose: [0.58, -0.30, 0.24, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.12, 0.12, 0.12]
+    confidence: 0.95
+    shape_type: sphere
+  soccer_ball:
+    semantic_type: soccer_ball
+    pose: [0.58, 0.30, 0.24, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.12, 0.12, 0.12]
+    confidence: 0.95
+    shape_type: sphere
+  basket:
+    semantic_type: basket
+    pose: [0.78, 0.0, 0.06, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.30, 0.20, 0.12]
+    confidence: 0.95
+    shape_type: box

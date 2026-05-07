@@ -1,6 +1,10 @@
 #include <nanoflann.hpp>
+#include <atomic>
+#include <cstdint>
 #include <queue>
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <eigen3/Eigen/Dense>
 #include <vector>
 #include "omp.h"
@@ -37,7 +41,18 @@ std::vector<std::vector<Eigen::Vector3f>> clusterPointsKDTree(
     int max_cluster_size = 100000
 ) {
     std::vector<std::vector<Eigen::Vector3f>> clusters;
-    std::vector<bool> processed(points.size(), false);
+    std::vector<std::atomic<std::uint8_t>> processed(points.size());
+    for (auto& flag : processed) {
+        flag.store(0, std::memory_order_relaxed);
+    }
+    auto claim_point = [&processed](size_t index) {
+        std::uint8_t expected = 0;
+        return processed[index].compare_exchange_strong(
+            expected,
+            1,
+            std::memory_order_acq_rel,
+            std::memory_order_relaxed);
+    };
 
     PointCloudAdaptor pcAdaptor(points);
     KDTree tree(3, pcAdaptor, nanoflann::KDTreeSingleIndexAdaptorParams(10));
@@ -45,14 +60,14 @@ std::vector<std::vector<Eigen::Vector3f>> clusterPointsKDTree(
 
 #pragma omp parallel for schedule(dynamic, 30000)
     for (size_t i = 0; i < points.size(); ++i) {
-        if (processed[i])
+        if (!claim_point(i)) {
             continue;
+        }
 
         std::vector<size_t> cluster_indices;
         std::queue<size_t> search_queue;
 
         search_queue.push(i);
-        processed[i] = true;
 
         while (!search_queue.empty()) {
             size_t idx = search_queue.front();
@@ -66,8 +81,7 @@ std::vector<std::vector<Eigen::Vector3f>> clusterPointsKDTree(
 
             for (auto& match: matches) {
                 size_t j = match.first;
-                if (!processed[j]) {
-                    processed[j] = true;
+                if (claim_point(j)) {
                     search_queue.push(j);
                 }
             }

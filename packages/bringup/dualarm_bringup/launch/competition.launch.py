@@ -7,6 +7,7 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 import os
+from pathlib import Path
 
 
 SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
@@ -14,6 +15,14 @@ SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
 
 def _as_bool(value) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _find_repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in [current.parent, *current.parents]:
+        if (parent / "STATE.md").exists() and (parent / "packages").is_dir():
+            return parent
+    return Path.cwd()
 
 
 def validate_depth_configuration(config: dict) -> None:
@@ -65,6 +74,7 @@ def _include(package_name: str, relative_launch: str, condition=None, launch_arg
 def generate_launch_description():
     detector_adapter_share = get_package_share_directory("detector_adapter")
     detector_share = get_package_share_directory("detector")
+    default_object_geometry_file = str(_find_repo_root() / "config" / "competition" / "object_geometry.yaml")
     left_gripper_port_default = (
         "/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A7BIb114J19-if00-port0"
     )
@@ -180,6 +190,7 @@ def generate_launch_description():
             DeclareLaunchArgument("left_camera_color_device", default_value="auto"),
             DeclareLaunchArgument("left_camera_depth_device", default_value="auto"),
             DeclareLaunchArgument("left_camera_depth_backend", default_value="auto"),
+            DeclareLaunchArgument("left_camera_depth_obsensor_index", default_value="0"),
             DeclareLaunchArgument("left_camera_enable_depth", default_value="true"),
             DeclareLaunchArgument("left_camera_fps", default_value="5.0"),
             DeclareLaunchArgument("left_camera_color_topic", default_value="/left_camera/color/image_raw"),
@@ -213,6 +224,7 @@ def generate_launch_description():
             DeclareLaunchArgument("detector_device", default_value=""),
             DeclareLaunchArgument("detector_allowed_class_ids", default_value="[0,1,2,3,4,5]"),
             DeclareLaunchArgument("detector_class_map_file", default_value=default_detector_class_map),
+            DeclareLaunchArgument("object_geometry_file", default_value=default_object_geometry_file),
             DeclareLaunchArgument("depth_require_depth_aligned_detections", default_value="true"),
             DeclareLaunchArgument("depth_require_camera_info_depth_frame", default_value="true"),
             DeclareLaunchArgument("depth_expected_detection_frame", default_value="left_camera_color_frame"),
@@ -256,8 +268,35 @@ def generate_launch_description():
             DeclareLaunchArgument("robot_state_age_limit_ms", default_value="100"),
             DeclareLaunchArgument("planning_time", default_value="5.0"),
             DeclareLaunchArgument("planning_attempts", default_value="10"),
+            DeclareLaunchArgument("allow_dual_arm_sequential_fallback", default_value="false"),
+            DeclareLaunchArgument("apply_default_tcp_orientation_to_dual_pose_targets", default_value="false"),
             DeclareLaunchArgument("allow_vendor_direct_cartesian", default_value="false"),
             DeclareLaunchArgument("vendor_direct_cartesian_profiles", default_value=""),
+            DeclareLaunchArgument("use_sim_time", default_value="false"),
+            DeclareLaunchArgument("scene_fusion_input_topics", default_value="['/perception/left/scene_objects','/perception/right/scene_objects','/perception/left/ball_basket_scene_objects','/perception/right/ball_basket_scene_objects','/perception/table_scene_objects']"),
+            DeclareLaunchArgument("scene_fusion_rgb_detection_topics", default_value="['/perception/right/detection_2d']"),
+            DeclareLaunchArgument("execution_backend", default_value="hardware"),
+            DeclareLaunchArgument("simulation_mode", default_value="false"),
+            DeclareLaunchArgument("sim_grasp_contact_threshold_m", default_value="0.04"),
+            DeclareLaunchArgument("sim_contact_retry_max", default_value="2"),
+            DeclareLaunchArgument("sim_robot_state_freshness_max_age_s", default_value="0.5"),
+            DeclareLaunchArgument("sim_visual_playback_rate_hz", default_value="20.0"),
+            DeclareLaunchArgument("sim_basket_accept_radius_m", default_value="0.15"),
+            DeclareLaunchArgument("sim_basket_accept_z_below_rim_m", default_value="0.05"),
+            DeclareLaunchArgument("sim_basketball_pregrasp_left_joints_rad", default_value="0.25 -0.75 1.15 0.0 0.55 0.0"),
+            DeclareLaunchArgument("sim_basketball_pregrasp_right_joints_rad", default_value="-0.25 -0.75 1.15 0.0 0.55 0.0"),
+            DeclareLaunchArgument("sim_soccer_ball_pregrasp_left_joints_rad", default_value="-0.10 -0.75 1.15 0.0 0.55 0.0"),
+            DeclareLaunchArgument("sim_soccer_ball_pregrasp_right_joints_rad", default_value="0.10 -0.75 1.15 0.0 0.55 0.0"),
+            DeclareLaunchArgument("sim_basketball_release_left_joints_rad", default_value="0.0 -0.8 1.2 0.0 0.6 0.0"),
+            DeclareLaunchArgument("sim_basketball_release_right_joints_rad", default_value="0.0 -0.8 1.2 0.0 0.6 0.0"),
+            DeclareLaunchArgument("sim_soccer_ball_release_left_joints_rad", default_value="0.0 -0.8 1.2 0.0 0.6 0.0"),
+            DeclareLaunchArgument("sim_soccer_ball_release_right_joints_rad", default_value="0.0 -0.8 1.2 0.0 0.6 0.0"),
+            DeclareLaunchArgument("sim_bottle_grasp_right_joints_rad", default_value="-1.094 -0.985 1.319 -0.354 0.803 0.390"),
+            DeclareLaunchArgument("sim_cup_grasp_left_joints_rad", default_value="2.248 -1.144 0.507 -0.089 0.343 -0.090"),
+            DeclareLaunchArgument("sim_cap_workspace_left_joints_rad", default_value="2.248 -1.144 0.507 -0.089 0.343 -0.090"),
+            DeclareLaunchArgument("sim_pour_tilt_right_joints_rad", default_value="-1.094 -0.985 1.319 -0.354 0.803 1.000"),
+            DeclareLaunchArgument("sim_place_left_joints_rad", default_value="2.428 -1.082 0.486 -0.283 0.997 -0.609"),
+            DeclareLaunchArgument("sim_place_right_joints_rad", default_value="-1.000 -1.000 1.200 -0.200 1.000 0.800"),
             OpaqueFunction(function=_validate_depth_configuration),
             _include(
                 "tf_node",
@@ -287,6 +326,7 @@ def generate_launch_description():
                     "color_frame_id": LaunchConfiguration("left_camera_color_frame"),
                     "depth_frame_id": LaunchConfiguration("left_camera_depth_frame"),
                     "rotate_180": LaunchConfiguration("left_camera_rotate_180"),
+                    "depth_obsensor_index": LaunchConfiguration("left_camera_depth_obsensor_index"),
                     "v4l2_depth_unit_to_mm_scale": LaunchConfiguration("camera_v4l2_depth_unit_to_mm_scale"),
                 }.items(),
             ),
@@ -345,6 +385,7 @@ def generate_launch_description():
                     "camera_info_topic": LaunchConfiguration("left_camera_depth_info_topic"),
                     "depth_topic": LaunchConfiguration("left_camera_depth_topic"),
                     "detection_topic": LaunchConfiguration("left_detection_2d_topic"),
+                    "object_geometry_file": LaunchConfiguration("object_geometry_file"),
                     "bbox3d_topic": "/depth_handler/left/bbox3d",
                     "scene_objects_topic": "/perception/left/scene_objects",
                     "pointcloud_topic": "/depth_handler/left/pointcloud",
@@ -364,6 +405,7 @@ def generate_launch_description():
                     "camera_info_topic": LaunchConfiguration("right_camera_depth_info_topic"),
                     "depth_topic": LaunchConfiguration("right_camera_depth_topic"),
                     "detection_topic": LaunchConfiguration("right_detection_2d_topic"),
+                    "object_geometry_file": LaunchConfiguration("object_geometry_file"),
                     "bbox3d_topic": "/depth_handler/right/bbox3d",
                     "scene_objects_topic": "/perception/right/scene_objects",
                     "pointcloud_topic": "/depth_handler/right/pointcloud",
@@ -410,8 +452,8 @@ def generate_launch_description():
                 "scene_fusion",
                 "scene_fusion.launch.py",
                 launch_arguments={
-                    "scene_fusion_input_topics": "['/perception/left/scene_objects','/perception/right/scene_objects','/perception/left/ball_basket_scene_objects','/perception/right/ball_basket_scene_objects','/perception/table_scene_objects']",
-                    "scene_fusion_rgb_detection_topics": "['/perception/right/detection_2d']",
+                    "scene_fusion_input_topics": LaunchConfiguration("scene_fusion_input_topics"),
+                    "scene_fusion_rgb_detection_topics": LaunchConfiguration("scene_fusion_rgb_detection_topics"),
                 }.items(),
             ),
             _include("planning_scene_sync", "planning_scene_sync.launch.py"),
@@ -423,6 +465,7 @@ def generate_launch_description():
                 "move_group.launch.py",
                 launch_arguments={
                     "publish_fake_joint_states": LaunchConfiguration("publish_fake_joint_states"),
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
                     "left_base_xyz": LaunchConfiguration("left_base_xyz"),
                     "left_base_rpy": LaunchConfiguration("left_base_rpy"),
                     "right_base_xyz": LaunchConfiguration("right_base_xyz"),
@@ -441,6 +484,10 @@ def generate_launch_description():
                     "robot_state_age_limit_ms": LaunchConfiguration("robot_state_age_limit_ms"),
                     "planning_time": LaunchConfiguration("planning_time"),
                     "planning_attempts": LaunchConfiguration("planning_attempts"),
+                    "allow_dual_arm_sequential_fallback": LaunchConfiguration("allow_dual_arm_sequential_fallback"),
+                    "apply_default_tcp_orientation_to_dual_pose_targets": LaunchConfiguration(
+                        "apply_default_tcp_orientation_to_dual_pose_targets"
+                    ),
                 }.items(),
             ),
             _include(
@@ -457,9 +504,36 @@ def generate_launch_description():
                     "right_gripper_status_topic": "/gripper1/epg50_gripper/status_stream",
                     "allow_vendor_direct_cartesian": LaunchConfiguration("allow_vendor_direct_cartesian"),
                     "vendor_direct_cartesian_profiles": LaunchConfiguration("vendor_direct_cartesian_profiles"),
+                    "execution_backend": LaunchConfiguration("execution_backend"),
+                    "sim_grasp_contact_threshold_m": LaunchConfiguration("sim_grasp_contact_threshold_m"),
+                    "sim_contact_retry_max": LaunchConfiguration("sim_contact_retry_max"),
+                    "sim_robot_state_freshness_max_age_s": LaunchConfiguration("sim_robot_state_freshness_max_age_s"),
+                    "sim_visual_playback_rate_hz": LaunchConfiguration("sim_visual_playback_rate_hz"),
                 }.items(),
             ),
-            _include("dualarm_task_manager", "dualarm_task_manager.launch.py"),
+            _include(
+                "dualarm_task_manager",
+                "dualarm_task_manager.launch.py",
+                launch_arguments={
+                    "simulation_mode": LaunchConfiguration("simulation_mode"),
+                    "basket_accept_radius_m": LaunchConfiguration("sim_basket_accept_radius_m"),
+                    "basket_accept_z_below_rim_m": LaunchConfiguration("sim_basket_accept_z_below_rim_m"),
+                    "sim_basketball_pregrasp_left_joints_rad": LaunchConfiguration("sim_basketball_pregrasp_left_joints_rad"),
+                    "sim_basketball_pregrasp_right_joints_rad": LaunchConfiguration("sim_basketball_pregrasp_right_joints_rad"),
+                    "sim_soccer_ball_pregrasp_left_joints_rad": LaunchConfiguration("sim_soccer_ball_pregrasp_left_joints_rad"),
+                    "sim_soccer_ball_pregrasp_right_joints_rad": LaunchConfiguration("sim_soccer_ball_pregrasp_right_joints_rad"),
+                    "sim_basketball_release_left_joints_rad": LaunchConfiguration("sim_basketball_release_left_joints_rad"),
+                    "sim_basketball_release_right_joints_rad": LaunchConfiguration("sim_basketball_release_right_joints_rad"),
+                    "sim_soccer_ball_release_left_joints_rad": LaunchConfiguration("sim_soccer_ball_release_left_joints_rad"),
+                    "sim_soccer_ball_release_right_joints_rad": LaunchConfiguration("sim_soccer_ball_release_right_joints_rad"),
+                    "sim_bottle_grasp_right_joints_rad": LaunchConfiguration("sim_bottle_grasp_right_joints_rad"),
+                    "sim_cup_grasp_left_joints_rad": LaunchConfiguration("sim_cup_grasp_left_joints_rad"),
+                    "sim_cap_workspace_left_joints_rad": LaunchConfiguration("sim_cap_workspace_left_joints_rad"),
+                    "sim_pour_tilt_right_joints_rad": LaunchConfiguration("sim_pour_tilt_right_joints_rad"),
+                    "sim_place_left_joints_rad": LaunchConfiguration("sim_place_left_joints_rad"),
+                    "sim_place_right_joints_rad": LaunchConfiguration("sim_place_right_joints_rad"),
+                }.items(),
+            ),
             _include(
                 "competition_start_gate",
                 "competition_start_gate.launch.py",

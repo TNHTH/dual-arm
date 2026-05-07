@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,10 +14,15 @@ from typing import Dict, List, Optional, Tuple
 import rclpy
 from ament_index_python.packages import get_package_prefix
 from geometry_msgs.msg import PoseStamped
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.action import ActionClient, ActionServer, CancelResponse, GoalResponse
 from rclpy.action import graph as action_graph
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from sensor_msgs.msg import JointState
+from std_msgs.msg import String
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import yaml
 
 from behavior_contract import BehaviorGripperCommand, BehaviorPlanExecutionCall, BehaviorPrimitiveCall, summarize_behavior_call
@@ -24,8 +30,8 @@ from behaviors.cap_pour_boundary import CAP_POUR_BEHAVIOR_STATES, build_cap_pour
 from behaviors.handover_boundary import HANDOVER_BEHAVIOR_STATES, build_handover_behavior_call
 from dualarm_interfaces.action import ExecutePrimitive, ExecuteTrajectory, RunCompetition
 from dualarm_interfaces.msg import GraspTarget, SceneObject, SceneObjectArray, TaskEvent
-from dualarm_interfaces.srv import PlanPose, ReleaseObject, ReserveObject, SetGripper, SetObjectInteraction, TaskCommand
-from task_contract import normalize_task_sequence, parse_task_sequence, rank_scene_objects
+from dualarm_interfaces.srv import PlanJoint, PlanPose, ReleaseObject, ReserveObject, SetGripper, SetObjectInteraction, TaskCommand
+from task_contract import handover_ball_semantic_for_state, normalize_task_sequence, parse_task_sequence, rank_scene_objects
 
 
 POURING_TABLE_REQUIRED_STATES = {
@@ -62,6 +68,30 @@ class DualArmTaskManagerNode(Node):
         self.declare_parameter("reobserve_once_enabled", True)
         self.declare_parameter("reobserve_once_timeout_sec", 1.5)
         self.declare_parameter("reobserve_once_interval_sec", 0.05)
+        self.declare_parameter("simulation_mode", False)
+        self.declare_parameter("basket_accept_radius_m", 0.15)
+        self.declare_parameter("basket_accept_z_below_rim_m", 0.05)
+        joint_param_descriptor = ParameterDescriptor(dynamic_typing=True)
+        self.declare_parameter("sim_home_left_joints_rad", [0.0, -0.8, 1.2, 0.0, 0.6, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_home_right_joints_rad", [0.0, -0.8, 1.2, 0.0, 0.6, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_home_duration_s", 1.0)
+        self.declare_parameter("sim_basketball_pregrasp_left_joints_rad", [0.25, -0.75, 1.15, 0.0, 0.55, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_basketball_pregrasp_right_joints_rad", [-0.25, -0.75, 1.15, 0.0, 0.55, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_soccer_ball_pregrasp_left_joints_rad", [-0.10, -0.75, 1.15, 0.0, 0.55, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_soccer_ball_pregrasp_right_joints_rad", [0.10, -0.75, 1.15, 0.0, 0.55, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_basketball_release_left_joints_rad", [0.0, -0.8, 1.2, 0.0, 0.6, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_basketball_release_right_joints_rad", [0.0, -0.8, 1.2, 0.0, 0.6, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_soccer_ball_release_left_joints_rad", [0.0, -0.8, 1.2, 0.0, 0.6, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_soccer_ball_release_right_joints_rad", [0.0, -0.8, 1.2, 0.0, 0.6, 0.0], joint_param_descriptor)
+        self.declare_parameter("sim_bottle_grasp_right_joints_rad", [-1.094, -0.985, 1.319, -0.354, 0.803, 0.390], joint_param_descriptor)
+        self.declare_parameter("sim_cup_grasp_left_joints_rad", [2.248, -1.144, 0.507, -0.089, 0.343, -0.090], joint_param_descriptor)
+        self.declare_parameter("sim_cap_workspace_left_joints_rad", [2.248, -1.144, 0.507, -0.089, 0.343, -0.090], joint_param_descriptor)
+        self.declare_parameter("sim_pour_tilt_right_joints_rad", [-1.094, -0.985, 1.319, -0.354, 0.803, 1.000], joint_param_descriptor)
+        self.declare_parameter("sim_place_left_joints_rad", [2.428, -1.082, 0.486, -0.283, 0.997, -0.609], joint_param_descriptor)
+        self.declare_parameter("sim_place_right_joints_rad", [-1.000, -1.000, 1.200, -0.200, 1.000, 0.800], joint_param_descriptor)
+        self.declare_parameter("sim_truth_command_topic", "/simulation/truth_command")
+        self.declare_parameter("sim_pour_event_topic", "/simulation/pour_event")
+        self.declare_parameter("sim_pour_state_topic", "/competition/pour_state")
 
         self._scene_cache = SceneObjectArray()
         self._grasp_targets: Dict[str, GraspTarget] = {}
@@ -71,9 +101,12 @@ class DualArmTaskManagerNode(Node):
         self._last_plan = None
         self._last_plan_digest = ""
         self._last_behavior_call = None
+        self._latest_pour_state: Dict[str, object] = {}
         self._start_immediately = False
         self._start_gate_source = ""
         self._config_fingerprint = ""
+        self._scene_callback_group = ReentrantCallbackGroup()
+        self._client_callback_group = ReentrantCallbackGroup()
         self._checkpoint_dir = Path(str(self.get_parameter("checkpoint_dir").value))
         self._checkpoint_dir.mkdir(parents=True, exist_ok=True)
         (self._checkpoint_dir / "runs").mkdir(parents=True, exist_ok=True)
@@ -82,22 +115,172 @@ class DualArmTaskManagerNode(Node):
         workspace_profiles = yaml.safe_load(workspace_profiles_file.read_text(encoding="utf-8"))
         active_profile_name = str(workspace_profiles.get("active_profile", "competition_default"))
         self._active_workspace_profile = workspace_profiles.get("profiles", {}).get(active_profile_name, {})
-        self._reobserve_once_enabled = bool(self.get_parameter("reobserve_once_enabled").value)
+        self._reobserve_once_enabled = self._parse_bool(self.get_parameter("reobserve_once_enabled").value)
         self._reobserve_once_timeout_sec = float(self.get_parameter("reobserve_once_timeout_sec").value)
         self._reobserve_once_interval_sec = float(self.get_parameter("reobserve_once_interval_sec").value)
-
+        self._simulation_mode = self._parse_bool(self.get_parameter("simulation_mode").value)
+        self._basket_accept_radius_m = float(self.get_parameter("basket_accept_radius_m").value)
+        self._basket_accept_z_below_rim_m = float(self.get_parameter("basket_accept_z_below_rim_m").value)
+        self._sim_home_left_joints = self._parse_joint_sequence(
+            self.get_parameter("sim_home_left_joints_rad").value,
+            [0.0, -0.8, 1.2, 0.0, 0.6, 0.0],
+        )
+        self._sim_home_right_joints = self._parse_joint_sequence(
+            self.get_parameter("sim_home_right_joints_rad").value,
+            [0.0, -0.8, 1.2, 0.0, 0.6, 0.0],
+        )
+        self._sim_home_duration_s = float(self.get_parameter("sim_home_duration_s").value)
+        self._sim_ball_pregrasp_joints = {
+            "basketball": (
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_basketball_pregrasp_left_joints_rad").value,
+                    [0.25, -0.75, 1.15, 0.0, 0.55, 0.0],
+                ),
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_basketball_pregrasp_right_joints_rad").value,
+                    [-0.25, -0.75, 1.15, 0.0, 0.55, 0.0],
+                ),
+            ),
+            "soccer_ball": (
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_soccer_ball_pregrasp_left_joints_rad").value,
+                    [-0.10, -0.75, 1.15, 0.0, 0.55, 0.0],
+                ),
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_soccer_ball_pregrasp_right_joints_rad").value,
+                    [0.10, -0.75, 1.15, 0.0, 0.55, 0.0],
+                ),
+            ),
+        }
+        self._sim_ball_release_joints = {
+            "basketball": (
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_basketball_release_left_joints_rad").value,
+                    [0.0, -0.8, 1.2, 0.0, 0.6, 0.0],
+                ),
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_basketball_release_right_joints_rad").value,
+                    [0.0, -0.8, 1.2, 0.0, 0.6, 0.0],
+                ),
+            ),
+            "soccer_ball": (
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_soccer_ball_release_left_joints_rad").value,
+                    [0.0, -0.8, 1.2, 0.0, 0.6, 0.0],
+                ),
+                self._parse_joint_sequence(
+                    self.get_parameter("sim_soccer_ball_release_right_joints_rad").value,
+                    [0.0, -0.8, 1.2, 0.0, 0.6, 0.0],
+                ),
+            ),
+        }
+        self._sim_pouring_joints = {
+            "bottle_grasp": self._parse_joint_sequence(
+                self.get_parameter("sim_bottle_grasp_right_joints_rad").value,
+                [-1.094, -0.985, 1.319, -0.354, 0.803, 0.390],
+            ),
+            "cup_grasp": self._parse_joint_sequence(
+                self.get_parameter("sim_cup_grasp_left_joints_rad").value,
+                [2.248, -1.144, 0.507, -0.089, 0.343, -0.090],
+            ),
+            "cap_workspace": self._parse_joint_sequence(
+                self.get_parameter("sim_cap_workspace_left_joints_rad").value,
+                [2.248, -1.144, 0.507, -0.089, 0.343, -0.090],
+            ),
+            "pour_tilt": self._parse_joint_sequence(
+                self.get_parameter("sim_pour_tilt_right_joints_rad").value,
+                [-1.094, -0.985, 1.319, -0.354, 0.803, 1.000],
+            ),
+            "place_left": self._parse_joint_sequence(
+                self.get_parameter("sim_place_left_joints_rad").value,
+                [2.428, -1.082, 0.486, -0.283, 0.997, -0.609],
+            ),
+            "place_right": self._parse_joint_sequence(
+                self.get_parameter("sim_place_right_joints_rad").value,
+                [-1.000, -1.000, 1.200, -0.200, 1.000, 0.800],
+            ),
+        }
         self._event_publisher = self.create_publisher(TaskEvent, "/task_manager/events", 10)
-        self.create_subscription(SceneObjectArray, "/scene_fusion/scene_objects", self._handle_scene, 10)
-        self.create_subscription(GraspTarget, "/planning/grasp_targets", self._handle_grasp_target, 10)
+        self._sim_truth_command_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("sim_truth_command_topic").value),
+            10,
+        )
+        self._sim_pour_event_pub = self.create_publisher(
+            String,
+            str(self.get_parameter("sim_pour_event_topic").value),
+            10,
+        )
+        self.create_subscription(
+            SceneObjectArray,
+            "/scene_fusion/scene_objects",
+            self._handle_scene,
+            10,
+            callback_group=self._scene_callback_group,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("sim_pour_state_topic").value),
+            self._handle_pour_state,
+            10,
+            callback_group=self._scene_callback_group,
+        )
+        self.create_subscription(
+            GraspTarget,
+            "/planning/grasp_targets",
+            self._handle_grasp_target,
+            10,
+            callback_group=self._scene_callback_group,
+        )
 
-        self._plan_pose_client = self.create_client(PlanPose, "/planning/plan_pose")
-        self._reserve_client = self.create_client(ReserveObject, "/scene/reserve_object")
-        self._release_client = self.create_client(ReleaseObject, "/scene/release_object")
-        self._set_gripper_client = self.create_client(SetGripper, "/execution/set_gripper")
-        self._set_object_interaction_client = self.create_client(SetObjectInteraction, "/scene/set_object_interaction")
-        self._execute_client = ActionClient(self, ExecuteTrajectory, "/execution/execute_trajectory")
-        self._primitive_client = ActionClient(self, ExecutePrimitive, "/execution/execute_primitive")
-        self.create_service(TaskCommand, "/task/command", self._handle_task_command)
+        self._plan_pose_client = self.create_client(
+            PlanPose,
+            "/planning/plan_pose",
+            callback_group=self._client_callback_group,
+        )
+        self._plan_joint_client = self.create_client(
+            PlanJoint,
+            "/planning/plan_joint",
+            callback_group=self._client_callback_group,
+        )
+        self._reserve_client = self.create_client(
+            ReserveObject,
+            "/scene/reserve_object",
+            callback_group=self._client_callback_group,
+        )
+        self._release_client = self.create_client(
+            ReleaseObject,
+            "/scene/release_object",
+            callback_group=self._client_callback_group,
+        )
+        self._set_gripper_client = self.create_client(
+            SetGripper,
+            "/execution/set_gripper",
+            callback_group=self._client_callback_group,
+        )
+        self._set_object_interaction_client = self.create_client(
+            SetObjectInteraction,
+            "/scene/set_object_interaction",
+            callback_group=self._client_callback_group,
+        )
+        self._execute_client = ActionClient(
+            self,
+            ExecuteTrajectory,
+            "/execution/execute_trajectory",
+            callback_group=self._client_callback_group,
+        )
+        self._primitive_client = ActionClient(
+            self,
+            ExecutePrimitive,
+            "/execution/execute_primitive",
+            callback_group=self._client_callback_group,
+        )
+        self.create_service(
+            TaskCommand,
+            "/task/command",
+            self._handle_task_command,
+            callback_group=self._client_callback_group,
+        )
 
         self._action_server = ActionServer(
             self,
@@ -108,6 +291,22 @@ class DualArmTaskManagerNode(Node):
             cancel_callback=self._cancel_callback,
         )
         self.get_logger().info("dualarm_task_manager 已启动")
+
+    def _parse_bool(self, value) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _parse_joint_sequence(self, value, fallback: List[float]) -> List[float]:
+        if isinstance(value, str):
+            raw = value.replace(",", " ").split()
+            parsed = [float(item) for item in raw]
+        else:
+            parsed = [float(item) for item in value]
+        if len(parsed) != 6:
+            self.get_logger().warn(f"sim home joint 参数长度必须为 6，使用默认值: {fallback}")
+            return list(fallback)
+        return parsed
 
     def _goal_callback(self, _goal_request: RunCompetition.Goal) -> GoalResponse:
         return GoalResponse.ACCEPT
@@ -185,6 +384,12 @@ class DualArmTaskManagerNode(Node):
 
     def _handle_grasp_target(self, message: GraspTarget) -> None:
         self._grasp_targets[message.object_id] = message
+
+    def _handle_pour_state(self, message: String) -> None:
+        try:
+            self._latest_pour_state = json.loads(message.data)
+        except json.JSONDecodeError:
+            self.get_logger().warn(f"忽略非法 /competition/pour_state JSON: {message.data}")
 
     def _count_action_servers(self, action_name: str) -> int:
         count = 0
@@ -387,6 +592,11 @@ class DualArmTaskManagerNode(Node):
         if state == "ASSIGN_BOTTLES_AND_CUPS":
             return self._assign_table_objects()
 
+        if self._simulation_mode:
+            sim_result = self._execute_sim_pouring_state(state)
+            if sim_result is not None:
+                return sim_result
+
         plan_states = {
             "PLAN_BIMANUAL_BALL_1_PREGRASP": ("basketball", "pregrasp", "handover_ball_1"),
             "PLAN_BIMANUAL_BALL_2_PREGRASP": ("soccer_ball", "pregrasp", "handover_ball_2"),
@@ -406,8 +616,14 @@ class DualArmTaskManagerNode(Node):
             return self._execute_behavior_call(state, behavior_call)
 
         if state in {"VERIFY_BALL_1_DROP", "VERIFY_BALL_2_DROP"}:
-            object_id = self._assignments.get("basketball" if state.endswith("1") else "soccer_ball")
-            return self._verify_drop_in_basket(object_id)
+            object_id = self._assignments.get(handover_ball_semantic_for_state(state))
+            ok, detail = self._verify_drop_in_basket(object_id)
+            basket = self._find_object("basket", allowed_states=("stable", "reserved", "attached"))
+            if basket is not None and self._reservation_owner(basket.reserved_by):
+                self._release(basket.id)
+            if ok:
+                detail = f"{detail}; basket reservation released"
+            return ok, detail
 
         if state == "GRASP_WATER_BOTTLE_BODY":
             return self._direct_grasp("water_bottle", "water_task")
@@ -438,6 +654,7 @@ class DualArmTaskManagerNode(Node):
             missing = []
             service_checks = [
                 ("/planning/plan_pose", self._plan_pose_client.wait_for_service(timeout_sec=0.1)),
+                ("/planning/plan_joint", self._plan_joint_client.wait_for_service(timeout_sec=0.1)),
                 ("/scene/reserve_object", self._reserve_client.wait_for_service(timeout_sec=0.1)),
                 ("/scene/release_object", self._release_client.wait_for_service(timeout_sec=0.1)),
                 ("/execution/set_gripper", self._set_gripper_client.wait_for_service(timeout_sec=0.1)),
@@ -460,11 +677,19 @@ class DualArmTaskManagerNode(Node):
             return True, f"scene frame ready: {frame_id}"
 
         if state == "HOME_ARMS":
-            return self._verify_no_live_allocations("HOME_ARMS")
+            allocation_ok, allocation_detail = self._verify_no_live_allocations("HOME_ARMS")
+            if not allocation_ok:
+                return False, allocation_detail
+            if self._simulation_mode:
+                home_ok, home_detail = self._execute_sim_home_arms()
+                return home_ok, f"{allocation_detail}; {home_detail}"
+            return True, allocation_detail
 
         if state == "WAIT_START":
             if self._start_gate_source == "start_gate_action":
                 return True, "WAIT_START 通过：start gate 已发送授权 RunCompetition goal"
+            if self._simulation_mode and self._start_immediately:
+                return True, "WAIT_START 通过：simulation_mode 允许 start_immediately action goal"
             if self._start_gate_source == "direct_action_goal":
                 return False, "WAIT_START 拒绝直接 action goal；请通过 /competition/start_signal 或 mock/dev 显式 start gate"
             return False, "WAIT_START 缺少合法开赛来源"
@@ -527,12 +752,20 @@ class DualArmTaskManagerNode(Node):
         if not self._reserve(scene_object.id, reserved_by, target.arm_mode):
             return False, f"{scene_object.id} reservation 失败"
         pose = getattr(target, target_field)
-        planner_response = self._call_plan_pose(target.arm_mode, pose)
+        if self._simulation_mode and semantic_type in {"basketball", "soccer_ball"} and target_field == "pregrasp":
+            planner_response = self._call_sim_ball_pregrasp_joint_plan(semantic_type)
+            planner_path = "sim_joint_fallback"
+        elif self._simulation_mode and semantic_type == "basket" and target_field == "release":
+            planner_response = self._call_sim_ball_release_joint_plan(reserved_by)
+            planner_path = "sim_basket_release_joint_fallback"
+        else:
+            planner_response = self._call_plan_pose(target.arm_mode, pose)
+            planner_path = "pose"
         if planner_response is None or not planner_response.success or planner_response.result_code != "success":
             self._release(scene_object.id)
             return False, f"planner 失败: {planner_response.result_code if planner_response else 'no_response'}"
         self._set_last_plan(planner_response)
-        return True, f"planner 成功: {scene_object.id}, scene_version={planner_response.scene_version}"
+        return True, f"planner 成功: {scene_object.id}, path={planner_path}, scene_version={planner_response.scene_version}"
 
     def _direct_grasp(self, semantic_type_or_id: str, reserved_by: str) -> Tuple[bool, str]:
         scene_object = self._find_object_by_id_or_semantic(semantic_type_or_id)
@@ -563,6 +796,162 @@ class DualArmTaskManagerNode(Node):
             return False, f"{scene_object.id} guarded_grasp 失败: {primitive_result.result_code} {primitive_result.message}"
         self._assignments[scene_object.semantic_type] = scene_object.id
         return True, f"{scene_object.id} guarded_grasp 成功"
+
+    def _execute_sim_pouring_state(self, state: str) -> Optional[Tuple[bool, str]]:
+        if state == "GRASP_WATER_BOTTLE_BODY":
+            return self._sim_grasp_object("water_bottle", "water_task")
+        if state == "GRASP_COLA_BOTTLE_BODY":
+            return self._sim_grasp_object("cola_bottle", "cola_task")
+        if state == "GRASP_WATER_CUP":
+            return self._sim_grasp_object(self._assignments.get("cup_water", "cup"), "water_task", assignment_key="cup_water")
+        if state == "GRASP_COLA_CUP":
+            return self._sim_grasp_object(self._assignments.get("cup_cola", "cup"), "cola_task", assignment_key="cup_cola")
+        if state in {"GRASP_WATER_CAP", "GRASP_COLA_CAP", "OPEN_WATER_CAP", "OPEN_COLA_CAP", "PLACE_WATER_CAP", "PLACE_COLA_CAP"}:
+            return self._sim_execute_cap_state(state)
+        if state == "PLAN_WATER_PREPOUR":
+            return self._sim_plan_prepour("water_bottle")
+        if state == "PLAN_COLA_PREPOUR":
+            return self._sim_plan_prepour("cola_bottle")
+        if state == "EXECUTE_WATER_POUR":
+            return self._sim_execute_pour("water_bottle", "cup_water")
+        if state == "EXECUTE_COLA_POUR":
+            return self._sim_execute_pour("cola_bottle", "cup_cola")
+        if state == "PLACE_WATER_BOTTLE":
+            return self._sim_place_object("water_bottle")
+        if state == "PLACE_COLA_BOTTLE":
+            return self._sim_place_object("cola_bottle")
+        if state == "PLACE_WATER_CUP":
+            return self._sim_place_object("cup_water")
+        if state == "PLACE_COLA_CUP":
+            return self._sim_place_object("cup_cola")
+        return None
+
+    def _sim_grasp_object(self, semantic_type_or_id: str, reserved_by: str, assignment_key: str = "") -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(semantic_type_or_id)
+        if scene_object is None:
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_sim_grasp_object", semantic_type_or_id)
+            if reobserve_ok:
+                scene_object = self._find_object_by_id_or_semantic(semantic_type_or_id)
+            if scene_object is None:
+                return False, f"sim grasp 未找到 {semantic_type_or_id}; {reobserve_detail}"
+        target = self._grasp_targets.get(scene_object.id)
+        if target is None:
+            reobserve_ok, reobserve_detail = self._reobserve_once("missing_sim_grasp_target", scene_object.id)
+            if reobserve_ok:
+                target = self._grasp_targets.get(scene_object.id)
+            if target is None:
+                return False, f"sim grasp 缺少 {scene_object.id} grasp target; {reobserve_detail}"
+        arm_group = target.arm_mode if target.arm_mode in {"left_arm", "right_arm"} else self._sim_default_arm_for(scene_object.semantic_type)
+        joints = self._sim_joint_target_for_grasp(scene_object.semantic_type, arm_group)
+        if not self._reserve(scene_object.id, reserved_by, arm_group):
+            return False, f"{scene_object.id} sim reservation 失败"
+        moved, move_detail = self._execute_sim_joint_target(arm_group, joints, f"sim_{scene_object.semantic_type}_grasp_joint_fallback")
+        if not moved:
+            self._release(scene_object.id)
+            return False, move_detail
+        link_name = self._tool_link_for_arm(arm_group)
+        if not self._set_gripper(arm_group, command=2, position=220, object_id=scene_object.id, link_name=link_name, attach=True):
+            self._release(scene_object.id)
+            return False, f"{scene_object.id} sim gripper attach 失败"
+        attached_ok, attached_detail = self._wait_for_object_attached(scene_object.id, timeout_sec=2.0)
+        if not attached_ok:
+            self._release(scene_object.id)
+            return False, attached_detail
+        self._assignments[assignment_key or scene_object.semantic_type] = scene_object.id
+        return True, f"{scene_object.id} sim joint grasp 成功: {move_detail}; {attached_detail}"
+
+    def _sim_execute_cap_state(self, state: str) -> Tuple[bool, str]:
+        bottle_key = "water_bottle" if "WATER" in state else "cola_bottle"
+        object_id = self._assignments.get(bottle_key, "")
+        scene_object = self._find_object_by_id_or_semantic(object_id or bottle_key)
+        if scene_object is None:
+            return False, f"{state} sim cap 缺少 {bottle_key}"
+        if state.startswith("GRASP_"):
+            moved, detail = self._execute_sim_joint_target("left_arm", self._sim_pouring_joints["cap_workspace"], "sim_cap_workspace_joint_fallback")
+            if not moved:
+                return False, detail
+            if not self._set_gripper("left_arm", command=2, position=180):
+                return False, f"{state} sim cap 左夹爪闭合失败"
+            return True, f"{state} sim cap grasp 完成: {detail}"
+        if state.startswith("OPEN_"):
+            if not self._set_object_interaction(
+                object_id=scene_object.id,
+                interaction_mode="opened_split",
+                owner="cap_pour",
+                primary_link=self._tool_link_for_arm("right_arm"),
+                secondary_link=self._tool_link_for_arm("left_arm"),
+                enable=True,
+            ):
+                return False, f"{scene_object.id} sim opened_split 同步失败"
+            opened_ok, opened_detail = self._wait_for_lifecycle(scene_object.id, {"opened_split_active", "opened_split"}, timeout_sec=2.0)
+            return opened_ok, f"{state} sim cap opened: {opened_detail}"
+        if state.startswith("PLACE_"):
+            if not self._set_gripper("left_arm", command=2, position=0):
+                return False, f"{state} sim cap 左夹爪释放失败"
+            return True, f"{state} sim cap release 完成"
+        return False, f"未知 sim cap 状态: {state}"
+
+    def _sim_plan_prepour(self, bottle_key: str) -> Tuple[bool, str]:
+        object_id = self._assignments.get(bottle_key, "")
+        if not object_id:
+            return False, f"sim prepour 缺少 {bottle_key} assignment"
+        planner_response = self._call_plan_joint_for_arm("right_arm", self._sim_pouring_joints["pour_tilt"])
+        if planner_response is None or not planner_response.success or planner_response.result_code != "success":
+            return False, f"{object_id} sim prepour joint planner 失败: {planner_response.result_code if planner_response else 'no_response'}"
+        self._set_last_plan(planner_response)
+        return True, f"planner 成功: {object_id}, path=sim_prepour_joint_fallback, scene_version={planner_response.scene_version}"
+
+    def _sim_execute_pour(self, bottle_key: str, cup_key: str) -> Tuple[bool, str]:
+        bottle_id = self._assignments.get(bottle_key, "")
+        cup_id = self._assignments.get(cup_key, "")
+        if not bottle_id or not cup_id:
+            return False, f"sim pour 缺少 assignment: bottle={bottle_id}, cup={cup_id}"
+        if self._last_plan is None:
+            planned, plan_detail = self._sim_plan_prepour(bottle_key)
+            if not planned:
+                return False, plan_detail
+        action_result = self._execute_plan(self._last_plan)
+        if action_result is None or not action_result.success:
+            return False, f"{bottle_id} sim pour 前置 joint 执行失败: {action_result.result_code if action_result else 'no_response'}"
+        self._sim_publish_pour_event(bottle_id, cup_id, motion_success=True, hold_duration_s=2.0, waypoint_count=1)
+        pour_ok, pour_detail = self._wait_for_sim_pour_evidence(bottle_id, cup_id, timeout_sec=2.0)
+        if not pour_ok:
+            return False, pour_detail
+        return True, f"{bottle_id}->{cup_id} sim pour_tilt 证据通过: {pour_detail}"
+
+    def _sim_place_object(self, assignment_key: str) -> Tuple[bool, str]:
+        object_id = self._assignments.get(assignment_key, assignment_key)
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        target = self._grasp_targets.get(object_id) if object_id else None
+        if scene_object is None or target is None:
+            return False, f"{object_id} sim place 前对象或 target 缺失"
+        arm_group = target.arm_mode if target.arm_mode in {"left_arm", "right_arm"} else self._sim_default_arm_for(scene_object.semantic_type)
+        place_key = "place_right" if arm_group == "right_arm" else "place_left"
+        moved, move_detail = self._execute_sim_joint_target(arm_group, self._sim_pouring_joints[place_key], f"sim_{scene_object.semantic_type}_place_joint_fallback")
+        if not moved:
+            return False, move_detail
+        requires_detach = bool(scene_object.attached_link) and not scene_object.lifecycle_state.startswith("opened_split")
+        if requires_detach:
+            if not self._set_gripper(arm_group, command=2, position=0, object_id=object_id, detach=True):
+                return False, f"{object_id} sim detach 失败"
+        else:
+            if not self._set_gripper(arm_group, command=2, position=0):
+                return False, f"{object_id} sim gripper release 失败"
+        if not self._set_object_interaction(
+            object_id=object_id,
+            interaction_mode="free",
+            owner="",
+            primary_link="",
+            secondary_link="",
+            enable=False,
+        ):
+            return False, f"{object_id} sim interaction free 同步失败"
+        self._sim_publish_truth_pose(object_id, target.place, lifecycle_state="stable")
+        if not self._release(object_id):
+            return False, f"{object_id} sim place 后 release 失败"
+        position_tolerance = target.position_tolerance if target.position_tolerance > 0.0 else 0.08
+        placed_ok, placed_detail = self._verify_placed_near_target(object_id, target.place, position_tolerance)
+        return placed_ok, f"{move_detail}; {placed_detail}"
 
     def _place_object(self, key: str) -> Tuple[bool, str]:
         object_id = self._assignments.get(key, key)
@@ -598,21 +987,37 @@ class DualArmTaskManagerNode(Node):
                 return False, "basket 尚未在 managed scene 中稳定可见"
             if scene_object.attached_link:
                 return False, f"{object_id} 仍 attached 到 {scene_object.attached_link}"
-            if scene_object.reserved_by:
-                return False, f"{object_id} 仍被 {scene_object.reserved_by} 占用"
-            if scene_object.lifecycle_state != "stable":
+            reservation = self._reservation_owner(scene_object.reserved_by)
+            if reservation:
+                return False, f"{object_id} 仍被 {reservation} 占用"
+            accepted_lifecycle_states = {"stable"}
+            if self._simulation_mode and scene_object.source == "sim_truth":
+                accepted_lifecycle_states.add("observed")
+            if scene_object.lifecycle_state not in accepted_lifecycle_states:
                 return False, f"{object_id} 当前 lifecycle_state={scene_object.lifecycle_state}"
-            basket_radius = max(basket.size.x, basket.size.y, 0.18) * 0.6
             dx = scene_object.pose.pose.position.x - basket.pose.pose.position.x
             dy = scene_object.pose.pose.position.y - basket.pose.pose.position.y
-            dz = abs(scene_object.pose.pose.position.z - basket.pose.pose.position.z)
             distance_xy = (dx * dx + dy * dy) ** 0.5
-            vertical_tolerance = max(basket.size.z, 0.12) + 0.10
-            if distance_xy > basket_radius:
-                return False, f"{object_id} 距篮筐中心过远: {distance_xy:.3f}m > {basket_radius:.3f}m"
-            if dz > vertical_tolerance:
-                return False, f"{object_id} 与篮筐高度差过大: {dz:.3f}m > {vertical_tolerance:.3f}m"
-            return True, f"{object_id} 已稳定进入篮筐区域"
+            rim_z = basket.pose.pose.position.z + max(float(basket.size.z), 0.12) * 0.5
+            ball_z = scene_object.pose.pose.position.z
+            required_below_z = rim_z - self._basket_accept_z_below_rim_m
+            if distance_xy >= self._basket_accept_radius_m:
+                return False, (
+                    f"{object_id} 距篮筐中心过远: distance_xy={distance_xy:.3f}m "
+                    f">= accept_radius={self._basket_accept_radius_m:.3f}m; "
+                    f"ball=({scene_object.pose.pose.position.x:.3f},{scene_object.pose.pose.position.y:.3f},{ball_z:.3f}), "
+                    f"basket=({basket.pose.pose.position.x:.3f},{basket.pose.pose.position.y:.3f},{basket.pose.pose.position.z:.3f})"
+                )
+            if ball_z > required_below_z:
+                return False, (
+                    f"{object_id} 未低于筐口足够距离: ball_z={ball_z:.3f}m "
+                    f"> rim_z-margin={required_below_z:.3f}m"
+                )
+            return True, (
+                f"{object_id} 已进入篮筐区域: distance_xy={distance_xy:.3f}m, "
+                f"ball_z={ball_z:.3f}m, basket_z={basket.pose.pose.position.z:.3f}m, rim_z={rim_z:.3f}m, "
+                f"lifecycle_state={scene_object.lifecycle_state}, source={scene_object.source}"
+            )
 
         return self._poll_scene_predicate(predicate, timeout_sec=1.5, interval_sec=0.1)
 
@@ -625,8 +1030,9 @@ class DualArmTaskManagerNode(Node):
                 return False, f"{object_id} 尚未在 managed scene 中稳定可见"
             if scene_object.attached_link:
                 return False, f"{object_id} 仍 attached 到 {scene_object.attached_link}"
-            if scene_object.reserved_by:
-                return False, f"{object_id} 仍被 {scene_object.reserved_by} 占用"
+            reservation = self._reservation_owner(scene_object.reserved_by)
+            if reservation:
+                return False, f"{object_id} 仍被 {reservation} 占用"
             if scene_object.lifecycle_state != "stable":
                 return False, f"{object_id} 当前 lifecycle_state={scene_object.lifecycle_state}"
             distance = self._pose_distance(scene_object.pose, target_pose)
@@ -699,17 +1105,17 @@ class DualArmTaskManagerNode(Node):
         request.reserved_by = reserved_by
         request.arm_mode = arm_mode
         future = self._reserve_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        return future.result() is not None and future.result().success
+        response = self._wait_for_future(future, timeout_sec=2.0)
+        return response is not None and response.success
 
-    def _release(self, object_id: str) -> bool:
+    def _release(self, object_id: str, timeout_sec: float = 2.0) -> bool:
         if not self._release_client.wait_for_service(timeout_sec=0.5):
             return False
         request = ReleaseObject.Request()
         request.object_id = object_id
         future = self._release_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-        return future.result() is not None and future.result().success
+        response = self._wait_for_future(future, timeout_sec=timeout_sec)
+        return response is not None and response.success
 
     def _call_plan_pose(self, arm_group: str, target_pose: PoseStamped):
         if not self._plan_pose_client.wait_for_service(timeout_sec=1.0):
@@ -720,8 +1126,102 @@ class DualArmTaskManagerNode(Node):
         request.planner_id = ""
         request.cartesian = False
         future = self._plan_pose_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
-        return future.result()
+        return self._wait_for_future(future, timeout_sec=5.0)
+
+    def _call_sim_ball_pregrasp_joint_plan(self, semantic_type: str):
+        joints = self._sim_ball_pregrasp_joints.get(semantic_type)
+        if joints is None:
+            return None
+        return self._call_plan_joint("dual_arm", joints[0], joints[1])
+
+    def _call_sim_ball_release_joint_plan(self, reserved_by: str):
+        semantic_type = self._handover_ball_semantic_for_reservation(reserved_by)
+        joints = self._sim_ball_release_joints.get(semantic_type)
+        if joints is None:
+            return None
+        return self._call_plan_joint("dual_arm", joints[0], joints[1])
+
+    def _execute_sim_joint_target(self, arm_group: str, joints: List[float], planner_path: str) -> Tuple[bool, str]:
+        planner_response = self._call_plan_joint_for_arm(arm_group, joints)
+        if planner_response is None or not planner_response.success or planner_response.result_code != "success":
+            return False, f"{planner_path} planner 失败: {planner_response.result_code if planner_response else 'no_response'}"
+        self._set_last_plan(planner_response)
+        executed = self._execute_plan(planner_response)
+        if executed is None or not executed.success:
+            return False, f"{planner_path} 执行失败: {executed.result_code if executed else 'no_response'}"
+        return True, f"{planner_path} MoveIt joint plan+execute 成功, scene_version={planner_response.scene_version}"
+
+    @staticmethod
+    def _handover_ball_semantic_for_reservation(reserved_by: str) -> str:
+        owner = str(reserved_by or "")
+        if "ball_1" in owner:
+            return "basketball"
+        if "ball_2" in owner:
+            return "soccer_ball"
+        return ""
+
+    def _call_plan_joint(self, arm_group: str, left_positions: List[float], right_positions: List[float]):
+        if not self._plan_joint_client.wait_for_service(timeout_sec=1.0):
+            return None
+        request = PlanJoint.Request()
+        request.arm_group = arm_group
+        request.planner_id = ""
+        joint_state = JointState()
+        joint_state.name = [f"left_j{index}" for index in range(1, 7)] + [f"right_j{index}" for index in range(1, 7)]
+        joint_state.position = list(left_positions) + list(right_positions)
+        request.target_joints = joint_state
+        future = self._plan_joint_client.call_async(request)
+        response = self._wait_for_future(future, timeout_sec=10.0)
+        if response is None:
+            return None
+        return SimpleNamespace(
+            success=response.success,
+            message=response.message,
+            scene_version=response.scene_version,
+            start_state_stamp=response.start_state_stamp,
+            result_code=response.result_code,
+            failure_stage=response.failure_stage,
+            synchronized=response.synchronized,
+            primary_arm_group=response.primary_arm_group or "left_arm",
+            secondary_arm_group=response.secondary_arm_group or "right_arm",
+            joint_trajectory=response.joint_trajectory,
+            secondary_joint_trajectory=response.secondary_joint_trajectory,
+            cartesian_waypoints=[],
+            planning_time_ms=response.planning_time_ms,
+        )
+
+    def _call_plan_joint_for_arm(self, arm_group: str, positions: List[float]):
+        if arm_group not in {"left_arm", "right_arm"}:
+            return None
+        if not self._plan_joint_client.wait_for_service(timeout_sec=1.0):
+            return None
+        request = PlanJoint.Request()
+        request.arm_group = arm_group
+        request.planner_id = ""
+        joint_state = JointState()
+        prefix = "left" if arm_group == "left_arm" else "right"
+        joint_state.name = [f"{prefix}_j{index}" for index in range(1, 7)]
+        joint_state.position = list(positions)
+        request.target_joints = joint_state
+        future = self._plan_joint_client.call_async(request)
+        response = self._wait_for_future(future, timeout_sec=10.0)
+        if response is None:
+            return None
+        return SimpleNamespace(
+            success=response.success,
+            message=response.message,
+            scene_version=response.scene_version,
+            start_state_stamp=response.start_state_stamp,
+            result_code=response.result_code,
+            failure_stage=response.failure_stage,
+            synchronized=response.synchronized,
+            primary_arm_group=response.primary_arm_group or arm_group,
+            secondary_arm_group=response.secondary_arm_group,
+            joint_trajectory=response.joint_trajectory,
+            secondary_joint_trajectory=response.secondary_joint_trajectory,
+            cartesian_waypoints=[],
+            planning_time_ms=response.planning_time_ms,
+        )
 
     def _execute_plan(self, planner_response):
         if not self._execute_client.wait_for_server(timeout_sec=1.0):
@@ -736,17 +1236,55 @@ class DualArmTaskManagerNode(Node):
         goal.use_cartesian_execution = False
         goal.execution_profile = "default"
         goal_future = self._execute_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, goal_future, timeout_sec=2.0)
-        goal_handle = goal_future.result()
+        goal_handle = self._wait_for_future(goal_future, timeout_sec=2.0)
         if goal_handle is None:
             return SimpleNamespace(success=False, result_code="goal_send_timeout")
         if not goal_handle.accepted:
             return SimpleNamespace(success=False, result_code="goal_rejected")
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future, timeout_sec=15.0)
-        if result_future.result() is None:
+        result = self._wait_for_future(result_future, timeout_sec=15.0)
+        if result is None:
             return SimpleNamespace(success=False, result_code="result_timeout")
-        return result_future.result().result
+        return result.result
+
+    def _execute_sim_home_arms(self) -> Tuple[bool, str]:
+        if not self._execute_client.wait_for_server(timeout_sec=1.0):
+            return False, "sim HOME_ARMS 执行器不可用"
+        goal = ExecuteTrajectory.Goal()
+        goal.arm_group = "dual_arm"
+        goal.secondary_arm_group = "right_arm"
+        goal.joint_trajectory = self._build_home_joint_trajectory("left", self._sim_home_left_joints)
+        goal.secondary_joint_trajectory = self._build_home_joint_trajectory("right", self._sim_home_right_joints)
+        goal.cartesian_waypoints = []
+        goal.synchronized = True
+        goal.use_cartesian_execution = False
+        goal.execution_profile = "sim_home_arms"
+        goal_future = self._execute_client.send_goal_async(goal)
+        goal_handle = self._wait_for_future(goal_future, timeout_sec=2.0)
+        if goal_handle is None:
+            return False, "sim HOME_ARMS goal 发送超时"
+        if not goal_handle.accepted:
+            return False, "sim HOME_ARMS goal 被拒绝"
+        result_future = goal_handle.get_result_async()
+        result_wrapper = self._wait_for_future(result_future, timeout_sec=10.0)
+        if result_wrapper is None:
+            return False, "sim HOME_ARMS result 等待超时"
+        result = result_wrapper.result
+        if not result.success:
+            return False, f"sim HOME_ARMS 执行失败: {result.result_code} {result.message}"
+        return True, "sim HOME_ARMS 已执行到无桌面碰撞 home joints"
+
+    def _build_home_joint_trajectory(self, prefix: str, positions: List[float]) -> JointTrajectory:
+        trajectory = JointTrajectory()
+        trajectory.header.frame_id = "world"
+        trajectory.joint_names = [f"{prefix}_j{index}" for index in range(1, 7)]
+        point = JointTrajectoryPoint()
+        point.positions = list(positions)
+        whole_seconds = max(self._sim_home_duration_s, 0.1)
+        point.time_from_start.sec = int(whole_seconds)
+        point.time_from_start.nanosec = int((whole_seconds - int(whole_seconds)) * 1_000_000_000)
+        trajectory.points.append(point)
+        return trajectory
 
     def _execute_primitive_action(
         self,
@@ -776,17 +1314,16 @@ class DualArmTaskManagerNode(Node):
         goal.hold_duration_s = hold_duration_s
         goal.synchronized = synchronized
         goal_future = self._primitive_client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(self, goal_future, timeout_sec=2.0)
-        goal_handle = goal_future.result()
+        goal_handle = self._wait_for_future(goal_future, timeout_sec=2.0)
         if goal_handle is None:
             return SimpleNamespace(success=False, message="primitive goal 发送超时", result_code="goal_send_timeout")
         if not goal_handle.accepted:
             return SimpleNamespace(success=False, message="primitive goal 被拒绝", result_code="goal_rejected")
         result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future, timeout_sec=20.0)
-        if result_future.result() is None:
+        result_wrapper = self._wait_for_future(result_future, timeout_sec=20.0)
+        if result_wrapper is None:
             return SimpleNamespace(success=False, message="primitive result 等待超时", result_code="result_timeout")
-        return result_future.result().result
+        return result_wrapper.result
 
     def _set_gripper(
         self,
@@ -812,8 +1349,8 @@ class DualArmTaskManagerNode(Node):
         request.attach_on_success = attach
         request.detach_on_success = detach
         future = self._set_gripper_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=5.0)
-        return future.result() is not None and future.result().success
+        response = self._wait_for_future(future, timeout_sec=5.0)
+        return response is not None and response.success
 
     def _write_pending_checkpoint(self, run_id: str, completed_states: List[str], next_state: str) -> None:
         data = self._checkpoint_payload(run_id, completed_states, next_state, pending_transition=next_state)
@@ -856,9 +1393,9 @@ class DualArmTaskManagerNode(Node):
             "selected_objects": dict(self._assignments),
             "assignments": self._assignments,
             "reserved_objects": [
-                {"id": obj.id, "reserved_by": obj.reserved_by}
+                {"id": obj.id, "reserved_by": self._reservation_owner(obj.reserved_by)}
                 for obj in self._scene_cache.objects
-                if obj.reserved_by
+                if self._reservation_owner(obj.reserved_by)
             ],
             "attached_objects": [
                 {"id": obj.id, "attached_link": obj.attached_link}
@@ -913,6 +1450,12 @@ class DualArmTaskManagerNode(Node):
         self._last_behavior_call = summarize_behavior_call(state, call)
         if isinstance(call, BehaviorPlanExecutionCall):
             return self._execute_behavior_plan_call(call)
+        if getattr(call, "execute_last_plan", False):
+            if self._last_plan is None:
+                return False, "行为 primitive 调用缺少可执行规划结果"
+            action_result = self._execute_plan(self._last_plan)
+            if not action_result.success:
+                return False, f"行为 primitive 前置规划执行失败: {action_result.result_code}"
         primitive_result = self._execute_primitive_action(
             primitive_id=call.primitive_id,
             arm_group=call.arm_group,
@@ -925,6 +1468,10 @@ class DualArmTaskManagerNode(Node):
             hold_duration_s=call.hold_duration_s,
             synchronized=call.synchronized,
         )
+        if primitive_result.success and call.primitive_id == "release_guard" and call.object_id:
+            release_timeout = 12.0 if self._simulation_mode else 2.0
+            if not self._release(call.object_id, timeout_sec=release_timeout):
+                return False, f"{call.object_id} release_guard 后 reservation release 失败"
         return primitive_result.success, primitive_result.message
 
     def _execute_behavior_plan_call(self, call: BehaviorPlanExecutionCall) -> Tuple[bool, str]:
@@ -985,15 +1532,137 @@ class DualArmTaskManagerNode(Node):
         request.secondary_link = secondary_link
         request.enable = enable
         future = self._set_object_interaction_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=3.0)
-        return future.result() is not None and future.result().success
+        response = self._wait_for_future(future, timeout_sec=3.0)
+        return response is not None and response.success
+
+    @staticmethod
+    def _tool_link_for_arm(arm_group: str) -> str:
+        return "right_tcp" if arm_group == "right_arm" else "left_tcp"
+
+    @staticmethod
+    def _sim_default_arm_for(semantic_type: str) -> str:
+        return "left_arm" if semantic_type.startswith("cup") else "right_arm"
+
+    def _sim_joint_target_for_grasp(self, semantic_type: str, arm_group: str) -> List[float]:
+        if semantic_type.startswith("cup") or arm_group == "left_arm":
+            return self._sim_pouring_joints["cup_grasp"]
+        return self._sim_pouring_joints["bottle_grasp"]
+
+    def _wait_for_object_attached(self, object_id: str, timeout_sec: float) -> Tuple[bool, str]:
+        return self._poll_scene_predicate(
+            lambda: self._object_attached_predicate(object_id),
+            timeout_sec=timeout_sec,
+            interval_sec=0.1,
+        )
+
+    def _object_attached_predicate(self, object_id: str) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None:
+            return False, f"{object_id} 尚未进入 managed scene"
+        if scene_object.attached_link:
+            return True, f"{object_id} attached_link={scene_object.attached_link}"
+        return False, f"{object_id} 尚未 attached, lifecycle_state={scene_object.lifecycle_state}"
+
+    def _wait_for_lifecycle(self, object_id: str, states: set[str], timeout_sec: float) -> Tuple[bool, str]:
+        return self._poll_scene_predicate(
+            lambda: self._lifecycle_predicate(object_id, states),
+            timeout_sec=timeout_sec,
+            interval_sec=0.1,
+        )
+
+    def _lifecycle_predicate(self, object_id: str, states: set[str]) -> Tuple[bool, str]:
+        scene_object = self._find_object_by_id_or_semantic(object_id)
+        if scene_object is None:
+            return False, f"{object_id} 尚未进入 managed scene"
+        if scene_object.lifecycle_state in states:
+            return True, f"{object_id} lifecycle_state={scene_object.lifecycle_state}"
+        return False, f"{object_id} lifecycle_state={scene_object.lifecycle_state}, expected={sorted(states)}"
+
+    def _sim_publish_truth_pose(self, object_id: str, pose: PoseStamped, lifecycle_state: str = "stable") -> None:
+        msg = String()
+        msg.data = json.dumps(
+            {
+                "action": "set_pose",
+                "object_id": object_id,
+                "pose": [
+                    float(pose.pose.position.x),
+                    float(pose.pose.position.y),
+                    float(pose.pose.position.z),
+                    float(pose.pose.orientation.x),
+                    float(pose.pose.orientation.y),
+                    float(pose.pose.orientation.z),
+                    float(pose.pose.orientation.w),
+                ],
+                "lifecycle_state": lifecycle_state,
+                "attached_link": "",
+                "reserved_by": "none",
+            },
+            ensure_ascii=False,
+        )
+        self._sim_truth_command_pub.publish(msg)
+
+    def _sim_publish_pour_event(
+        self,
+        bottle_id: str,
+        cup_id: str,
+        motion_success: bool,
+        hold_duration_s: float,
+        waypoint_count: int,
+    ) -> None:
+        msg = String()
+        msg.data = json.dumps(
+            {
+                "object_id": bottle_id,
+                "reference_object_id": cup_id,
+                "bottle": bottle_id,
+                "cup": cup_id,
+                "motion_success": bool(motion_success),
+                "hold_duration_s": float(hold_duration_s),
+                "tilt_waypoint_count": int(waypoint_count),
+                "evidence_confidence": 0.9,
+                "spill_detected": False,
+            },
+            ensure_ascii=False,
+        )
+        self._sim_pour_event_pub.publish(msg)
+
+    def _wait_for_sim_pour_evidence(self, bottle_id: str, cup_id: str, timeout_sec: float) -> Tuple[bool, str]:
+        deadline = time.monotonic() + timeout_sec
+        last_state = dict(self._latest_pour_state)
+        while time.monotonic() < deadline:
+            last_state = dict(self._latest_pour_state)
+            if bool(last_state.get("fill_target_reached", False)):
+                bottle_match = str(last_state.get("bottle", "")) in {"", bottle_id}
+                cup_match = str(last_state.get("cup", "")) in {"", cup_id}
+                if bottle_match and cup_match:
+                    return True, (
+                        f"fill_target_reached=true, mass={float(last_state.get('estimated_poured_mass_g', 0.0)):.1f}g, "
+                        f"confidence={float(last_state.get('evidence_confidence', 0.0)):.2f}"
+                    )
+            time.sleep(0.05)
+        return False, f"/competition/pour_state 未确认 fill_target_reached: {last_state}"
+
+    @staticmethod
+    def _wait_for_future(future, timeout_sec: float):
+        done = threading.Event()
+        future.add_done_callback(lambda _future: done.set())
+        if not future.done():
+            done.wait(timeout=max(float(timeout_sec), 0.0))
+        if not future.done():
+            return None
+        return future.result()
 
     def _verify_no_live_allocations(self, state: str) -> Tuple[bool, str]:
         attached = [obj.id for obj in self._scene_cache.objects if obj.attached_link]
-        reserved = [obj.id for obj in self._scene_cache.objects if obj.reserved_by]
+        reserved = [obj.id for obj in self._scene_cache.objects if self._reservation_owner(obj.reserved_by)]
         if attached or reserved:
             return False, f"{state} 前仍有 live allocation: attached={attached}, reserved={reserved}"
         return True, f"{state} 前未检测到 live allocation"
+
+    @staticmethod
+    def _reservation_owner(raw_owner: str) -> str:
+        owner = str(raw_owner or "").strip()
+        return "" if owner.lower() in {"", "none", "null"} else owner
 
     def _poll_scene_predicate(self, predicate, timeout_sec: float, interval_sec: float) -> Tuple[bool, str]:
         deadline = time.monotonic() + timeout_sec

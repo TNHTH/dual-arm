@@ -48,6 +48,7 @@ find_package(message_filters REQUIRED)
 find_package(rosidl_default_generators REQUIRED) # 确保在此处添加
 find_package(OpenMP QUIET) # OpenMP 可选
 find_package(visualization_msgs REQUIRED) # 添加 visualization_msgs 依赖
+find_package(yaml_cpp_vendor REQUIRED)
 
 # 添加TF2相关依赖
 find_package(tf2 REQUIRED)
@@ -93,6 +94,7 @@ ament_target_dependencies(depth_processor_node
   tf2_ros
   tf2_eigen
   tf2_geometry_msgs
+  yaml_cpp_vendor
 )
 
 # 添加编译选项以启用OpenMP
@@ -134,6 +136,7 @@ ament_export_dependencies(
   tf2_ros
   tf2_eigen
   tf2_geometry_msgs
+  yaml_cpp_vendor
 )
 
 # 需要添加的其他导出
