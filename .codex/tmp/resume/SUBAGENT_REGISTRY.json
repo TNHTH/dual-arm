@@ -1,0 +1,153 @@
+{
+  "updated_at": "2026-05-07",
+  "task": "right arm depth model practice control",
+  "agents": [
+    {
+      "role": "right_arm_architecture_review_and_grasp_handoff",
+      "status": "local_main_thread_closed_no_live_ros_graph_next_window_prompt_ready",
+      "summary": "本轮未使用 subagent。主线程按用户要求停止继续实机动作，右臂最后有效状态 motion_done=true/error_code=0，TCP 约 [-226.135,-262.203,236.498,-171.249,38.941,37.351] mm/deg；右夹爪打开 position=0、gobj=3、error=0。已执行两段 MoveIt/执行适配器 pregrasp 靠近和一段视觉恢复，未合爪，未调用 /competition/run，未做双臂协作。ClaudeCode 架构审查被登记为下窗口首要任务：先处理主链/quick/sim 分裂、Orbbec bridge/camera matrix/执行层/launch/config/实机脚本重复，再重新 bringup 右臂并重新采 precheck 接续夹取。提示词写入 .codex/tmp/resume/NEXT_WINDOW_PROMPT_2026-05-07-right-arm-architecture-and-grasp.md。"
+    },
+    {
+      "role": "right_arm_practice_motion_and_j6_orientation",
+      "status": "local_main_thread_in_progress_waiting_operator_visual_confirmation",
+      "summary": "本轮未使用 subagent。主线程按用户要求拉起右臂相机可视化，用户现场确认 /dev/video14 是右臂相机；对比 HDU-PHOENIX/FairinoDualArm 后按参考格式优化 MoveCart 请求。右臂实机完成 Z -20mm x2 和 XY 矩形组合路径，累计请求路径 120mm，最终 motion_done=true、error_code=0。随后用户要求调整 J6 让相机在上方；直接 /R/robot_move MoveJ 到 J6=45deg 失败，错误码 14，已 StopMotion/ResetAllError 收口；改用 ServoMoveStart + /R/robot_servo_joint + ServoMoveEnd 小步 J6 +10deg 成功，J6 到约 10.16deg，等待用户从视觉窗口确认方向后继续。"
+    },
+    {
+      "role": "right_arm_depth_model_practice_control",
+      "status": "local_main_thread_in_progress_waiting_field_safety_confirmation",
+      "summary": "本轮按用户要求使用相关 skills 规划并执行：实现 right_arm_grasp_precheck.py，完成 py_compile、禁用动作 endpoint 静态扫描、git diff --check、tools 构建和 no-motion 预检。脚本检测到 cocacola，目标深度模型有效，但 obstacle clearance gate 失败且右相机外参仍 candidate，因此不允许自动抓取。当前等待现场确认短语后才启动右臂控制节点并发送一次低速 Z +2.0 mm 增量 jog。未使用 subagent。"
+    },
+    {
+      "role": "right_arm_motion_stop_and_scripted_geometry_handoff",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "用户准备开新窗口接续，并要求后续几何全部脚本计算。本轮未使用 subagent；主线程记录右臂低速 Z +3.0 mm 增量测试后 motion_done=false 的风险，直连 Fairino SDK StopMotion 返回 ret=0，停止后连续 5 帧 /R/robot_state 为 motion_done=true、error_code=0，/right_robo_ctrl 已停止且 ROS_DOMAIN_ID=0 node list 为空。下一步只允许先实现 no-motion right_arm_grasp_precheck.py 脚本，输出 JSON 后再讨论任何小步 motion。"
+    },
+    {
+      "role": "right_arm_single_arm_grasp_precheck",
+      "status": "local_main_thread_completed_fail_closed_no_subagent",
+      "summary": "用户要求用右臂深度相机和既有链路尝试单臂夹取，并确认现场无人、右相机视野有障碍物。本轮未使用 subagent；主线程停止右侧 color-only 可视化以释放深度设备，右臂 robo_ctrl 只读接入成功，/R/robot_state 约 4.995 Hz 且 motion_done=true、error_code=0。YOLOv8 在右彩色快照检测到 cocacola，confidence 0.894；原生 V4L2 ioctl/mmap 读取 /dev/video0 Z16 成功，目标 ROI raw depth p05=555、median=676。但深度单位存在 0.125x 与 raw=mm 冲突，且缺可信 Rtcp/right_tcp -> right_camera_depth_frame 外参，color/depth 未正式对齐；因此真实夹取/靠近/合爪被 fail-closed 拒绝。未调用运动、夹爪或 /competition/run。"
+    },
+    {
+      "role": "right_camera_confirmed_right_arm_readonly_control_precheck",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "用户现场确认当前 /dev/video6 / CP02653000G2 画面是右侧相机，并要求尝试控制机械臂。本轮未使用 subagent；主线程仅做 no-motion 前置检查和右臂只读状态接入。ROS_DOMAIN_ID=0 初始仅有右相机/检测可视化节点；192.168.58.2:8080 与 192.168.58.3:8080 均可达。受控前台会话启动右臂 robo_ctrl_node 后 /R/robot_state 约 4.995 Hz，采样帧 motion_done=true、error_code=0；未调用任何 /R/robot_move、/R/robot_servo、夹爪命令或 /competition/run。前台会话已停止。"
+    },
+    {
+      "role": "right_arm_candidate_camera_color_viz",
+      "status": "local_main_thread_running_no_subagent",
+      "summary": "用户要求拉起右臂相机可视化并询问双臂坐标系安全。本轮未使用 subagent；主线程停止误命名为 right_camera 但用户现场确认实际为左机械臂相机的 /dev/video16 链路，改用 CP02653000G2 /dev/video6 启动右机械臂候选彩色-only 可视化和 CPU detector overlay。/right_camera/color/image_raw 约 13.9-15.0 Hz，/detector/right/detections/image 约 15.0 Hz。右深度/table overlay 未通过，双臂外参/指尖模型未 verified，不能声明协作运动或互碰安全。未执行实机运动、夹爪动作或 /competition/run。"
+    },
+    {
+      "role": "hardware_code_review_p1_crash_risk_repair",
+      "status": "local_main_thread_completed_partial_runtime_stress_no_subagent",
+      "summary": "用户要求执行 P1 崩溃风险批次。本轮未使用 subagent；主线程完成异常返回、const_cast、KDTree atomic claim、planner/depth/PlanningSceneSync/legacy 快照锁、LwDetr 生命周期和 console stop 竞态修复。验证为 py_compile、P0/P1 pytest、git diff --check、活跃核心包构建和 detector 单独构建；后续补充 KDTree、PlanningSceneSync cache、competition_console stop 三项 runtime stress 并通过。planner/depth_processor/legacy、Servo failure injection、LwDetr CUDA/TensorRT runtime 仍缺证据；legacy fairino3_v6_planner 因 COLCON_IGNORE 未构建。未执行实机运动、夹爪动作或 /competition/run。"
+    },
+    {
+      "role": "hardware_code_review_p0_safety_repair",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "用户要求执行代码审查修复计划。本轮只完成 P0 安全批次的软件/mock/no-motion 修复与验证：keyboard mm->m、robo_ctrl 急停 gate、quick stop_all fail-closed、compat fake-success 拒绝、rclpy shutdown 生命周期。未使用 subagent，未执行实机运动、夹爪动作或 /competition/run。"
+    },
+    {
+      "role": "gazebo_full_sim_quick_hybrid",
+      "status": "local_main_thread_active_no_new_subagents",
+      "summary": "当前任务为正式 Gazebo 主链仿真闭环 + quick hybrid computed-template 融合。因此前 Claude Code sidecar 两次未返回可用证据，本任务剩余阶段不打开非必要 subagent；实现、审查、验证先走本地主线程 checklist。当前状态为半实现未验证，详见 STATE.md 与 docs/operations/reports/2026-05-06-gazebo-full-sim-quick-hybrid-progress.md。"
+    },
+    {
+      "role": "quick_competition_claude_code_scout",
+      "agent_type": "claude_code_sidecar",
+      "status": "failed_budget_local_fallback",
+      "summary": "按用户要求尝试 Claude Code 只读 Scout；第一次 CLI 参数模式失败，第二次超过 0.50 USD 预算且未返回可用证据。主线程已用本地 rg/sed、pytest、colcon、launch smoke 和 software_check 完成核对。"
+    },
+    {
+      "role": "v1_hardware_interface_hardening",
+      "status": "local_main_thread_completed",
+      "summary": "未开启 subagent；主线程完成接口、launch、感知字段、PlanningScene subframes、planner 参数、execution_adapter、task_manager、evidence_manager、测试与验证。"
+    },
+    {
+      "role": "software_hardening_orchestrator",
+      "status": "local_main_thread_active",
+      "summary": "主线程负责 Wave 0-6 实施、验证、提交和推送；subagent 仅用于非阻塞、窄范围、只读 reviewer/verifier，使用后立即关闭。宽泛 final review 改走本地 checklist。"
+    },
+    {
+      "role": "subagent_timeout_policy",
+      "status": "implemented",
+      "summary": "已新增 docs/operations/runbooks/subagent-timeout-policy.md，并更新 AGENTS.md、engineering-process-standards.md、auto-pipeline skill、wave-executor skill；同一任务两次超时后停用非必要 subagent。"
+    },
+    {
+      "role": "software_hardening_security_reviewer",
+      "agent_type": "reviewer",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 1 完成后已开启只读 reviewer，但 120 秒未返回；已及时关闭，主线程用 py_compile、colcon build、diff check 和静态搜索完成本地复核。"
+    },
+    {
+      "id": "019dc803-c68d-74b1-97b1-c345c8bf088b",
+      "role": "software_hardening_wave5_reviewer",
+      "agent_type": "reviewer",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 5 完成第一轮模块拆分后开启只读 reviewer，但 120 秒未返回；已及时关闭。主线程用 py_compile、pytest、npm build、colcon build 和 software_check 完成本地复核。"
+    },
+    {
+      "role": "software_hardening_final_verifier",
+      "agent_type": "verifier",
+      "id": "019dc80c-b7bc-7a80-b3e5-dd13b1dc27fc",
+      "status": "timed_out_closed_local_fallback",
+      "summary": "Wave 6 最终 staged diff 后已开启只读 verifier，但 180 秒未返回；已及时关闭。主线程完成 readme/path checks、software_check、colcon test-result、git diff --check 和 staged sensitive scan。"
+    },
+    {
+      "role": "perception",
+      "status": "resumable",
+      "summary": "已确认左臂相机正式拓扑应为 left_camera 基准 + 独立 depth/color sensor frame；球筐需要 detection-driven 3D，瓶杯继续走 depth_handler。"
+    },
+    {
+      "role": "planning_execution",
+      "status": "resumable",
+      "summary": "已确认 planning_scene_sync 需真接 ApplyPlanningScene；planner 继续负责接近/搬运，开盖和倒水下沉到 ExecutePrimitive。"
+    },
+    {
+      "role": "task_acceptance",
+      "status": "resumable",
+      "summary": "已确认 dualarm_task_manager 存在关键占位成功、PLACE 伪完成、VERIFY_BALL 伪闭环，需改成真实判定与恢复路径。"
+    },
+    {
+      "role": "references",
+      "status": "resumable",
+      "summary": "已收集 MoveIt 官方 PlanningScene 文档、RLBench、双臂开盖/倒水/handover 论文与项目页作为实现参考。"
+    },
+    {
+      "role": "web_console_worker",
+      "status": "errored_502_fallback_local",
+      "summary": "实现 worker 502，主线程已本地创建 competition_console_api 与 competition_console_web，并完成 build / API health / Playwright smoke。"
+    },
+    {
+      "role": "migration_docs_worker",
+      "status": "errored_502_fallback_local",
+      "summary": "文档 worker 502，主线程已本地创建 migration、control-plane、wave-gates 文档骨架。"
+    },
+    {
+      "role": "repo_reorg_docs_researcher",
+      "agent_type": "docs_researcher",
+      "status": "completed_closed",
+      "summary": "已核对 GitHub README、ROS 2、colcon 等资料约定，为根 README、repo map、path migration map 和 README 分层规则提供参考依据。"
+    },
+    {
+      "role": "repo_reorg_repo_explorer",
+      "agent_type": "repo_explorer",
+      "status": "completed_closed",
+      "summary": "已完成 README 缺口矩阵、目录迁移清单、旧路径热点和旧仓库抽取矩阵的只读审计，支撑 packages/vendor/archive/docs 目录收口。"
+    },
+    {
+      "id": "019d970b-e8ec-7392-a635-66234093e43f",
+      "role": "repo_reorg_reviewer",
+      "agent_type": "reviewer",
+      "status": "completed_closed",
+      "summary": "静态 review 结论为 no P0/P1 findings；残余风险仅剩 STATE.md 中旧 src 叙述，已在主线程收口时修正。"
+    },
+    {
+      "id": "019d970b-e939-7cf0-9148-536c6d653ca5",
+      "role": "repo_reorg_verifier",
+      "agent_type": "verifier",
+      "status": "completed_closed",
+      "summary": "已验证 README 覆盖、路径治理、build groups、packages/src 包发现一致性、launch smoke 和 workspace acceptance；仅发现 competition_console_api README 轻微缺口，主线程已补齐。"
+    }
+  ]
+}

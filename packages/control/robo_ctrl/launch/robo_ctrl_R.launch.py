@@ -14,6 +14,10 @@ def generate_launch_description():
     robot_port = LaunchConfiguration("robot_port")
     robot_name = LaunchConfiguration("robot_name")
     state_query_interval = LaunchConfiguration("state_query_interval")
+    motion_done_timeout_sec = LaunchConfiguration("motion_done_timeout_sec")
+    max_velocity_percent = LaunchConfiguration("max_velocity_percent")
+    max_acceleration_percent = LaunchConfiguration("max_acceleration_percent")
+    max_ovl_percent = LaunchConfiguration("max_ovl_percent")
     start_high_level = LaunchConfiguration("start_high_level")
 
     return LaunchDescription(
@@ -24,6 +28,12 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "state_query_interval", default_value="0.01", description="机器人状态查询周期（秒）"
             ),
+            DeclareLaunchArgument(
+                "motion_done_timeout_sec", default_value="60.0", description="等待运动完成的超时时间（秒）"
+            ),
+            DeclareLaunchArgument("max_velocity_percent", default_value="100.0", description="最大速度百分比"),
+            DeclareLaunchArgument("max_acceleration_percent", default_value="100.0", description="最大加速度百分比"),
+            DeclareLaunchArgument("max_ovl_percent", default_value="100.0", description="最大速度缩放百分比"),
             DeclareLaunchArgument(
                 "start_high_level",
                 default_value="false",
@@ -40,6 +50,10 @@ def generate_launch_description():
                         "robot_port": robot_port,
                         "robot_name": robot_name,
                         "state_query_interval": state_query_interval,
+                        "motion_done_timeout_sec": motion_done_timeout_sec,
+                        "max_velocity_percent": max_velocity_percent,
+                        "max_acceleration_percent": max_acceleration_percent,
+                        "max_ovl_percent": max_ovl_percent,
                     }
                 ],
                 output="screen",

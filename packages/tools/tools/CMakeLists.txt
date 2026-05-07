@@ -204,6 +204,8 @@ install(PROGRAMS
   scripts/evaluate_table_calibration_run.py
   scripts/keyboard_ctrl.py
   scripts/pick_assist_auto_grasp.py
+  scripts/right_arm_grasp_precheck.py
+  scripts/right_arm_autonomous_grasp_attempt.py
   scripts/single_arm_pick_debug.py
   scripts/smoke_dual_camera_scene_dedup.py
   scripts/smoke_dual_camera_scene_fusion.py

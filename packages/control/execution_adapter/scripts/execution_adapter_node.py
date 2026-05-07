@@ -89,6 +89,16 @@ class ExecutionAdapterNode(Node):
         self.declare_parameter("sim_truth_command_topic", "/simulation/truth_command")
         self.declare_parameter("sim_pour_event_topic", "/simulation/pour_event")
         self.declare_parameter("sim_pour_state_topic", "/competition/pour_state")
+        self.declare_parameter("trajectory_servo_joint_acc", 2.0)
+        self.declare_parameter("trajectory_servo_joint_vel", 2.0)
+        self.declare_parameter("trajectory_servo_joint_cmd_time", 0.02)
+        self.declare_parameter("trajectory_servo_joint_filter_time", 0.02)
+        self.declare_parameter("trajectory_servo_joint_gain", 0.0)
+        self.declare_parameter("trajectory_servo_joint_completion_margin_s", 0.5)
+        self.declare_parameter("trajectory_servo_joint_motion_done_timeout_s", 12.0)
+        self.declare_parameter("trajectory_servo_joint_resample_enabled", True)
+        self.declare_parameter("trajectory_servo_joint_duration_cmd_time", 0.10)
+        self.declare_parameter("trajectory_servo_joint_max_resampled_points", 800)
         self._left_gripper_slave_id = int(self.get_parameter("left_gripper_slave_id").value)
         self._right_gripper_slave_id = int(self.get_parameter("right_gripper_slave_id").value)
         self._left_gripper_command_service = str(self.get_parameter("left_gripper_command_service").value)
@@ -112,6 +122,31 @@ class ExecutionAdapterNode(Node):
         self._sim_contact_retry_max = int(self.get_parameter("sim_contact_retry_max").value)
         self._sim_robot_state_freshness_max_age_s = float(self.get_parameter("sim_robot_state_freshness_max_age_s").value)
         self._sim_visual_playback_rate_hz = max(float(self.get_parameter("sim_visual_playback_rate_hz").value), 1.0)
+        self._trajectory_servo_joint_acc = self._clamp_percent_parameter("trajectory_servo_joint_acc")
+        self._trajectory_servo_joint_vel = self._clamp_percent_parameter("trajectory_servo_joint_vel")
+        self._trajectory_servo_joint_cmd_time = max(
+            float(self.get_parameter("trajectory_servo_joint_cmd_time").value), 0.001
+        )
+        self._trajectory_servo_joint_filter_time = max(
+            float(self.get_parameter("trajectory_servo_joint_filter_time").value), 0.0
+        )
+        self._trajectory_servo_joint_gain = max(float(self.get_parameter("trajectory_servo_joint_gain").value), 0.0)
+        self._trajectory_servo_joint_completion_margin_s = max(
+            float(self.get_parameter("trajectory_servo_joint_completion_margin_s").value), 0.0
+        )
+        self._trajectory_servo_joint_motion_done_timeout_s = max(
+            float(self.get_parameter("trajectory_servo_joint_motion_done_timeout_s").value), 0.0
+        )
+        self._trajectory_servo_joint_resample_enabled = self._parse_bool(
+            self.get_parameter("trajectory_servo_joint_resample_enabled").value
+        )
+        self._trajectory_servo_joint_duration_cmd_time = max(
+            float(self.get_parameter("trajectory_servo_joint_duration_cmd_time").value),
+            self._trajectory_servo_joint_cmd_time,
+        )
+        self._trajectory_servo_joint_max_resampled_points = max(
+            int(self.get_parameter("trajectory_servo_joint_max_resampled_points").value), 1
+        )
         self._reentrant_group = ReentrantCallbackGroup()
 
         self._robot_move_clients: Dict[str, any] = {
@@ -226,7 +261,16 @@ class ExecutionAdapterNode(Node):
             cancel_callback=self._cancel_callback,
             callback_group=self._reentrant_group,
         )
-        self.get_logger().info(f"execution_adapter 已启动，backend={self._execution_backend}")
+        self.get_logger().info(
+            f"execution_adapter 已启动，backend={self._execution_backend}，"
+            f"ServoJ vel={self._trajectory_servo_joint_vel:.1f} "
+            f"acc={self._trajectory_servo_joint_acc:.1f} "
+            f"cmd_time={self._trajectory_servo_joint_cmd_time:.3f} "
+            f"filter_time={self._trajectory_servo_joint_filter_time:.3f} "
+            f"completion_margin={self._trajectory_servo_joint_completion_margin_s:.2f}s "
+            f"resample={self._trajectory_servo_joint_resample_enabled} "
+            f"duration_cmd_time={self._trajectory_servo_joint_duration_cmd_time:.3f}"
+        )
 
     def _parse_profile_list(self, value) -> set[str]:
         if isinstance(value, str):
@@ -245,6 +289,16 @@ class ExecutionAdapterNode(Node):
         if isinstance(value, bool):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _clamp_percent_parameter(self, parameter_name: str) -> float:
+        value = float(self.get_parameter(parameter_name).value)
+        if value < 0.1:
+            self.get_logger().warn(f"{parameter_name}={value} 过低，钳制到 0.1")
+            return 0.1
+        if value > 100.0:
+            self.get_logger().warn(f"{parameter_name}={value} 过高，钳制到 100.0")
+            return 100.0
+        return value
 
     def _wait_future(self, future, timeout_sec: float):
         deadline = time.monotonic() + max(timeout_sec, 0.0)
@@ -943,7 +997,11 @@ class ExecutionAdapterNode(Node):
         response = self._wait_future(future, 10.0)
         if response is None:
             return False, f"{arm_group} 的关节执行超时"
-        return bool(response.success), response.message
+        if not bool(response.success):
+            return False, response.message
+        if not self._wait_for_hardware_servo_completion(arm_group, len(request.joint_positions)):
+            return False, f"{arm_group} ServoJ 执行后未在超时内确认 motion_done=true"
+        return True, f"{response.message}; 已等待 ServoJ 执行窗口并确认 motion_done=true"
 
     def _execute_dual_arm(self, primary_joint_trajectory, secondary_joint_trajectory) -> tuple[bool, str, str, bool, bool, bool, bool, float]:
         if self._sim_mode():
@@ -981,6 +1039,10 @@ class ExecutionAdapterNode(Node):
             return False, left_response.message, "primary_abort", True, True, False, right_success, sync_skew_ms
         if not right_success:
             return False, right_response.message, "secondary_abort", True, True, left_success, False, sync_skew_ms
+        left_done = self._wait_for_hardware_servo_completion("left_arm", len(left_request.joint_positions))
+        right_done = self._wait_for_hardware_servo_completion("right_arm", len(right_request.joint_positions))
+        if not left_done or not right_done:
+            return False, "双臂 ServoJ 执行后未在超时内确认 motion_done=true", "timeout", True, True, left_done, right_done, sync_skew_ms
         return True, "双臂执行成功", "success", True, True, True, True, sync_skew_ms
 
     def _sim_play_joint_trajectory(self, arm_group: str, joint_trajectory) -> tuple[bool, str]:
@@ -1101,19 +1163,99 @@ class ExecutionAdapterNode(Node):
     def _build_servo_joint_request(self, joint_trajectory) -> RobotServoJoint.Request:
         request = RobotServoJoint.Request()
         request.command_type = 0
-        request.acc = 30.0
-        request.vel = 30.0
-        request.cmd_time = 0.01
-        request.filter_time = 0.003
-        request.gain = 0.0
+        request.acc = self._trajectory_servo_joint_acc
+        request.vel = self._trajectory_servo_joint_vel
+        request.cmd_time = self._trajectory_servo_joint_cmd_time
+        request.filter_time = self._trajectory_servo_joint_filter_time
+        request.gain = self._trajectory_servo_joint_gain
         request.use_incremental = False
         request.joint_positions = []
-        for point in joint_trajectory.points:
+        positions = self._resample_servo_joint_positions(joint_trajectory)
+        if len(positions) != len(joint_trajectory.points):
+            self.get_logger().info(
+                f"ServoJ 轨迹重采样: original_points={len(joint_trajectory.points)} "
+                f"resampled_points={len(positions)} cmd_time={self._trajectory_servo_joint_cmd_time:.3f}"
+            )
+        for position in positions:
             joint_state = JointState()
             joint_state.name = list(joint_trajectory.joint_names)
-            joint_state.position = [math.degrees(value) for value in point.positions]
+            joint_state.position = [math.degrees(value) for value in position]
             request.joint_positions.append(joint_state)
         return request
+
+    def _resample_servo_joint_positions(self, joint_trajectory) -> List[List[float]]:
+        raw_positions = [list(point.positions) for point in joint_trajectory.points]
+        if not raw_positions or not self._trajectory_servo_joint_resample_enabled:
+            return raw_positions
+        if len(raw_positions) < 2:
+            return raw_positions
+        target_duration_s = float(len(raw_positions)) * self._trajectory_servo_joint_duration_cmd_time
+        target_count = max(
+            len(raw_positions),
+            int(math.ceil(target_duration_s / max(self._trajectory_servo_joint_cmd_time, 1e-6))),
+        )
+        target_count = min(target_count, self._trajectory_servo_joint_max_resampled_points)
+        if target_count <= len(raw_positions):
+            return raw_positions
+        span = float(len(raw_positions) - 1)
+        resampled: List[List[float]] = []
+        for index in range(target_count):
+            position_on_raw = span * float(index) / float(target_count - 1)
+            lower = int(math.floor(position_on_raw))
+            upper = min(lower + 1, len(raw_positions) - 1)
+            ratio = position_on_raw - float(lower)
+            lower_values = raw_positions[lower]
+            upper_values = raw_positions[upper]
+            resampled.append(
+                [
+                    float(low) + (float(high) - float(low)) * ratio
+                    for low, high in zip(lower_values, upper_values)
+                ]
+            )
+        return resampled
+
+    def _hardware_servo_expected_duration_s(self, point_count: int) -> float:
+        driver_window_s = float(point_count) * float(self._trajectory_servo_joint_cmd_time) * 1.10
+        return max(driver_window_s, 0.1) + self._trajectory_servo_joint_completion_margin_s
+
+    def _wait_for_hardware_servo_completion(self, arm_group: str, point_count: int) -> bool:
+        expected_duration_s = self._hardware_servo_expected_duration_s(point_count)
+        self.get_logger().info(
+            f"{arm_group} ServoJ 等待执行窗口 {expected_duration_s:.2f}s "
+            f"(points={point_count}, cmd_time={self._trajectory_servo_joint_cmd_time:.3f})"
+        )
+        self._sleep_with_callbacks(expected_duration_s)
+        return self._wait_for_motion_done(
+            arm_group,
+            timeout_sec=self._trajectory_servo_joint_motion_done_timeout_s,
+            stable_samples=3,
+        )
+
+    def _sleep_with_callbacks(self, duration_sec: float) -> None:
+        deadline = time.monotonic() + max(duration_sec, 0.0)
+        while time.monotonic() < deadline:
+            time.sleep(min(0.05, max(deadline - time.monotonic(), 0.0)))
+
+    def _state_for_arm(self, arm_group: str) -> Optional[RobotState]:
+        return self._right_robot_state if arm_group == "right_arm" else self._left_robot_state
+
+    def _wait_for_motion_done(self, arm_group: str, timeout_sec: float, stable_samples: int = 3) -> bool:
+        deadline = time.monotonic() + max(timeout_sec, 0.0)
+        stable_count = 0
+        while time.monotonic() < deadline:
+            state = self._state_for_arm(arm_group)
+            if state is not None:
+                if int(state.error_code) != 0:
+                    self.get_logger().error(f"{arm_group} robot_state error_code={int(state.error_code)}")
+                    return False
+                if bool(state.motion_done):
+                    stable_count += 1
+                    if stable_count >= stable_samples:
+                        return True
+                else:
+                    stable_count = 0
+            time.sleep(0.1)
+        return False
 
     def _handle_set_gripper(self, request: SetGripper.Request, response: SetGripper.Response):
         response.success = self._set_gripper_internal(
