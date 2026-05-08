@@ -54,6 +54,7 @@ def generate_launch_description():
             DeclareLaunchArgument("camera_color_device", default_value="auto"),
             DeclareLaunchArgument("camera_depth_device", default_value="auto"),
             DeclareLaunchArgument("camera_depth_backend", default_value="auto"),
+            DeclareLaunchArgument("allow_auto_device_scan", default_value="true"),
             DeclareLaunchArgument("start_detector", default_value="true"),
             DeclareLaunchArgument("publish_fake_joint_states", default_value="false"),
             DeclareLaunchArgument("start_gripper", default_value="true"),
@@ -93,6 +94,7 @@ def generate_launch_description():
                     "color_device": LaunchConfiguration("camera_color_device"),
                     "depth_device": LaunchConfiguration("camera_depth_device"),
                     "depth_backend": LaunchConfiguration("camera_depth_backend"),
+                    "allow_auto_device_scan": LaunchConfiguration("allow_auto_device_scan"),
                 }.items(),
             ),
             _include(

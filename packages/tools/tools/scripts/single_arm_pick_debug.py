@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import os
 import time
 from typing import Dict, Optional, Tuple
 
@@ -43,6 +44,8 @@ class SingleArmPickDebug(Node):
         self.declare_parameter("max_total_increment_mm", 260.0)
         self.declare_parameter("cartesian_velocity", 20.0)
         self.declare_parameter("cartesian_acceleration", 20.0)
+        self.declare_parameter("allow_hardware", False)
+        self.declare_parameter("hardware_confirm_token", "")
 
         self._semantic_type = str(self.get_parameter("semantic_type").value).strip()
         self._object_id = str(self.get_parameter("object_id").value).strip()
@@ -65,6 +68,8 @@ class SingleArmPickDebug(Node):
         self._max_total_increment_mm = float(self.get_parameter("max_total_increment_mm").value)
         self._cartesian_velocity = float(self.get_parameter("cartesian_velocity").value)
         self._cartesian_acceleration = float(self.get_parameter("cartesian_acceleration").value)
+        self._allow_hardware = bool(self.get_parameter("allow_hardware").value)
+        self._hardware_confirm_token = str(self.get_parameter("hardware_confirm_token").value)
 
         self._scene_cache = SceneObjectArray()
         self._raw_scene_cache = SceneObjectArray()
@@ -89,6 +94,10 @@ class SingleArmPickDebug(Node):
         self._execute_client = ActionClient(self, ExecuteTrajectory, "/execution/execute_trajectory")
         self._primitive_client = ActionClient(self, ExecutePrimitive, "/execution/execute_primitive")
 
+    def _hardware_gate_passed(self) -> bool:
+        expected_token = os.environ.get("DUALARM_HARDWARE_CONFIRM_TOKEN", "")
+        return bool(self._allow_hardware and expected_token and self._hardware_confirm_token == expected_token)
+
     def _scene_cb(self, message: SceneObjectArray) -> None:
         self._scene_cache = message
 
@@ -105,6 +114,12 @@ class SingleArmPickDebug(Node):
         self._right_robot_state = message
 
     def run(self) -> int:
+        if not self._hardware_gate_passed():
+            self.get_logger().error(
+                "single_arm_pick_debug 默认 no-motion；真实动作必须设置 allow_hardware=true "
+                "且 hardware_confirm_token 匹配 DUALARM_HARDWARE_CONFIRM_TOKEN"
+            )
+            return 5
         dependency_error = self._wait_for_dependencies()
         if dependency_error is not None:
             self.get_logger().error(dependency_error)

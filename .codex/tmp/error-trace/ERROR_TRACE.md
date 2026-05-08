@@ -1,5 +1,25 @@
 # Error Trace
 
+## Maintenance Note 2026-05-08 Dual Arm Camera Alignment
+- Scope: 双臂 no-motion 连接检测与双相机瓶盖单点深度采样。
+- Status: no new runtime incident.
+- Evidence:
+  - 左右机械臂网络和 `8080` TCP 均可达。
+  - 左右 `robo_ctrl` 只读状态发布约 `4.996 Hz`，均 `motion_done=true`、`error_code=0`。
+  - 左 Orbbec `/dev/video6` RGB + `/dev/video0` Z16 采样成功；右 Orbbec `/dev/video14` RGB + `/dev/video8` Z16 采样成功。
+  - `cap_p1` 左右瓶盖像素、ROI 深度和相机点已写入 JSON。
+  - `cap_p2` 左右瓶盖像素、ROI 深度和相机点已写入 JSON。
+  - `cap_p3` 左右瓶盖像素、ROI 深度和相机点已写入 JSON。
+  - `cap_p4` 左右瓶盖像素、ROI 深度和相机点已写入 JSON。
+  - `cap_p1..cap_p4` 候选刚体变换 RMSE `0.013744 m`，最大误差 `0.020159 m`。
+  - `cap_p5` 独立验证误差 `0.083752 m`，状态 `candidate_validation_failed_high_error`。
+  - 已重标记：`cap_p5` 为 rejected validation outlier，`cap_p1..cap_p4` 仅保留为 candidate fit。
+- Remaining:
+  - 当前候选变换未通过独立验证；不能标记 verified。
+  - `cap_p5` 附近有浅色长条物体，存在混合深度风险，建议重采无干扰验证点。
+  - 瓶盖高度只应在换算桌面接触点时处理；当前相机到相机拟合按瓶盖顶部中心点处理。
+  - `depth_scale_mm_per_raw=1.0` 仍是 operator-selected，不是全局 verified。
+
 ## Incident 50
 - Time: 2026-05-07
 - Scope: right-arm scripted approach / vision reacquisition / grasp stop decision
@@ -870,3 +890,25 @@
   - 后续调整腕部相机朝向优先使用小步 `ServoJ` 或 SDK `StartJOG`，并由现场视觉确认方向后再叠加。
   - 直接关节 MoveJ 失败后必须先 StopMotion/ResetAllError 并采样 5 帧，不得马上换另一个大角度重试。
   - J6 方向未知时每步不超过 `10deg`，先判断方向，再继续。
+
+## Incident 47
+- Time: 2026-05-08
+- Scope: production runtime authority closure / Quick and console bypass
+- Symptom: 架构审查发现生产入口与 active workspace 仍可能绕过唯一生产链：`competition_integrated.launch.py` 默认启动 `competition_console_api_node.py`，console API 能创建 `/L|R/robot_move*`、`/L|R/robot_servo_joint` raw motion clients；`quick_competition` 仍位于 `packages/` 且 build group 中包含 quick/full 路径，可能被 active colcon/CI 带回。
+- Root cause: raw motion 权限边界之前按目录粗放豁免，Quick 被当作 launch 或 docs 问题处理，未把 active package、CI、console API constructor、debug/manual tools 和 camera fact source 统一纳入运行权威边界。
+- Handling:
+  1. 固定唯一生产链为 `scene_fusion -> /planning/* -> /execution/* -> /competition/run`。
+  2. 将 `robo_ctrl` 限定为 driver/provider，将 `execution_adapter` 限定为唯一 production raw robot motion service caller。
+  3. `competition_integrated.launch.py` 新增 `start_console_api` 且默认 `false`；console production 模式不初始化 raw motion clients，raw jog 只允许 debug token gate。
+  4. 将 `quick_competition`、quick config、quick scripts 和旧 quick tests 归档到 `archive/quick_competition_2026-05-08/`，归档根放置 `COLCON_IGNORE`。
+  5. 新增 `scripts/check_runtime_authority.py` 并接入 software CI，覆盖 raw motion、IK、launch、Quick archive、motion CLI 和 camera facts。
+  6. 相机 production profile 改为 stable profile source，`/dev/video*` 仅允许 debug ephemeral override。
+- Evidence:
+  - `PYTHON_BIN=/usr/bin/python3 bash scripts/ci/software_check.sh`：path/readme/runtime authority checks passed，`60 passed`，8 packages built，15 colcon tests，web build 与 Playwright passed。
+  - `python3 scripts/check_runtime_authority.py --launch-contracts`：passed。
+  - production `--show-args` 显示 `start_console_api` 默认 `false`，camera auto scan 默认 `false`。
+  - mock/no-motion smoke 使用 `start_hardware:=false` 且未调用 `/competition/run`。
+- Prevention:
+  - 以后新增 motion-capable 入口时，必须先进入 runtime authority checker 分类，不允许靠 README 约定防旁路。
+  - active `packages/` 内不得保留 legacy hardware bypass package；归档包必须在归档根有 `COLCON_IGNORE`。
+  - production camera profile 不得把 `/dev/video*` 写成 verified fact，只能使用 serial、usb_port、by-id 或 by-path 及校准状态。

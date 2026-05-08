@@ -1,7 +1,17 @@
 {
-  "updated_at": "2026-05-07",
-  "task": "right arm depth model practice control",
+  "updated_at": "2026-05-08",
+  "task": "production runtime authority closure and dual arm hardware camera alignment",
   "agents": [
+    {
+      "role": "production_runtime_authority_closure",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "本轮未使用 subagent。主线程完成 software-only runtime authority closure：production chain 固定为 scene_fusion -> /planning/* -> /execution/* -> /competition/run；console raw clients debug/token gated；quick_competition 归档并退出 active colcon/CI/test；camera facts profile-first；runtime checker 接入 CI。验证通过 path/readme/runtime checks、60 pytest、8 packages build、15 colcon tests、show-args 和 mock/no-motion smoke。未启动真实硬件，未调用 /competition/run。"
+    },
+    {
+      "role": "dual_arm_hardware_camera_alignment",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "本轮未使用 subagent。主线程完成双臂 no-motion 连接检测和双相机 cap_p1/cap_p2/cap_p3/cap_p4/cap_p5 瓶盖采样：左右 8080 TCP 可达，左右 /robot_state 约 4.996 Hz 且 motion_done=true/error_code=0；左 /dev/video6 RGB + /dev/video0 Z16、右 /dev/video14 RGB + /dev/video8 Z16 均采样成功。重审后按瓶盖顶部中心 cap_top_center 处理，瓶盖高度不从相机到相机拟合中扣除。cap_p1..cap_p4 保留为候选拟合，RMSE 约 13.7mm、最大误差约 20.2mm；cap_p5 重标记为 rejected validation outlier，独立验证误差约 83.8mm，存在混合深度风险，不能标记 verified。"
+    },
     {
       "role": "right_arm_architecture_review_and_grasp_handoff",
       "status": "local_main_thread_closed_no_live_ros_graph_next_window_prompt_ready",

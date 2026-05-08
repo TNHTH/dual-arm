@@ -1,36 +1,18 @@
-# quick_competition 快速实机运行手册
+# Archived quick_competition Runbook
 
-## 目标
+更新时间：2026-05-08
 
-`quick_competition` 是粗糙完整流程旁路：manual pose 优先、预设路点、低速动作、失败跳过得分项、fatal 立即熔断。它不做真实水位检测、洒漏检测、右相机修复、复杂 MoveIt 智能规划或自主开瓶盖。
+`quick_competition` 已归档到 `archive/quick_competition_2026-05-08/`，只作为 reference 保存。它不是 production runtime path，不参与 active colcon base path，不参与 production CI。
 
-## 冷启动顺序
+Production runtime authority 固定为：
 
-```bash
-ros2 launch dualarm_bringup quick_competition.launch.py dry_run:=true
-ros2 run quick_competition quick_calibration_manager --solve
-ros2 run quick_competition quick_competition_orchestrator --dry-run --full
+```text
+scene_fusion -> /planning/* -> /execution/* -> /competition/run
 ```
 
-`table_frame_corrected` 依赖 `table_frame`，所以 orchestrator 前必须先完成 calibration solve。若 preflight 报 TF 链缺失，先回到 `quick_calibration_manager --solve`。
+旧 quick 启动命令不再可用。`ros2 launch dualarm_bringup quick_competition.launch.py` 现在是 fail-closed deprecated wrapper，会输出归档说明并退出。
 
-## 真实运行
+如需查阅旧 quick 源码、配置或测试，请阅读：
 
-```bash
-ros2 launch dualarm_bringup quick_competition.launch.py dry_run:=false hardware_confirm_token:=I_UNDERSTAND
-ros2 run quick_competition quick_competition_orchestrator --hardware --task pouring --hardware-confirm-token I_UNDERSTAND
-ros2 run quick_competition quick_competition_orchestrator --hardware --task handover --hardware-confirm-token I_UNDERSTAND
-ros2 run quick_competition quick_competition_orchestrator --hardware --full --hardware-confirm-token I_UNDERSTAND
-```
-
-## 关键规则
-
-- TF 固定为 `quick_left_motion_base -> table_frame`、`quick_right_motion_base -> table_frame`、`table_frame -> table_frame_corrected`。
-- `manual_offset_xyz` 只发布 corrected frame，不改原始 calibration。
-- manual 模式禁止用 depth 偷偷生成最终 3D pose。
-- `motion_generation_mode: hybrid` 下，preflight 必须对关键 step 满足 computed template 或 manual fallback waypoint；两者都失败时标记 `SKIPPED_BY_PREFLIGHT`。
-- `allow_runtime_first_ik: false` 时，运行期只消费 preflight 生成的 computed solution 或已验证 waypoint，不允许首次临时 IK。
-- `home` 与 `safe_stow` 是 computed/hybrid 模式的必需人工安全锚点；未录入前 quick full dry-run 会停在 preflight，不会执行任务序列。
-- 倒水放回默认 `place_sequence: bottle_first`，现场可改为 `cup_first`。
-- handover 子任务开头单独 observe，提示队员举球，球稳定后才 cage。
-- fatal 后不自动回 home，不禁用夹爪，保持扭矩等待人工救援。
+- `archive/quick_competition_2026-05-08/README.md`
+- `archive/quick_competition_2026-05-08/MIGRATION.md`

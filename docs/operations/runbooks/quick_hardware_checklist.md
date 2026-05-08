@@ -1,24 +1,13 @@
-# quick_competition 硬件检查清单
+# Archived quick Hardware Checklist
 
-## No-Motion Smoke
+更新时间：2026-05-08
 
-```bash
-bash scripts/quick/quick_hardware_smoke_test.sh
-```
+旧 quick hardware checklist 已归档，不再用于 production 操作。Production hardware 恢复必须从 runtime authority 链路和当前 safety runbook 重新建立证据。
 
-该脚本会检查：
+当前入口：
 
-- `/L`、`/R` 话题存在。
-- `/L/robot_state`、`/R/robot_state` 有消息频率。
-- 各 echo 一次 robot_state。
+- `docs/architecture/runtime-authority.md`
+- `docs/operations/runbooks/safety.md`
+- `docs/operations/runbooks/competition_gazebo_full.md`
 
-`topic hz` 只能证明消息频率，不能证明数值正确。操作者必须手动把机械臂移到明显姿态，读取 `/L/robot_state`、`/R/robot_state`，人工确认关节角和 TCP 与目测一致；若状态值异常，禁止进入 hardware 运动。
-
-## 进入真实动作前
-
-- 急停可达。
-- 人员离开运动范围。
-- `dry_run=false` 与 `hardware_confirm_token=I_UNDERSTAND` 显式设置。
-- preflight 通过。
-- 所有关键 waypoint `verified=true`。
-- 倒水任务的液体负载失败策略为保持夹爪扭矩并人工接管，不自动松夹爪。
+任何 manual/debug 工具真实动作都必须默认 no-motion，并显式提供 `DUALARM_HARDWARE_CONFIRM_TOKEN` 匹配的硬件确认 token。

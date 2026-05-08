@@ -27,7 +27,6 @@ from dualarm_interfaces.srv import SetGripper
 from epg50_gripper_ros.msg import GripperStatus as GripperStatusMsg
 from epg50_gripper_ros.srv import GripperStatus as GripperStatusSrv
 from robo_ctrl.msg import RobotState
-from robo_ctrl.srv import RobotMove, RobotMoveCart, RobotServoJoint
 
 from competition_console_security import (
     authorize_dangerous_request,
@@ -148,6 +147,12 @@ class RecordingMarkRequest(BaseModel):
     note: str = ""
 
 
+def parameter_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 class CompetitionConsoleApiNode(Node):
     def __init__(self) -> None:
         super().__init__("competition_console_api")
@@ -158,6 +163,8 @@ class CompetitionConsoleApiNode(Node):
         self.declare_parameter("allow_external_host", env_bool("DUAL_ARM_CONSOLE_ALLOW_EXTERNAL_HOST", False))
         self.declare_parameter("allow_unsafe_without_token", env_bool("DUAL_ARM_CONSOLE_ALLOW_UNSAFE_WITHOUT_TOKEN", False))
         self.declare_parameter("allow_hardware_bringup", env_bool("DUAL_ARM_CONSOLE_ALLOW_HARDWARE_BRINGUP", False))
+        self.declare_parameter("allow_raw_motion_debug", env_bool("DUAL_ARM_CONSOLE_ALLOW_RAW_MOTION_DEBUG", False))
+        self.declare_parameter("raw_motion_debug_confirm_token", "")
         self.declare_parameter("max_jog_delta_mm", 10.0)
         self.declare_parameter("max_jog_cumulative_delta_mm", 50.0)
         self.declare_parameter("max_jog_duration_sec", 5.0)
@@ -170,9 +177,11 @@ class CompetitionConsoleApiNode(Node):
         self._host = str(self.get_parameter("host").value)
         self._port = int(self.get_parameter("port").value)
         self._api_token = str(self.get_parameter("api_token").value)
-        self._allow_external_host = bool(self.get_parameter("allow_external_host").value)
-        self._allow_unsafe_without_token = bool(self.get_parameter("allow_unsafe_without_token").value)
-        self._allow_hardware_bringup = bool(self.get_parameter("allow_hardware_bringup").value)
+        self._allow_external_host = parameter_bool(self.get_parameter("allow_external_host").value)
+        self._allow_unsafe_without_token = parameter_bool(self.get_parameter("allow_unsafe_without_token").value)
+        self._allow_hardware_bringup = parameter_bool(self.get_parameter("allow_hardware_bringup").value)
+        self._allow_raw_motion_debug = parameter_bool(self.get_parameter("allow_raw_motion_debug").value)
+        self._raw_motion_debug_confirm_token = str(self.get_parameter("raw_motion_debug_confirm_token").value)
         self._max_jog_delta_mm = float(self.get_parameter("max_jog_delta_mm").value)
         self._max_jog_cumulative_delta_mm = float(self.get_parameter("max_jog_cumulative_delta_mm").value)
         self._max_jog_duration_sec = float(self.get_parameter("max_jog_duration_sec").value)
@@ -199,12 +208,13 @@ class CompetitionConsoleApiNode(Node):
         self._run_client = ActionClient(self, RunCompetition, "/competition/run")
         self._execute_trajectory_client = ActionClient(self, ExecuteTrajectory, "/execution/execute_trajectory")
         self._plan_joint_client = self.create_client(PlanJoint, "/planning/plan_joint")
-        self._left_robot_move_client = self.create_client(RobotMove, "/L/robot_move")
-        self._right_robot_move_client = self.create_client(RobotMove, "/R/robot_move")
-        self._left_robot_move_cart_client = self.create_client(RobotMoveCart, "/L/robot_move_cart")
-        self._right_robot_move_cart_client = self.create_client(RobotMoveCart, "/R/robot_move_cart")
-        self._left_robot_servo_joint_client = self.create_client(RobotServoJoint, "/L/robot_servo_joint")
-        self._right_robot_servo_joint_client = self.create_client(RobotServoJoint, "/R/robot_servo_joint")
+        self._RobotMoveCart: Optional[type[Any]] = None
+        self._RobotServoJoint: Optional[type[Any]] = None
+        self._left_robot_move_cart_client = None
+        self._right_robot_move_cart_client = None
+        self._left_robot_servo_joint_client = None
+        self._right_robot_servo_joint_client = None
+        self._initialize_raw_motion_debug_clients()
         self._set_gripper_client = self.create_client(SetGripper, "/execution/set_gripper")
         self._left_gripper_status_client = self.create_client(GripperStatusSrv, "/gripper0/epg50_gripper/status")
         self._right_gripper_status_client = self.create_client(GripperStatusSrv, "/gripper1/epg50_gripper/status")
@@ -240,9 +250,29 @@ class CompetitionConsoleApiNode(Node):
         self._app = self._create_app()
         self._server_thread = None
         self.get_logger().info(
-            f"competition_console_api 已启动，profile={self._profile}, host={self._host}, port={self._port}"
+            f"competition_console_api 已启动，profile={self._profile}, host={self._host}, "
+            f"port={self._port}, raw_motion_debug={self._allow_raw_motion_debug}"
         )
         self._start_http_server()
+
+    def _initialize_raw_motion_debug_clients(self) -> None:
+        if not self._allow_raw_motion_debug:
+            self.get_logger().info("console raw motion debug clients disabled")
+            return
+        expected_token = os.environ.get("DUALARM_HARDWARE_CONFIRM_TOKEN", "")
+        if not expected_token or self._raw_motion_debug_confirm_token != expected_token:
+            raise RuntimeError(
+                "console raw motion debug requires raw_motion_debug_confirm_token matching DUALARM_HARDWARE_CONFIRM_TOKEN"
+            )
+        from robo_ctrl.srv import RobotMoveCart, RobotServoJoint
+
+        self._RobotMoveCart = RobotMoveCart
+        self._RobotServoJoint = RobotServoJoint
+        self._left_robot_move_cart_client = self.create_client(RobotMoveCart, "/L/robot_move_cart")
+        self._right_robot_move_cart_client = self.create_client(RobotMoveCart, "/R/robot_move_cart")
+        self._left_robot_servo_joint_client = self.create_client(RobotServoJoint, "/L/robot_servo_joint")
+        self._right_robot_servo_joint_client = self.create_client(RobotServoJoint, "/R/robot_servo_joint")
+        self.get_logger().warn("console raw motion debug clients enabled; production launch must not set this parameter")
 
     def _create_app(self):
         app = FastAPI(title="dual-arm competition console", version="0.1.0")
@@ -1260,6 +1290,11 @@ class CompetitionConsoleApiNode(Node):
         velocity: float,
         acceleration: float,
     ) -> tuple[int, dict[str, Any]]:
+        if not self._allow_raw_motion_debug or self._RobotMoveCart is None:
+            return HTTPStatus.FORBIDDEN, {
+                "success": False,
+                "error": "raw motion debug is disabled in production console mode",
+            }
         normalized_axis = self._normalize_jog_axis(axis)
         if normalized_axis is None:
             return HTTPStatus.BAD_REQUEST, {"success": False, "error": f"unknown axis: {axis}"}
@@ -1267,10 +1302,10 @@ class CompetitionConsoleApiNode(Node):
         if validation_error:
             return HTTPStatus.BAD_REQUEST, {"success": False, "error": validation_error}
         client = self._left_robot_move_cart_client if arm_name == "left_arm" else self._right_robot_move_cart_client
-        if not client.wait_for_service(timeout_sec=1.0):
+        if client is None or not client.wait_for_service(timeout_sec=1.0):
             return HTTPStatus.SERVICE_UNAVAILABLE, {"success": False, "error": "robot_move_cart service unavailable"}
 
-        jog = RobotMoveCart.Request()
+        jog = self._RobotMoveCart.Request()
         setattr(jog.tcp_pose, normalized_axis, float(delta_mm))
         jog.tool = 0
         jog.user = 0
@@ -1308,10 +1343,17 @@ class CompetitionConsoleApiNode(Node):
         )
 
     def _request_arm_stop(self, arm_name: str, reason: str) -> dict[str, Any]:
+        if not self._allow_raw_motion_debug or self._RobotServoJoint is None:
+            return {
+                "requested": False,
+                "arm": arm_name,
+                "reason": reason,
+                "message": "raw motion debug is disabled in production console mode",
+            }
         client = self._left_robot_servo_joint_client if arm_name == "left_arm" else self._right_robot_servo_joint_client
-        if not client.wait_for_service(timeout_sec=0.2):
+        if client is None or not client.wait_for_service(timeout_sec=0.2):
             return {"requested": False, "arm": arm_name, "reason": reason, "message": "robot_servo_joint service unavailable"}
-        request = RobotServoJoint.Request()
+        request = self._RobotServoJoint.Request()
         request.command_type = 1
         future = client.call_async(request)
         response = self._wait_for_future_result(future, 1.0)
@@ -1643,10 +1685,12 @@ class CompetitionConsoleApiNode(Node):
         }
 
     def _clear_servoj_task(self, arm_name: str):
-        client = self._left_robot_servo_joint_client if arm_name == "left_arm" else self._right_robot_servo_joint_client
-        if not client.wait_for_service(timeout_sec=0.5):
+        if not self._allow_raw_motion_debug or self._RobotServoJoint is None:
             return None
-        request = RobotServoJoint.Request()
+        client = self._left_robot_servo_joint_client if arm_name == "left_arm" else self._right_robot_servo_joint_client
+        if client is None or not client.wait_for_service(timeout_sec=0.5):
+            return None
+        request = self._RobotServoJoint.Request()
         request.command_type = 1
         future = client.call_async(request)
         return self._wait_for_future_result(future, 2.0)

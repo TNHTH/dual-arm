@@ -30,6 +30,7 @@
   <depend>nlohmann-json-dev</depend>
   <depend>yaml_cpp_vendor</depend>
   <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
 
   <exec_depend>rosidl_default_runtime</exec_depend>
 

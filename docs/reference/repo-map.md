@@ -28,6 +28,7 @@
 - `packages/transforms`：TF 权威发布与标定变换。
 - `packages/compat`：兼容包与遗留接口。
 - `packages/tools`：校准、TF 工具和 smoke 脚本。
+- `archive/quick_competition_2026-05-08`：2026-05-08 归档的 quick hardware bypass，含 `COLCON_IGNORE`，不参与 active colcon base path。
 
 ## 重要入口
 
@@ -37,6 +38,7 @@
 - 控制台 API：`packages/ops/competition_console_api/scripts/competition_console_api_node.py`
 - README 覆盖检查：`scripts/check_readme_coverage.py`
 - 路径硬编码检查：`scripts/check_path_hardcodes.py`
+- Runtime authority 检查：`scripts/check_runtime_authority.py`
 
 ## 非源码事实来源
 

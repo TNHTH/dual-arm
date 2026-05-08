@@ -2,7 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -95,6 +95,7 @@ def generate_launch_description():
                 "right_gripper_port",
                 default_value="/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0",
             ),
+            DeclareLaunchArgument("start_console_api", default_value="false"),
             DeclareLaunchArgument("start_console_web", default_value="false"),
             DeclareLaunchArgument("profile", default_value="test"),
             DeclareLaunchArgument("scene_age_limit_ms", default_value="800"),
@@ -183,14 +184,30 @@ def generate_launch_description():
                 package="competition_console_api",
                 executable="competition_console_api_node.py",
                 name="competition_console_api",
+                condition=IfCondition(LaunchConfiguration("start_console_api")),
                 output="screen",
-                parameters=[{"profile": LaunchConfiguration("profile")}],
+                parameters=[
+                    {
+                        "profile": LaunchConfiguration("profile"),
+                        "allow_raw_motion_debug": False,
+                    }
+                ],
             ),
             Node(
                 package="competition_console_api",
                 executable="competition_console_static_server.py",
                 name="competition_console_web",
-                condition=IfCondition(LaunchConfiguration("start_console_web")),
+                condition=IfCondition(
+                    PythonExpression(
+                        [
+                            "'",
+                            LaunchConfiguration("start_console_api"),
+                            "' == 'true' and '",
+                            LaunchConfiguration("start_console_web"),
+                            "' == 'true'",
+                        ]
+                    )
+                ),
                 output="screen",
             ),
         ]

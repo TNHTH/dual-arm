@@ -33,15 +33,10 @@ groups:
     description: 比赛任务状态机与流程编排。
     packages:
       - dualarm_task_manager
-      - quick_competition
   simulation:
     description: Gazebo/语义仿真辅助节点。
     packages:
       - dualarm_simulation
-  quick:
-    description: quick_competition 快速实机旁路。
-    packages:
-      - quick_competition
   bringup:
     description: 双臂核心 bringup 与聚合节点。
     packages:
@@ -65,6 +60,6 @@ groups:
     packages:
       - tools
   full:
-    description: 全工作区构建。
+    description: active packages 全工作区构建；archive/** 由 COLCON_IGNORE 排除，不属于 production base path。
     packages:
       - "*"

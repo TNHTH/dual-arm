@@ -1,6 +1,29 @@
 # dual-arm 任务复盘
 
-更新时间：2026-05-07
+更新时间：2026-05-08
+
+## 2026-05-08 双臂连接与双相机瓶盖采样复盘
+
+### Facts
+- `enp5s0` 已恢复到 `192.168.58.10/24`，左右机械臂 `192.168.58.2/.3:8080` 可达。
+- 左右 `robo_ctrl` 只读状态均约 `4.996 Hz`，`motion_done=true`、`error_code=0`。
+- 左相机 `/dev/video6` + `/dev/video0`、右相机 `/dev/video14` + `/dev/video8` 均完成 RGB/Z16 采样。
+- `cap_p1`、`cap_p2`、`cap_p3`、`cap_p4` 左右深度 ROI 均有效，四点可计算候选刚体变换，但点集几乎共面，仍不能标记 verified。
+- `cap_p5` 独立验证误差约 `83.8 mm`，候选变换未通过验证；该点附近有浅色长条物体，存在混合深度风险。
+- 重审后将目标语义明确为瓶盖顶部中心 `cap_top_center`；瓶盖高度不影响相机到相机的同点刚体拟合，只影响后续桌面接触点换算。
+
+### Worked
+- 把相机采样拆成 `capture` 和 `analyze` 两步，先固化 raw depth，再基于同一份采样选择像素，避免重拍导致瓶盖位置变化。
+- 采样脚本只读设备文件，不依赖 ROS graph，不暴露运动或夹爪 command 入口。
+- 红色阈值辅助定位瓶盖中心，再人工查看 overlay 验证标点落在瓶盖上。
+
+### New Rules
+- 双相机共同点标定不能用单点或两点直接求 6DoF；至少采 4 个非共线点，并额外保留 1 个独立验证点。
+- 桌面瓶盖点天然容易近似共面；即使 4 点可拟合，也必须看点集奇异值和独立验证误差，不能只看 RMSE。
+- 独立验证点周围不要贴近其他物体或边缘；ROI 有效像素明显偏少、raw min 离群时应记录为混合深度风险并重采。
+- 不要因为用户提醒“瓶盖有高度”就盲目扣高度；先判断当前拟合点是 cap top、cap side、还是 table contact。只有 table contact 才需要桌面法向和瓶盖高度。
+- 每个共同点必须保存 RGB、depth raw、depth visualization、capture JSON、pixel overlay 和 analysis JSON。
+- 深度单位和内参来源必须跟随每个 JSON 记录；`raw=mm` 在正式校准前只能是 operator-selected。
 
 ## 2026-05-07 右臂脚本化靠近收口与架构审查复盘
 
@@ -732,3 +755,25 @@
 - 实机大于 10cm 的“明显运动”可以分段完成，但每段必须有停稳采样或等效闭环。
 - 直接关节 MoveJ 出现错误码后，不再换大角度重试；先 StopMotion/ResetAllError，再改用小步 ServoJ/JOG。
 - J6 相机朝向调试必须由现场画面判断方向；方向未确认前每次只加 `10deg` 级别的小步。
+
+## 2026-05-08 Production Runtime Authority Closure 复盘
+
+### Facts
+- 本轮是 software-only 架构收口，未启动真实硬件，未调用 `/competition/run`，未声明真机安全或比赛成功。
+- production runtime authority 被固定为 `scene_fusion -> /planning/* -> /execution/* -> /competition/run`。
+- `robo_ctrl` 只作为 raw service provider/driver；`execution_adapter` 是唯一 production raw motion service caller。
+- `quick_competition`、quick config、quick scripts 和旧 quick tests 已退出 active `packages/` 并归档到 `archive/quick_competition_2026-05-08/`。
+- console API production 构造路径不再创建 raw robot motion clients，raw jog/direct send 只在 debug token gate 下可用。
+- 相机事实源改为 profile-first；`/dev/video*` 只能作为 debug ephemeral override。
+
+### Worked
+- 先做 baseline evidence，再修改运行边界，能把“软件检查已通过”和“架构收口后的新证据”分开。
+- 静态 checker 把 raw service、IK、launch、Quick archive、CLI token gate 和 camera profile 放到一个可重复入口，比人工 `rg` 更适合作为 CI 守门。
+- 将 Quick 移出 active colcon base path，比只改 launch/build group 更彻底，避免 `full: *` 或手工 colcon 路径重新安装旧旁路。
+- console API 用 production/debug 构造分层，而不是只隐藏前端按钮，能防止后端 raw client 被 production launch 带起。
+
+### New Rules
+- raw motion 豁免必须精确到实现层：`packages/control/robo_ctrl/**` 是 provider，`packages/control/execution_adapter/**` 是 production adapter；不能按 `packages/control/**` 整体放行。
+- motion-capable tool 默认必须 no-motion/dry-run；真实硬件必须同时有显式 hardware flag 和环境变量 token。
+- 生产 launch 合同要检查实际拉起节点和构造参数；不能只看源码中有没有某个 import。
+- 右臂夹取恢复必须重新采集 precheck，重新验证外参、深度单位、ROI、clearance gate、`motion_done` 和 gripper status。

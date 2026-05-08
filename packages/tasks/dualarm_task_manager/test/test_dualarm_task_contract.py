@@ -6,7 +6,15 @@ import sys
 SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from task_contract import handover_ball_semantic_for_state, normalize_task_sequence, parse_task_sequence, rank_scene_objects  # noqa: E402
+from task_contract import (  # noqa: E402
+    CHECKPOINT_EVIDENCE_KEYS,
+    HANDOVER_PRIMITIVE_SEQUENCE,
+    POURING_PRIMITIVE_SEQUENCE,
+    handover_ball_semantic_for_state,
+    normalize_task_sequence,
+    parse_task_sequence,
+    rank_scene_objects,
+)
 
 
 def test_task_sequence_allows_only_competition_tasks():
@@ -62,3 +70,36 @@ def test_handover_release_executes_last_plan_before_release_guard():
 
     assert 'primitive_id="release_guard"' in release_block
     assert "execute_last_plan=True" in release_block
+
+
+def test_competition_primitive_sequences_match_runtime_authority_skeleton():
+    assert POURING_PRIMITIVE_SEQUENCE == (
+        "detect_objects",
+        "verify_scene_freshness",
+        "grasp_cup",
+        "grasp_bottle",
+        "lift_cup",
+        "lift_bottle",
+        "align_pour",
+        "pour_until_time_or_level_proxy",
+        "return_bottle_upright",
+        "place_bottle",
+        "place_cup",
+        "release",
+        "retreat",
+    )
+    assert HANDOVER_PRIMITIVE_SEQUENCE == (
+        "detect_ball",
+        "verify_human_static_window",
+        "move_to_pre_cage",
+        "open_grippers",
+        "cage_ball",
+        "wait_human_release",
+        "lift_and_hold_3s",
+        "move_to_basket_pre_drop",
+        "release_before_contact",
+        "retreat",
+    )
+    assert {"checkpoint", "perception_timestamp", "planning_result", "execution_result"}.issubset(
+        set(CHECKPOINT_EVIDENCE_KEYS)
+    )

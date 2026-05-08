@@ -10,6 +10,9 @@ paths:
   object_geometry: config/competition/object_geometry.yaml
   task_thresholds: config/competition/task_thresholds.yaml
   workspace_profiles: config/competition/workspace_profiles.yaml
+  camera_profiles: config/competition/camera_profiles.yaml
+  pouring: config/competition/pouring.yaml
+  handover: config/competition/handover.yaml
   safety_limits: config/control/safety_limits.yaml
 
 ops:
@@ -58,16 +61,27 @@ perception:
   cameras:
     start_camera_bridge_default: false
     use_mock_camera_stream_default: false
+    camera_profile: competition_default
     left:
-      color_device: auto
-      depth_device: auto
+      profile_key: left_camera
+      device_source: profile
+      color_device_by_id: ""
+      depth_device_by_id: ""
+      color_device_by_path: ""
+      depth_device_by_path: ""
+      calibration_status: unverified
       enable_depth: true
       fps: 5.0
       rotate_180: true
     right:
-      color_device: auto
-      depth_device: auto
-      enable_depth: false
+      profile_key: right_camera
+      device_source: profile
+      color_device_by_id: ""
+      depth_device_by_id: ""
+      color_device_by_path: ""
+      depth_device_by_path: ""
+      calibration_status: unverified
+      enable_depth: true
       fps: 5.0
       rotate_180: false
 

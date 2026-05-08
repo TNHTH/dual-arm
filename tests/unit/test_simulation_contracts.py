@@ -142,22 +142,13 @@ def test_software_check_builds_dualarm_simulation():
     assert "dualarm_simulation" in source
 
 
-def test_quick_computed_entry_point_is_installed():
-    source = (REPO_ROOT / "packages/quick_competition/setup.py").read_text(encoding="utf-8")
-    templates = yaml.safe_load(
-        (REPO_ROOT / "config/quick_competition/quick_grasp_templates.yaml").read_text(encoding="utf-8")
-    )
-    planner = (
-        REPO_ROOT / "packages/quick_competition/quick_competition/quick_ik_planner.py"
-    ).read_text(encoding="utf-8")
-    computed = (
-        REPO_ROOT / "packages/quick_competition/quick_competition/quick_computed_motion_executor.py"
-    ).read_text(encoding="utf-8")
-
-    assert "quick_computed_motion_executor = quick_competition.quick_computed_motion_executor:main" in source
-    assert templates["computed_templates"]["require_moveit_service"] is True
-    assert "from moveit_msgs.srv import GetPositionIK" in planner
-    assert "require_moveit_service=self.require_moveit_service" in computed
+def test_quick_is_not_active_sim_or_ci_dependency():
+    assert not (REPO_ROOT / "packages/quick_competition").exists()
+    assert not (REPO_ROOT / "config/quick_competition").exists()
+    build_groups = (REPO_ROOT / "config/system/build_groups.yaml").read_text(encoding="utf-8")
+    software_check = (REPO_ROOT / "scripts/ci/software_check.sh").read_text(encoding="utf-8")
+    assert "quick_competition" not in build_groups
+    assert "quick_competition" not in software_check
 
 
 def test_sim_runtime_truth_fk_and_pour_are_service_backed_not_unconditional():

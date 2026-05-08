@@ -1,0 +1,48 @@
+# Production camera identity profiles.
+# /dev/video* is intentionally excluded from verified facts because it is boot-order dependent.
+schema_version: competition_camera_profiles_v1
+updated_at: "2026-05-08"
+
+active_profile: competition_default
+
+profiles:
+  competition_default:
+    calibration_status: unverified
+    source_policy:
+      production_allowed_sources:
+        - serial
+        - usb_port
+        - by_id
+        - by_path
+      debug_ephemeral_sources:
+        - video_index_scan
+      video_index_is_verified: false
+    cameras:
+      left_camera:
+        role: left_table_camera
+        color_frame_id: left_camera_color_frame
+        depth_frame_id: left_camera_depth_frame
+        serial: ""
+        usb_port: ""
+        color_device_by_id: ""
+        depth_device_by_id: ""
+        color_device_by_path: ""
+        depth_device_by_path: ""
+        enable_depth_default: true
+        rotate_180_default: true
+        calibration_status: unverified
+        notes: "2026-05-08现场曾观察到临时 video index；不得写入 verified profile。"
+      right_camera:
+        role: right_grasp_precheck_camera
+        color_frame_id: right_camera_color_frame
+        depth_frame_id: right_camera_depth_frame
+        serial: ""
+        usb_port: ""
+        color_device_by_id: ""
+        depth_device_by_id: ""
+        color_device_by_path: ""
+        depth_device_by_path: ""
+        enable_depth_default: true
+        rotate_180_default: false
+        calibration_status: unverified
+        notes: "右臂夹取恢复前必须重新验证外参、深度单位、ROI和clearance gate。"

@@ -28,6 +28,7 @@
 成功标准：
 
 - 软件-only 检查可重复通过。
+- production runtime authority 固定为 `scene_fusion -> /planning/* -> /execution/* -> /competition/run`。
 - 默认不暴露危险 API，危险 API 有 token 鉴权。
 - 未取得 start gate、缺少 evidence、对象丢失、规划失败、stop/cancel 失败时不得默认为任务成功。
 - 新人能按 README 和 `docs/operations/runbooks/safety.md` 在 mock 模式启动和测试。
@@ -76,6 +77,7 @@ ros2 launch dualarm_bringup competition_core.launch.py \
 ```bash
 python3 scripts/check_path_hardcodes.py
 python3 scripts/check_readme_coverage.py
+python3 scripts/check_runtime_authority.py
 /usr/bin/python3 -m pytest -q tests/unit tests/integration
 bash scripts/ci/software_check.sh
 colcon test-result --all --verbose
@@ -98,7 +100,7 @@ ros2 launch dualarm robot_main.launch.py
 5. `grasp_pose_generator`、`planning_scene_sync`、`fairino_dualarm_planner` 提供规划与场景覆盖层。
 6. `execution_adapter`、`robo_ctrl`、`epg50_gripper_ros` 负责执行层与硬件适配。
 7. `dualarm_task_manager` 通过 `RunCompetition` action 驱动任务状态机。
-8. `competition_console_api` 与 `competition_console_web` 提供控制台、验收和断点恢复入口。
+8. `competition_console_api` 与 `competition_console_web` 提供控制台、验收和断点恢复入口；production launch 默认不启动 console API。
 
 ## 配置方式
 
@@ -106,6 +108,7 @@ ros2 launch dualarm robot_main.launch.py
 - 安全限幅：`config/control/safety_limits.yaml`。
 - 比赛对象几何：`config/competition/object_geometry.yaml`。
 - 任务阈值和证据：`config/competition/task_thresholds.yaml`。
+- 相机事实源：`config/competition/camera_profiles.yaml`，production profile 不使用 `/dev/video*` 作为 verified 事实。
 - detector 模型可用 `DUALARM_DETECTOR_MODEL_PATH` 覆盖。
 - 控制台 API 默认 `127.0.0.1:18080`，危险接口 token 见 `docs/operations/runbooks/safety.md`。
 
@@ -134,6 +137,7 @@ python3 scripts/check_readme_coverage.py
 python3 scripts/check_path_hardcodes.py
 ros2 interface show dualarm_interfaces/action/RunCompetition
 ros2 pkg executables competition_console_api
+python3 scripts/check_runtime_authority.py --launch-contracts
 ```
 
 ## 文档索引
@@ -143,6 +147,7 @@ ros2 pkg executables competition_console_api
 - README 维护规范：`docs/development/readme-style-guide.md`
 - 工程流程规范：`docs/operations/runbooks/engineering-process-standards.md`
 - 运行架构：`docs/architecture/runtime-architecture.md`
+- Runtime authority：`docs/architecture/runtime-authority.md`
 - 安全 runbook：`docs/operations/runbooks/safety.md`
 - 接口合同：`docs/api/interfaces.md`
 - 模型和厂商资产治理：`docs/artifacts/model-and-vendor-manifest.md`
@@ -153,6 +158,7 @@ ros2 pkg executables competition_console_api
 - 默认生产链面向真机双臂和夹爪；`debug.launch.py`、mock 相机与 fake joint state 主要用于开发验证。
 - `build/`、`install/`、`log/`、`.artifacts/` 是生成物或运行证据，不是源码事实来源。
 - `archive/` 与 `docs/archive/` 只保存历史会话、迁移记录和 legacy 参考，不参与正式构建。
+- `quick_competition` 已在 2026-05-08 归档到 `archive/quick_competition_2026-05-08/`，不属于 active colcon base path。
 - 根目录 `SETUP_2026-04-15.md`、`task_plan.md`、`progress.md`、`findings.md` 等是历史兼容符号链接，不代表当前路径事实。
 
 ## 常见问题

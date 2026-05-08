@@ -4,7 +4,7 @@
 
 ## 结论
 
-`competition_gazebo_full.launch.py` 是本轮 Gazebo 正式主链仿真入口。验收必须以该 launch 加 `/competition/run` 为准；quick hybrid 只作为实机保底路径，不能替代正式主链证据。
+`competition_gazebo_full.launch.py` 是 Gazebo 同接口 backend。验收必须以该 launch 加 `/competition/run` 为准；archived quick 不属于 production path，也不能替代正式主链证据。
 
 ## 边界
 
@@ -15,9 +15,10 @@
 ## 静态验证
 
 ```bash
-/usr/bin/python3 -m py_compile packages/simulation/dualarm_simulation/dualarm_simulation/*.py packages/control/execution_adapter/scripts/execution_adapter_node.py packages/tasks/dualarm_task_manager/scripts/dualarm_task_manager_node.py packages/quick_competition/quick_competition/quick_*.py
+/usr/bin/python3 -m py_compile packages/simulation/dualarm_simulation/dualarm_simulation/*.py packages/control/execution_adapter/scripts/execution_adapter_node.py packages/tasks/dualarm_task_manager/scripts/dualarm_task_manager_node.py
 /usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py
-./build_workspace.sh --group simulation,bringup,control,tasks,quick
+./build_workspace.sh --group simulation,bringup,control,tasks
+python3 scripts/check_runtime_authority.py --launch-contracts
 source install/setup.bash
 ros2 launch dualarm_bringup competition_gazebo_full.launch.py --show-args
 ```
@@ -61,5 +62,5 @@ ros2 topic list | grep -E '/perception/sim_scene_objects|/scene_fusion/scene_obj
 
 - `execution_adapter` 报 `sim robot_state 过期或缺失`：先查 `sim_robot_state_publisher` 是否启动、`/L/robot_state` 和 `/R/robot_state` 是否持续发布。
 - `scene_fusion` 缺对象：查 `/perception/sim_scene_objects` 与 `scene_fusion_input_topics`。
-- PlanningScene 或 planner 失败：先按 `planning_scene_sync` 最小 MoveIt diff 流程定位，不要用 quick fallback 掩盖正式主链问题。
+- PlanningScene 或 planner 失败：先按 `planning_scene_sync` 最小 MoveIt diff 流程定位，不要用 archived quick 掩盖正式主链问题。
 - 任何可复用失败模式必须更新 `.codex/tmp/error-trace/ERROR_TRACE.md`。

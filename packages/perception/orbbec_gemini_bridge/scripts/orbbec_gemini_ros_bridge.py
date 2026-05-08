@@ -6,6 +6,7 @@ import ctypes
 import fcntl
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -53,6 +54,12 @@ class CameraModel:
     distortion: list[float]
 
 
+def parameter_bool(value: object) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 class OrbbecGeminiRosBridge(Node):
     def __init__(self) -> None:
         super().__init__("orbbec_gemini_ros_bridge")
@@ -71,6 +78,7 @@ class OrbbecGeminiRosBridge(Node):
         self.declare_parameter("color_frame_id", "left_camera_color_frame")
         self.declare_parameter("depth_frame_id", "left_camera_depth_frame")
         self.declare_parameter("publish_color_camera_info", True)
+        self.declare_parameter("allow_auto_device_scan", False)
         self.declare_parameter("depth_alignment_mode", "raw_unregistered")
         self.declare_parameter("color_camera_info_source", "copy_depth_intrinsics")
         self.declare_parameter("camera_matrix_file", "")
@@ -80,12 +88,13 @@ class OrbbecGeminiRosBridge(Node):
         requested_depth_device = str(self.get_parameter("depth_device").value)
         requested_depth_backend = str(self.get_parameter("depth_backend").value)
         depth_obsensor_index = int(self.get_parameter("depth_obsensor_index").value)
-        self._enable_depth = bool(self.get_parameter("enable_depth").value)
+        self._enable_depth = parameter_bool(self.get_parameter("enable_depth").value)
         fps = float(self.get_parameter("fps").value)
         self._color_frame_id = str(self.get_parameter("color_frame_id").value)
         self._depth_frame_id = str(self.get_parameter("depth_frame_id").value)
-        self._rotate_180 = bool(self.get_parameter("rotate_180").value)
-        self._publish_color_camera_info = bool(self.get_parameter("publish_color_camera_info").value)
+        self._rotate_180 = parameter_bool(self.get_parameter("rotate_180").value)
+        self._publish_color_camera_info = parameter_bool(self.get_parameter("publish_color_camera_info").value)
+        self._allow_auto_device_scan = parameter_bool(self.get_parameter("allow_auto_device_scan").value)
         self._depth_alignment_mode = str(self.get_parameter("depth_alignment_mode").value)
         self._color_camera_info_source = str(self.get_parameter("color_camera_info_source").value)
         self._v4l2_depth_unit_to_mm_scale = float(self.get_parameter("v4l2_depth_unit_to_mm_scale").value)
@@ -212,8 +221,22 @@ class OrbbecGeminiRosBridge(Node):
     def _resolve_color_device(self, requested: str) -> str:
         if requested and requested != "auto":
             return requested
+        if not self._allow_auto_device_scan:
+            raise RuntimeError(
+                "color_device 未提供稳定设备身份，且 allow_auto_device_scan=false；"
+                "production profile 必须使用 serial/usb_port/by-id/by-path。"
+            )
         detected = self._select_v4l2_device({"YUYV", "MJPG"})
-        return detected or "/dev/video8"
+        if detected:
+            self.get_logger().warn(
+                f"auto 彩色设备发现结果 {detected} 仅作为 debug_ephemeral；"
+                "production profile 应使用 serial/usb_port/by-id/by-path。"
+            )
+            return detected
+        raise RuntimeError(
+            "未提供稳定彩色设备身份，且 auto 扫描未找到设备；"
+            "production profile 必须使用 serial/usb_port/by-id/by-path。"
+        )
 
     def _open_color_capture(self, device: str) -> cv2.VideoCapture:
         cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
@@ -233,17 +256,36 @@ class OrbbecGeminiRosBridge(Node):
             raise RuntimeError(f"不支持的 depth_backend: {requested_backend}")
 
         if backend in ("auto", "v4l2"):
-            resolved_depth_device = requested_device if requested_device and requested_device != "auto" else (
-                self._select_v4l2_device({"Z16"}) or "/dev/video0"
-            )
-            depth_cap = cv2.VideoCapture(resolved_depth_device)
-            if depth_cap.isOpened():
-                depth_cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)
-                depth_cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"Z16 "))
-                ok, depth = depth_cap.read()
-                if ok and depth is not None and depth.dtype == "uint16":
-                    return depth_cap, "v4l2_z16", resolved_depth_device
-                depth_cap.release()
+            if requested_device and requested_device != "auto":
+                resolved_depth_device = requested_device
+            else:
+                if not self._allow_auto_device_scan:
+                    raise RuntimeError(
+                        "depth_device 未提供稳定设备身份，且 allow_auto_device_scan=false；"
+                        "production profile 必须使用 serial/usb_port/by-id/by-path。"
+                    )
+                resolved_depth_device = self._select_v4l2_device({"Z16"})
+                if resolved_depth_device:
+                    self.get_logger().warn(
+                        f"auto 深度设备发现结果 {resolved_depth_device} 仅作为 debug_ephemeral；"
+                        "production profile 应使用 serial/usb_port/by-id/by-path。"
+                    )
+                elif backend == "v4l2":
+                    raise RuntimeError(
+                        "未提供稳定深度设备身份，且 auto 扫描未找到 Z16 设备；"
+                        "production profile 必须使用 serial/usb_port/by-id/by-path。"
+                    )
+            if resolved_depth_device:
+                depth_cap = cv2.VideoCapture(resolved_depth_device)
+                if depth_cap.isOpened():
+                    depth_cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)
+                    depth_cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"Z16 "))
+                    for _ in range(10):
+                        ok, depth = depth_cap.read()
+                        if ok and depth is not None and depth.dtype == "uint16":
+                            return depth_cap, "v4l2_z16", resolved_depth_device
+                        time.sleep(0.1)
+                    depth_cap.release()
             if backend == "v4l2":
                 raise RuntimeError(f"无法通过 V4L2 打开 Z16 深度设备: {resolved_depth_device}")
 
@@ -359,7 +401,7 @@ class OrbbecGeminiRosBridge(Node):
                 candidates.append((index, device))
         if not candidates:
             return None
-        # 对彩色设备优先选择索引更高的 interface，当前实机上通常是 /dev/video8。
+        # auto 扫描只允许作为 debug_ephemeral 发现结果，不能写入 production profile。
         return sorted(candidates, key=lambda item: item[0])[-1][1]
 
     def _enumerate_v4l2_formats(self, device: str) -> set[str]:

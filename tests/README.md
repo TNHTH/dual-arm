@@ -2,7 +2,7 @@
 
 ## 目录作用
 
-预留统一测试分层目录，区分单元、集成、硬件和验收测试。
+统一测试分层目录，区分单元、集成、硬件和验收测试。
 
 ## 包含内容
 
@@ -16,6 +16,8 @@
 ```bash
 find tests -maxdepth 2 -type f | sort
 python3 scripts/check_readme_coverage.py
+python3 scripts/check_runtime_authority.py
+/usr/bin/python3 -m pytest -q tests/unit tests/integration
 ```
 
 ## 上下游依赖

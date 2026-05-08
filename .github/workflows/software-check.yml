@@ -22,4 +22,5 @@ jobs:
         run: |
           python3 scripts/check_path_hardcodes.py
           python3 scripts/check_readme_coverage.py
+          python3 scripts/check_runtime_authority.py
           /usr/bin/python3 -m pytest -q tests/unit tests/integration

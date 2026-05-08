@@ -19,6 +19,12 @@ camera / mock stream
   -> scene_fusion interaction update / task checkpoint
 ```
 
+Production runtime authority 固定为：
+
+```text
+scene_fusion -> /planning/* -> /execution/* -> /competition/run
+```
+
 ## 模块职责
 
 - `perception/*`：只负责检测、深度恢复、对象语义和位姿估计，不直接做任务判定。
@@ -29,7 +35,7 @@ camera / mock stream
 - `epg50_gripper_ros`：EPG50 Modbus RTU 适配层。
 - `dualarm_task_manager`：比赛状态机、checkpoint、任务顺序、对象选择和恢复。
 - `competition_start_gate`：外部开赛信号到 `RunCompetition` action 的唯一默认授权路径。
-- `competition_console_api`：本地控制台 API、软件验收、bringup 进程管理和安全鉴权。
+- `competition_console_api`：本地控制台 API、软件验收、bringup 进程管理和安全鉴权；production launch 默认不启动，raw motion debug clients 默认关闭。
 - `competition_console_web`：前端控制台，不直接访问 ROS graph。
 - `competition_rviz_tools`：可视化和人工调试，不发真实动作。
 
@@ -39,6 +45,7 @@ camera / mock stream
 - 安全限制：`config/control/safety_limits.yaml`。
 - 比赛对象几何：`config/competition/object_geometry.yaml`。
 - 任务阈值与证据要求：`config/competition/task_thresholds.yaml`。
+- 相机 profile：`config/competition/camera_profiles.yaml`，不得把 `/dev/video*` 写成 verified production 事实。
 - 环境覆盖：模型路径使用 `DUALARM_DETECTOR_MODEL_PATH`，控制台 host/port/token 使用 `DUAL_ARM_CONSOLE_*`。
 
 ## 关键接口
@@ -50,6 +57,8 @@ camera / mock stream
 - `/competition/run`：比赛任务状态机 action。
 - `/competition/start_signal`：外部开赛 gate。
 - `/api/*`：控制台 HTTP API，默认仅监听本机。
+
+Raw robot motion service 只能由 `robo_ctrl` 提供、由 `execution_adapter` 在 production 链路中调用。Quick、compat、manual/debug tools 不属于 production runtime authority。
 
 ## 扩展方式
 

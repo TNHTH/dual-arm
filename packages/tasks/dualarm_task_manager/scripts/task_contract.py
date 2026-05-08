@@ -7,6 +7,43 @@ from typing import Iterable, Sequence
 
 ALLOWED_TASKS: tuple[str, ...] = ("handover", "pouring")
 
+POURING_PRIMITIVE_SEQUENCE: tuple[str, ...] = (
+    "detect_objects",
+    "verify_scene_freshness",
+    "grasp_cup",
+    "grasp_bottle",
+    "lift_cup",
+    "lift_bottle",
+    "align_pour",
+    "pour_until_time_or_level_proxy",
+    "return_bottle_upright",
+    "place_bottle",
+    "place_cup",
+    "release",
+    "retreat",
+)
+
+HANDOVER_PRIMITIVE_SEQUENCE: tuple[str, ...] = (
+    "detect_ball",
+    "verify_human_static_window",
+    "move_to_pre_cage",
+    "open_grippers",
+    "cage_ball",
+    "wait_human_release",
+    "lift_and_hold_3s",
+    "move_to_basket_pre_drop",
+    "release_before_contact",
+    "retreat",
+)
+
+CHECKPOINT_EVIDENCE_KEYS: tuple[str, ...] = (
+    "checkpoint",
+    "ros_topic_or_action_result",
+    "perception_timestamp",
+    "planning_result",
+    "execution_result",
+)
+
 
 def parse_task_sequence(raw_sequence: str, allowed_tasks: Sequence[str] = ALLOWED_TASKS) -> list[str]:
     tasks = [item.strip() for item in raw_sequence.split(",") if item.strip()]

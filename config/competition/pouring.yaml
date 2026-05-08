@@ -1,0 +1,53 @@
+schema_version: competition_pouring_v1
+updated_at: "2026-05-08"
+
+runtime_authority:
+  planning: /planning/plan_pose
+  execution:
+    - /execution/execute_trajectory
+    - /execution/execute_primitive
+    - /execution/set_gripper
+
+sequence:
+  - detect_objects
+  - verify_scene_freshness
+  - grasp_cup
+  - grasp_bottle
+  - lift_cup
+  - lift_bottle
+  - align_pour
+  - pour_until_time_or_level_proxy
+  - return_bottle_upright
+  - place_bottle
+  - place_cup
+  - release
+  - retreat
+
+defaults:
+  cup_arm: left_arm
+  bottle_arm: right_arm
+  place_sequence: bottle_first
+  liquid_safe_motion:
+    velocity_scale: 0.10
+    acceleration_scale: 0.08
+    keep_cup_upright: true
+    max_cup_roll_pitch_deg: 8
+
+beverages:
+  water_bottle:
+    tilt_deg: 60
+    hold_sec: 2.5
+    return_upright_sec: 1.0
+    target_cup_volume_ml: 190
+  cola_bottle:
+    tilt_deg: 55
+    hold_sec: 2.2
+    return_upright_sec: 1.0
+    target_cup_volume_ml: 190
+
+evidence_required:
+  - checkpoint
+  - perception_timestamp
+  - planning_result
+  - execution_result
+  - gripper_status

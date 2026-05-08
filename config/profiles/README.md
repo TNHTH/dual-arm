@@ -13,3 +13,4 @@
 - 命令行 launch 参数可以覆盖 profile 默认值。
 - 真机 IP、串口、模型路径等高风险参数必须在 profile 中有说明，不能只散落在代码里。
 - 软件-only 验证默认不连接真实设备。
+- Production profile 只能引用 active `config/competition/*` 和 `config/control/*`，不能引用 archived quick config。

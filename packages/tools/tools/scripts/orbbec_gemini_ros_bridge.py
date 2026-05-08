@@ -22,7 +22,7 @@ class OrbbecGeminiRosBridge(Node):
     def __init__(self) -> None:
         super().__init__("orbbec_gemini_ros_bridge")
 
-        self.declare_parameter("color_device", "/dev/video8")
+        self.declare_parameter("color_device", "")
         self.declare_parameter("depth_obsensor_index", 0)
         self.declare_parameter("fps", 15.0)
         self.declare_parameter("rotate_180", True)
@@ -32,7 +32,12 @@ class OrbbecGeminiRosBridge(Node):
         self.declare_parameter("color_frame_id", "camera_color_frame")
         self.declare_parameter("depth_frame_id", "camera_depth_frame")
 
-        color_device = self.get_parameter("color_device").value
+        color_device = str(self.get_parameter("color_device").value)
+        if not color_device:
+            raise RuntimeError(
+                "tools/orbbec_gemini_ros_bridge 是 debug-only 旧入口，必须显式传入稳定 by-id/by-path 设备；"
+                "不要在 production profile 中使用 /dev/video*。"
+            )
         depth_obsensor_index = int(self.get_parameter("depth_obsensor_index").value)
         fps = float(self.get_parameter("fps").value)
         self._color_frame_id = str(self.get_parameter("color_frame_id").value)

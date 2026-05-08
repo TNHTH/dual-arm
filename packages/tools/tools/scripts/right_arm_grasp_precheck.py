@@ -19,6 +19,7 @@ from typing import Any, Optional
 
 import cv2
 import numpy as np
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -28,6 +29,7 @@ DEFAULT_MODEL_PATH = (
 )
 DEFAULT_CAMERA_MATRIX = Path(__file__).resolve().parent / "camera_matrix.json"
 DEFAULT_STATIC_TRANSFORMS = ROOT / "packages/tools/tools/config/static_transforms.yaml"
+DEFAULT_CAMERA_PROFILES = ROOT / "config/competition/camera_profiles.yaml"
 
 VIDIOC_G_FMT = 0xC0D05604
 VIDIOC_S_FMT = 0xC0D05605
@@ -335,8 +337,12 @@ class NativeZ16Capture:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="右臂 no-motion 视觉/深度/避障预检")
-    parser.add_argument("--color-device", default="/dev/video14")
-    parser.add_argument("--depth-device", default="/dev/video8")
+    parser.add_argument("--camera-profile", default="competition_default.right_camera")
+    parser.add_argument("--camera-profiles-file", default=str(DEFAULT_CAMERA_PROFILES))
+    parser.add_argument("--color-device", default="", help="debug-only alias for --color-device-override")
+    parser.add_argument("--depth-device", default="", help="debug-only alias for --depth-device-override")
+    parser.add_argument("--color-device-override", default="", help="debug-only ephemeral override; never verified")
+    parser.add_argument("--depth-device-override", default="", help="debug-only ephemeral override; never verified")
     parser.add_argument("--color-width", type=int, default=640)
     parser.add_argument("--color-height", type=int, default=480)
     parser.add_argument("--depth-width", type=int, default=640)
@@ -400,11 +406,12 @@ def main() -> int:
             "gripper_command_services",
             "competition_run_action",
         ],
-        "parameters": vars(args),
         "artifacts": {},
     }
 
     try:
+        result["camera_fact_source"] = resolve_camera_devices(args)
+        result["parameters"] = dict(vars(args))
         color, color_meta = capture_color(args)
         depth, depth_meta = capture_depth(args)
         result["capture"] = {"color": color_meta, "depth": depth_meta}
@@ -443,6 +450,70 @@ def main() -> int:
         result["error"] = {"type": exc.__class__.__name__, "message": str(exc)}
         result["safety_gate"] = fail_gate("exception", str(exc))
         return write_result(output_dir, result, exit_code=1)
+
+
+def resolve_camera_devices(args: argparse.Namespace) -> dict[str, Any]:
+    profile_name, camera_key = parse_camera_profile_ref(str(args.camera_profile))
+    data = yaml.safe_load(Path(args.camera_profiles_file).read_text(encoding="utf-8"))
+    profiles = data.get("profiles", {}) if isinstance(data, dict) else {}
+    if not profile_name:
+        profile_name = str(data.get("active_profile", "competition_default"))
+    profile = profiles.get(profile_name)
+    if not isinstance(profile, dict):
+        raise RuntimeError(f"camera profile 不存在: {profile_name}")
+    cameras = profile.get("cameras", {})
+    camera = cameras.get(camera_key)
+    if not isinstance(camera, dict):
+        raise RuntimeError(f"camera profile 缺少 camera key: {profile_name}.{camera_key}")
+
+    color_override = str(args.color_device_override or args.color_device or "").strip()
+    depth_override = str(args.depth_device_override or args.depth_device or "").strip()
+    color_profile_device = first_non_empty(camera.get("color_device_by_id"), camera.get("color_device_by_path"))
+    depth_profile_device = first_non_empty(camera.get("depth_device_by_id"), camera.get("depth_device_by_path"))
+
+    source_kind = "override" if color_override or depth_override else "profile"
+    color_device = color_override or color_profile_device
+    depth_device = depth_override or depth_profile_device
+    if not color_device or not depth_device:
+        raise RuntimeError(
+            "camera profile 未提供稳定 color/depth 设备身份；"
+            "生产 profile 必须使用 serial/usb_port/by-id/by-path，临时调试才可传入 override。"
+        )
+
+    args.color_device = color_device
+    args.depth_device = depth_device
+    args.camera_profile_name = profile_name
+    args.camera_profile_key = camera_key
+    args.camera_fact_source_kind = source_kind
+    args.camera_override_verified = False
+    args.camera_profile_calibration_status = str(camera.get("calibration_status", profile.get("calibration_status", "unverified")))
+    return {
+        "source_kind": source_kind,
+        "profile_name": profile_name,
+        "camera_key": camera_key,
+        "color_device": color_device,
+        "depth_device": depth_device,
+        "calibration_status": args.camera_profile_calibration_status,
+        "override_verified": False,
+        "verified": source_kind == "profile" and args.camera_profile_calibration_status == "verified",
+        "policy": "override is debug_ephemeral and never verified",
+    }
+
+
+def parse_camera_profile_ref(raw: str) -> tuple[str, str]:
+    value = raw.strip()
+    if "." in value:
+        profile_name, camera_key = value.split(".", 1)
+        return profile_name, camera_key
+    return "", value or "right_camera"
+
+
+def first_non_empty(*values: object) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
 
 
 def resolve_output_dir(raw: str) -> Path:
@@ -489,6 +560,7 @@ def capture_color(args: argparse.Namespace) -> tuple[np.ndarray, dict[str, Any]]
             return frame, {
                 "backend": backend_name,
                 "device": args.color_device,
+                "source_kind": getattr(args, "camera_fact_source_kind", "unknown"),
                 "width": int(frame.shape[1]),
                 "height": int(frame.shape[0]),
                 "frames_read": frames_read,
@@ -522,6 +594,7 @@ def capture_depth(args: argparse.Namespace) -> tuple[np.ndarray, dict[str, Any]]
                 return frame, {
                     "backend": "opencv_v4l2_z16",
                     "device": args.depth_device,
+                    "source_kind": getattr(args, "camera_fact_source_kind", "unknown"),
                     "width": int(frame.shape[1]),
                     "height": int(frame.shape[0]),
                     "frames_read": frames_read,
@@ -545,6 +618,7 @@ def capture_depth(args: argparse.Namespace) -> tuple[np.ndarray, dict[str, Any]]
         frame = cv2.rotate(frame, cv2.ROTATE_180)
     metadata["opencv_fallback_reason"] = opencv_error
     metadata["rotate_180"] = bool(args.rotate_180)
+    metadata["source_kind"] = getattr(args, "camera_fact_source_kind", "unknown")
     return frame, metadata
 
 

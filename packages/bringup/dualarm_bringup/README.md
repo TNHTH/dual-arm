@@ -2,7 +2,7 @@
 
 ## 目录作用
 
-双臂比赛运行时的核心启动包，负责主链 launch 编排。
+双臂比赛运行时的核心启动包，负责主链 launch 编排。Production runtime authority 固定为 `scene_fusion -> /planning/* -> /execution/* -> /competition/run`。
 
 ## 包含内容
 
@@ -16,6 +16,7 @@
 
 ```bash
 ros2 launch dualarm_bringup competition_integrated.launch.py
+ros2 launch dualarm_bringup competition_integrated.launch.py start_console_api:=false
 ros2 launch dualarm_bringup competition_core.launch.py
 ros2 launch dualarm_bringup debug.launch.py
 ros2 launch dualarm_bringup single_arm_debug.launch.py
@@ -30,6 +31,7 @@ ros2 launch dualarm_bringup single_arm_debug.launch.py
 
 - 只做启动编排和参数转发。
 - 新节点实现不要直接塞到 bringup 包里。
+- `competition_integrated.launch.py` 默认不启动 console API；debug/manual console 必须走独立 debug gate。
 
 ## 相关链接
 

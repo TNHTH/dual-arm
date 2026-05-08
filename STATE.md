@@ -1,6 +1,95 @@
 # dual-arm STATE
 
-更新时间：2026-05-07
+更新时间：2026-05-08
+
+## 2026-05-08 Production Runtime Authority Closure
+- Wave: production-runtime-authority-closure
+- 状态：软件架构收口完成；未启动真实硬件、未调用 `/competition/run`、未设置 `start_hardware:=true`；mock/no-motion smoke 已启动核心软件图并用 timeout 收口，无关键 ROS 进程残留。
+- 详细记录：
+  - `docs/operations/reports/2026-05-08-architecture-closure-baseline.md`
+  - `docs/operations/reports/2026-05-08-production-runtime-authority-closure.md`
+- 已完成：
+  - 新增 `docs/architecture/runtime-authority.md` 与 `docs/architecture/adr/ADR-0001-production-runtime-authority.md`。
+  - 新增 `scripts/check_runtime_authority.py`，并接入 `scripts/ci/software_check.sh` 与 `.github/workflows/software-check.yml`。
+  - `competition_integrated.launch.py` 新增 `start_console_api`，默认 `false`；production 参数强制 `allow_raw_motion_debug=false`。
+  - `competition_console_api_node.py` 默认不创建 `/L|R/robot_move*` 或 `/L|R/robot_servo_joint` raw clients；debug raw 模式必须匹配 `DUALARM_HARDWARE_CONFIRM_TOKEN`。
+  - `quick_competition`、`config/quick_competition`、`scripts/quick` 和 quick tests 已迁入 `archive/quick_competition_2026-05-08/`，archive root 放置 `COLCON_IGNORE`。
+  - 新增 `config/competition/camera_profiles.yaml`、`pouring.yaml`、`handover.yaml`，并更新 `config/profiles/competition_default.yaml`。
+  - `right_arm_grasp_precheck.py` 改为 profile-first；`--color-device*` / `--depth-device*` 只能作为 debug ephemeral override，不能标记 verified。
+  - `orbbec_gemini_bridge` 默认 `allow_auto_device_scan=false`；production 缺少稳定设备身份时 fail-closed。
+  - motion-capable tools 默认 no-motion；真实动作需要显式 hardware 参数和 `DUALARM_HARDWARE_CONFIRM_TOKEN`。
+  - `task_contract.py` 增加 pouring/handover primitive sequence 与 checkpoint evidence skeleton。
+- 验证证据：
+  - `python3 scripts/check_path_hardcodes.py`：通过。
+  - `python3 scripts/check_readme_coverage.py`：通过，检查 61 个目录。
+  - `python3 scripts/check_runtime_authority.py`：通过。
+  - `python3 scripts/check_runtime_authority.py --launch-contracts`：通过。
+  - `git diff --check`：通过。
+  - `/usr/bin/python3 -m pytest -q tests/unit tests/integration packages/tasks/dualarm_task_manager/test/test_dualarm_task_contract.py`：`60 passed in 7.16s`。
+  - `colcon build --base-paths packages --packages-select competition_console_api robo_ctrl dualarm_task_manager execution_adapter competition_start_gate dualarm_bringup dualarm_simulation tools`：`8 packages finished`。
+  - `colcon build --base-paths packages --packages-select orbbec_gemini_bridge dualarm_bringup`：`2 packages finished`。
+  - `PYTHON_BIN=/usr/bin/python3 bash scripts/ci/software_check.sh`：path/readme/runtime checks 通过，`60 passed`，8 包构建，15 个 colcon tests，web build 通过，Playwright `2 passed`。
+  - `competition_integrated.launch.py --show-args`、`competition_core.launch.py --show-args`、`competition_gazebo_full.launch.py --show-args`：均通过。
+  - Mock/no-motion smoke：旧进程检查无残留；`timeout 10s ros2 launch dualarm_bringup competition_integrated.launch.py start_hardware:=false use_mock_camera_stream:=true publish_fake_joint_states:=true start_console_api:=false start_camera_bridge:=false start_detector:=false` 启动核心软件图，timeout `124` 为预期；后置旧进程检查无残留。
+- 当前边界与风险：
+  - 本轮只证明软件架构收口，不证明真机安全、比赛成功或右臂夹取可恢复。
+  - `execution_adapter` 仍是唯一 production raw robot service caller；`robo_ctrl` 只作为 driver/provider。
+  - archived quick 只作 reference，不得作为 active package 或 production fallback 重新引入。
+  - 相机 profile 当前 `calibration_status=unverified`，不能作为 verified hardware evidence。
+- 下一步范围：
+  1. 右臂夹取恢复前重新采集 camera by-id/by-path/serial/usb_port、外参、深度单位、ROI、clearance gate、`motion_done` 和 gripper status。
+  2. 若要启用 debug/manual 真动作，必须显式 hardware 参数并匹配 `DUALARM_HARDWARE_CONFIRM_TOKEN`。
+  3. 不复用旧 quick JSON 或旧 `/dev/video*` 设备号作为 verified 事实。
+
+## 2026-05-08 双臂连接检测与双相机瓶盖单点深度采样
+- Wave: dual-arm-hardware-camera-alignment-log
+- 状态：no-motion 双臂连接检测与双相机单点瓶盖采样完成；未执行真实运动、未调用夹爪 command、未调用 `/competition/run`。当前 `ROS_DOMAIN_ID=0` 已清理为空，关键进程无残留。
+- 详细记录：
+  - `docs/operations/reports/2026-05-08-dual-arm-hardware-camera-alignment-log.md`
+- 已完成：
+  - 新增 `packages/tools/tools/scripts/cap_depth_alignment_probe.py`，支持 `capture` 固化 RGB/Z16 raw/metadata，支持 `analyze` 在同一份 raw depth 上按像素点计算 ROI 深度和相机坐标。
+  - `py_compile`、动作端点静态扫描、`git diff --check`、`colcon build --base-paths packages --packages-select tools` 均通过。
+  - 网络：`enp5s0=192.168.58.10/24`；`192.168.58.2:8080` 与 `192.168.58.3:8080` 均可达。
+  - 只读 `robo_ctrl`：`/L/robot_state` 与 `/R/robot_state` 均约 `4.996 Hz`，均为 `motion_done=true`、`error_code=0`。
+  - 左相机采样：RGB `/dev/video6`，Z16 `/dev/video0`；右相机采样：RGB `/dev/video14`，Z16 `/dev/video8`。
+  - 瓶盖 `cap_p1` 单点深度：
+    - 左像素 `(377.70, 226.89)`，depth median `0.440 m`，camera point `[0.075594, -0.012506, 0.440] m`。
+    - 右像素 `(357.96, 219.75)`，depth median `0.459 m`，camera point `[0.052596, -0.020173, 0.459] m`。
+  - 瓶盖 `cap_p2` 追加采样：
+    - 左像素 `(243.42, 174.59)`，depth median `0.410 m`，camera point `[-0.089138, -0.058286, 0.410] m`。
+    - 右像素 `(257.58, 308.35)`，depth median `0.412 m`，camera point `[-0.072663, 0.061278, 0.412] m`。
+  - 瓶盖 `cap_p3` 追加采样：
+    - 左像素 `(354.07, 234.19)`，depth median `0.443 m`，camera point `[0.045768, -0.005558, 0.443] m`。
+    - 右像素 `(358.92, 238.30)`，depth median `0.443 m`，camera point `[0.051995, -0.001598, 0.443] m`。
+  - 瓶盖 `cap_p4` 追加采样：
+    - 左像素 `(327.36, 149.77)`，depth median `0.394 m`，camera point `[0.010202, -0.077279, 0.394] m`。
+    - 右像素 `(267.76, 241.54)`，depth median `0.464 m`，camera point `[-0.068143, 0.001595, 0.464] m`。
+  - 已用 `cap_p1..cap_p4` 计算右相机到左相机候选刚体变换：RMSE `0.013744 m`，最大误差 `0.020159 m`，输出 `.codex/tmp/runtime/dual-arm-cap-alignment-20260508-transform-candidate.json`。
+  - 瓶盖 `cap_p5` 独立验证采样：
+    - 左像素 `(265.65, 226.24)`，depth median `0.372 m`，camera point `[-0.056907, -0.011099, 0.372] m`。
+    - 右像素 `(269.09, 255.83)`，depth median `0.455 m`，camera point `[-0.065067, 0.015704, 0.455] m`。
+    - 用 `cap_p1..cap_p4` 候选变换预测 `cap_p5`，独立验证误差 `0.083752 m`，状态 `candidate_validation_failed_high_error`。
+  - 已按“瓶盖顶部中心”语义重标记并重拟合：
+    - `cap_p1..cap_p3` 标记为 inlier。
+    - `cap_p4` 标记为 weak inlier。
+    - `cap_p5` 标记为 rejected validation outlier。
+    - 重拟合 JSON：`.codex/tmp/runtime/dual-arm-cap-alignment-20260508-refit-with-labels.json`。
+  - 已用 camera+TCP 链路推导候选双臂变换并与历史指尖接触候选对比：
+    - JSON：`.codex/tmp/runtime/dual-arm-camera-tcp-vs-contact-transform-compare-20260508.json`。
+    - camera+TCP 推导 `right_base -> left_base` translation `[-184.040, 653.847, -135.691] mm`，rpy `[91.686, 48.006, 53.481] deg`。
+    - 历史指尖接触候选 `right_base -> left_base` translation `[-143.040, 871.374, -9.201] mm`，rpy `[3.359, -0.274, 21.311] deg`。
+    - 两者平移差范数约 `254.949 mm`，旋转差约 `90.002 deg`。
+- 当前边界与风险：
+  - `depth_scale_mm_per_raw=1.0` 仍是 `operator_selected_not_global_verified`。
+  - 当前 4 点候选变换未通过 `cap_p5` 独立验证，误差约 `83.8 mm`；不能标记 verified。
+  - `cap_p5` 瓶盖旁有浅色长条物体，左 ROI 有效像素较少且 raw min 有离群值，存在局部混合深度风险。
+  - 瓶盖高度不应从相机到相机的“瓶盖顶部中心”刚体拟合里扣除；如果后续要换算桌面接触点，必须先有桌面法向和实测瓶盖高度。
+  - camera+TCP 推导和历史指尖接触候选差异远超内部残差，当前不能互相验证；两者都只能保留为 candidate。
+  - 工作区仍不得进入双臂协作、自动抓取或合爪；任何真实运动前必须重新现场确认。
+- 下一步范围：
+  1. 建议重新采 `cap_p5_repeat`：瓶盖周围尽量不要贴近长条、线缆或反光边缘，保持左右采样期间不移动。
+  2. 若重复验证仍大于约 `30 mm`，继续采更多无干扰点并重新拟合；通过前不标记 verified。
+  3. 若要提升到手眼/双臂统一坐标系，后续必须引入机械臂位姿或独立标定板验证，不能只靠当前候选变换。
 
 ## 2026-05-07 右臂脚本化靠近收口与架构审查接续
 - Wave: right-arm-autonomous-approach-closure-and-architecture-handoff
