@@ -93,7 +93,7 @@
 
 ## 2026-05-07 右臂脚本化靠近收口与架构审查接续
 - Wave: right-arm-autonomous-approach-closure-and-architecture-handoff
-- 状态：已按用户要求停止继续实机动作并清理控制图；右臂停稳，右夹爪打开；未合爪，未调用 `/competition/run`，未做双臂协作。下一窗口先处理 ClaudeCode 架构审查暴露的重复/分裂问题，再重新启动右臂链路接续夹取。
+- 状态：已按用户要求停止继续实机动作并清理控制图；右臂停稳，右夹爪打开；未合爪，未调用 `/competition/run`，未做双臂协作。下一窗口先处理 external review 架构审查暴露的重复/分裂问题，再重新启动右臂链路接续夹取。
 - 详细记录：
   - `docs/operations/reports/2026-05-07-right-arm-practice-control-log.md`
   - `.codex/tmp/resume/NEXT_WINDOW_PROMPT_2026-05-07-right-arm-architecture-and-grasp.md`
@@ -115,13 +115,13 @@
   - 未完成自动夹取；未执行合爪。
   - 靠近后目标持续贴到画面底边，最新 `bbox_edge_margin_px=0.0`，depth median 约 `0.210 m`，clearance gate 失败，外参仍是 `operator_confirmed_same_as_left_not_calibration_verified`。
   - 目标居中/TCP 对齐按用户要求是参考项，不是默认硬门禁；但目标贴边、深度跳变或 ROI 混背景时仍必须先恢复视野。
-- ClaudeCode 架构审查接续要求：
+- external review 架构审查接续要求：
   - 下窗口先处理项目三条执行路径分裂：正式主链、Quick 实机旁路、Gazebo 仿真链。
   - 优先收口重复 Orbbec bridge、重复 camera matrix、Quick 执行路径与 `execution_adapter` 分裂、launch 三层透传、配置 schema 分裂、右臂实机脚本 JSON 串联问题。
   - 架构清理阶段不得触发真实硬件运动；删除/归档前必须先 `rg` 引用并保留兼容入口或迁移说明。
 - 下一步范围：
   1. 读取 `.codex/tmp/resume/NEXT_WINDOW_PROMPT_2026-05-07-right-arm-architecture-and-grasp.md`。
-  2. 将 ClaudeCode 审查转成 PRD Story 和小波次，先做 P0/P1 重复源码/执行路径收口。
+  2. 将 external review 审查转成 PRD Story 和小波次，先做 P0/P1 重复源码/执行路径收口。
   3. 架构清理验证完成后，重新启动右臂控制图并重新采集 precheck；不要复用旧 JSON 直接运动。
   4. 若目标仍贴边，先做小步视野恢复；若 plan 实际出现 `grasp` 段且夹爪打开、现场安全，再执行合爪并用 `gobj` 验证是否夹到。
 
@@ -453,7 +453,7 @@
   - `source install/setup.bash && ros2 run quick_competition quick_competition_orchestrator --dry-run --full`：通过。
   - `bash scripts/ci/software_check.sh`：通过，`45 passed`、7 包构建、2 包 colcon test、前端 build 与 Playwright `2 passed`。
 - Sidecar：
-  - Claude Code read-only scout 两次未提供可用证据：第一次 CLI 参数模式失败，第二次超出 0.50 USD 预算；已按规则降级本地主线程核对，不作为完成证据。
+  - TNHTH read-only scout 两次未提供可用证据：第一次 CLI 参数模式失败，第二次超出 0.50 USD 预算；已按规则降级本地主线程核对，不作为完成证据。
 - 当前边界：
   - 未执行真实机械臂运动、夹爪开合或硬件 stop。
   - quick 模式 v1 的 IK preflight 是静态合同/工作空间检查，不声明替代完整 MoveIt 智能规划。

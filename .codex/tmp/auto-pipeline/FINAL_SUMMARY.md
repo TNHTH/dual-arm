@@ -3,19 +3,19 @@
 完成时间：2026-05-07
 
 ## 任务目标
-- 收口 2026-05-07 右臂实机脚本化靠近任务，停止继续运动，更新记录，并为下窗口准备“先处理 ClaudeCode 架构审查问题，再接续右臂夹取”的提示词。
+- 收口 2026-05-07 右臂实机脚本化靠近任务，停止继续运动，更新记录，并为下窗口准备“先处理 external review 架构审查问题，再接续右臂夹取”的提示词。
 
 ## 完成项
 - 已完成右臂两段 MoveIt/`execution_adapter` 脚本化 `pregrasp` 靠近和一段视野恢复，均闭环到 `motion_done=true`、`error_code=0`。
 - 未执行合爪；右夹爪保持打开，最后 status 为 `position=0`、`gobj=3`、`error=0`。
 - 已清理 `ROS_DOMAIN_ID=0` 控制图；`ros2 daemon stop` 后无有效控制节点或关键进程残留。
 - 已将 target alignment 默认改成 advisory，并保留显式 hard-gate 参数。
-- 已把 ClaudeCode 架构审查写入 `STATE.md`、断点、delivery task 和下窗口提示词。
+- 已把 external review 架构审查写入 `STATE.md`、断点、delivery task 和下窗口提示词。
 
 ## 未完成项
 - 自动夹取未完成；目标靠近后仍贴图像底边，最新 `bbox_edge_margin_px=0.0`。
 - 右相机到右 TCP 外参仍不是 calibration verified。
-- ClaudeCode 架构审查指出的主链/Quick/sim 执行路径分裂仍待下窗口处理。
+- external review 架构审查指出的主链/Quick/sim 执行路径分裂仍待下窗口处理。
 
 ## 证据位置
 - 详细报告：`docs/operations/reports/2026-05-07-right-arm-practice-control-log.md`

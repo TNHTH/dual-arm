@@ -36,7 +36,7 @@
 
 ## 2026-05-07 Architecture Review Checkpoint
 
-ClaudeCode 完整项目审查指出当前 runtime 需要新增一个架构收口波次，优先解决正式主链、Quick 实机旁路和 Gazebo 仿真链三套路径分裂问题。下一窗口应先把该审查拆成可验证 Story，再接续右臂硬件夹取。
+external review 完整项目审查指出当前 runtime 需要新增一个架构收口波次，优先解决正式主链、Quick 实机旁路和 Gazebo 仿真链三套路径分裂问题。下一窗口应先把该审查拆成可验证 Story，再接续右臂硬件夹取。
 
 优先范围：
 

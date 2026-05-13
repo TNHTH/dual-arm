@@ -71,10 +71,10 @@ vendor/fairino_sdk/software.backup_*/
 
 # AI / agent workspace files
 .codex/
-.claude/
+.agent-workspace/
 AGENTS.md
 agent.md
-CLAUDE.md
+AGENTS.md
 STATE.md
 **/SKILL.md
 **/ERROR_TRACE.md

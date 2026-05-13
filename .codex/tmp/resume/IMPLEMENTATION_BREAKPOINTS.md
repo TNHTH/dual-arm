@@ -135,11 +135,11 @@
   - clearance gate 失败；右相机到右 TCP 仍不是 calibration verified。
   - 目标 alignment 只是参考，不是默认硬门禁；但贴边/深度跳变时不能直接合爪。
 - 用户新增下窗口要求：
-  - ClaudeCode 完整审查指出项目存在正式主链、Quick 实机旁路、Gazebo 仿真链三套分裂路径，以及 Orbbec bridge、camera matrix、执行层、任务编排、pouring、夹爪、launch、配置和实机脚本重复。
+  - external review 完整审查指出项目存在正式主链、Quick 实机旁路、Gazebo 仿真链三套分裂路径，以及 Orbbec bridge、camera matrix、执行层、任务编排、pouring、夹爪、launch、配置和实机脚本重复。
   - 下窗口必须先解决这些建议体现的问题，再接续右臂夹取任务。
 - 下一步唯一入口：
   1. 先读 `.codex/tmp/resume/NEXT_WINDOW_PROMPT_2026-05-07-right-arm-architecture-and-grasp.md`。
-  2. 将 ClaudeCode 架构审查转成 PRD Story，先做 P0/P1 小波次清理，不触发硬件。
+  2. 将 external review 架构审查转成 PRD Story，先做 P0/P1 小波次清理，不触发硬件。
   3. 架构清理完成并验证后，重新启动右臂控制图，重新跑 precheck，禁止复用旧 JSON 直接运动。
   4. 若目标可见且 plan 生成实际 `grasp` 段，才进入合爪；合爪后以 EPG50 `gobj in {1,2}` 声明抓取成功。
 
@@ -416,7 +416,7 @@
   - `source install/setup.bash && ros2 run quick_competition quick_competition_orchestrator --dry-run --full` -> preflight/pouring/ball cage/log exported
   - `bash scripts/ci/software_check.sh` -> `45 passed`、7 包构建、2 包 colcon test、Playwright `2 passed`
 - 未计入通过证据：
-  - Claude Code sidecar scout 两次未提供可用证据，已记录到 ERROR_TRACE Incident 35。
+  - TNHTH sidecar scout 两次未提供可用证据，已记录到 ERROR_TRACE Incident 35。
   - 未执行真实硬件运动或夹爪动作。
 - 下一步：
   - 现场先跑 `bash scripts/quick/quick_hardware_smoke_test.sh`，人工确认 `/L/robot_state`、`/R/robot_state` 数值真实。

@@ -40,7 +40,7 @@
   - 用户允许 alignment advisory 不等于允许忽略目标可见性和深度一致性。
   - 合爪前必须确认 plan 中有实际 `grasp` 段，夹爪打开，且最新 precheck 不是贴边/背景混入状态。
 - Remaining:
-  - 自动夹取未完成；下窗口需先按用户要求处理 ClaudeCode 架构审查问题，再重新 bringup 硬件并重新采集 precheck。
+  - 自动夹取未完成；下窗口需先按用户要求处理 external review 架构审查问题，再重新 bringup 硬件并重新采集 precheck。
 
 ## Incident 49
 - Time: 2026-05-07
@@ -249,10 +249,10 @@
 - Time: 2026-05-06
 - Scope: quick_competition implementation and launch smoke
 - Symptom:
-  1. Claude Code read-only scout did not return useful evidence: first invocation failed with prompt/print argument handling, second invocation exceeded the 0.50 USD budget.
+  1. TNHTH read-only scout did not return useful evidence: first invocation failed with prompt/print argument handling, second invocation exceeded the 0.50 USD budget.
   2. First `ros2 launch dualarm_bringup quick_competition.launch.py dry_run:=true` smoke started quick nodes, but all Python entrypoints exited with `unrecognized arguments: --ros-args -r __node:=...`.
 - Root cause:
-  1. Sidecar prompt/tool budget was still too broad for the local Claude Code model/router, so it consumed budget before returning a concise scout report.
+  1. Sidecar prompt/tool budget was still too broad for the local TNHTH model/router, so it consumed budget before returning a concise scout report.
   2. quick console scripts used `argparse.parse_args()`, while `launch_ros.actions.Node` appends ROS arguments to Python executables.
 - Handling:
   1. Stopped relying on the sidecar for completion evidence and used local interface scans, py_compile, pytest, colcon build, launch smoke, and software_check.
@@ -267,7 +267,7 @@
     - `bash scripts/ci/software_check.sh` -> `45 passed`, 7 packages built, Playwright `2 passed`.
 - Prevention:
   - Any ROS 2 Python console script used as a `Node` executable should use `parse_known_args()` or remove ROS args before parsing custom CLI flags.
-  - Claude Code sidecars remain bounded best-effort inputs only; when they fail or exceed budget, continue with local evidence and record the lifecycle.
+  - TNHTH sidecars remain bounded best-effort inputs only; when they fail or exceed budget, continue with local evidence and record the lifecycle.
 - Remaining: none for quick software smoke. Real hardware remains untested by design.
 
 ## Incident 34

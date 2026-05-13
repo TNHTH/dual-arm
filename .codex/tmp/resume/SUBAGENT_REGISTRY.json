@@ -15,7 +15,7 @@
     {
       "role": "right_arm_architecture_review_and_grasp_handoff",
       "status": "local_main_thread_closed_no_live_ros_graph_next_window_prompt_ready",
-      "summary": "本轮未使用 subagent。主线程按用户要求停止继续实机动作，右臂最后有效状态 motion_done=true/error_code=0，TCP 约 [-226.135,-262.203,236.498,-171.249,38.941,37.351] mm/deg；右夹爪打开 position=0、gobj=3、error=0。已执行两段 MoveIt/执行适配器 pregrasp 靠近和一段视觉恢复，未合爪，未调用 /competition/run，未做双臂协作。ClaudeCode 架构审查被登记为下窗口首要任务：先处理主链/quick/sim 分裂、Orbbec bridge/camera matrix/执行层/launch/config/实机脚本重复，再重新 bringup 右臂并重新采 precheck 接续夹取。提示词写入 .codex/tmp/resume/NEXT_WINDOW_PROMPT_2026-05-07-right-arm-architecture-and-grasp.md。"
+      "summary": "本轮未使用 subagent。主线程按用户要求停止继续实机动作，右臂最后有效状态 motion_done=true/error_code=0，TCP 约 [-226.135,-262.203,236.498,-171.249,38.941,37.351] mm/deg；右夹爪打开 position=0、gobj=3、error=0。已执行两段 MoveIt/执行适配器 pregrasp 靠近和一段视觉恢复，未合爪，未调用 /competition/run，未做双臂协作。external review 架构审查被登记为下窗口首要任务：先处理主链/quick/sim 分裂、Orbbec bridge/camera matrix/执行层/launch/config/实机脚本重复，再重新 bringup 右臂并重新采 precheck 接续夹取。提示词写入 .codex/tmp/resume/NEXT_WINDOW_PROMPT_2026-05-07-right-arm-architecture-and-grasp.md。"
     },
     {
       "role": "right_arm_practice_motion_and_j6_orientation",
@@ -60,13 +60,13 @@
     {
       "role": "gazebo_full_sim_quick_hybrid",
       "status": "local_main_thread_active_no_new_subagents",
-      "summary": "当前任务为正式 Gazebo 主链仿真闭环 + quick hybrid computed-template 融合。因此前 Claude Code sidecar 两次未返回可用证据，本任务剩余阶段不打开非必要 subagent；实现、审查、验证先走本地主线程 checklist。当前状态为半实现未验证，详见 STATE.md 与 docs/operations/reports/2026-05-06-gazebo-full-sim-quick-hybrid-progress.md。"
+      "summary": "当前任务为正式 Gazebo 主链仿真闭环 + quick hybrid computed-template 融合。因此前 TNHTH sidecar 两次未返回可用证据，本任务剩余阶段不打开非必要 subagent；实现、审查、验证先走本地主线程 checklist。当前状态为半实现未验证，详见 STATE.md 与 docs/operations/reports/2026-05-06-gazebo-full-sim-quick-hybrid-progress.md。"
     },
     {
       "role": "quick_competition_claude_code_scout",
       "agent_type": "claude_code_sidecar",
       "status": "failed_budget_local_fallback",
-      "summary": "按用户要求尝试 Claude Code 只读 Scout；第一次 CLI 参数模式失败，第二次超过 0.50 USD 预算且未返回可用证据。主线程已用本地 rg/sed、pytest、colcon、launch smoke 和 software_check 完成核对。"
+      "summary": "按用户要求尝试 TNHTH 只读 Scout；第一次 CLI 参数模式失败，第二次超过 0.50 USD 预算且未返回可用证据。主线程已用本地 rg/sed、pytest、colcon、launch smoke 和 software_check 完成核对。"
     },
     {
       "role": "v1_hardware_interface_hardening",

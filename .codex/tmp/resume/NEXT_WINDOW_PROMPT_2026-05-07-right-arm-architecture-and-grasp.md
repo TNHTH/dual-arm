@@ -38,9 +38,9 @@
 - `packages/control/execution_adapter/*`
   - 已加入 ServoJ 平滑/重采样相关参数，当前实机执行时运动更平滑。
 
-下窗口首要任务不是直接继续实机夹取，而是先处理 ClaudeCode 架构审查暴露的问题，然后再恢复夹取：
+下窗口首要任务不是直接继续实机夹取，而是先处理 external review 架构审查暴露的问题，然后再恢复夹取：
 
-1. 先把 ClaudeCode 审查中的 P0/P1 问题转成仓库内计划和可验证 Story：
+1. 先把 external review 审查中的 P0/P1 问题转成仓库内计划和可验证 Story：
    - Orbbec bridge 重复：`packages/perception/orbbec_gemini_bridge/scripts/` vs `packages/tools/tools/scripts/orbbec_gemini_ros_bridge.py`
    - camera_matrix 重复：感知包 config vs tools/scripts
    - Quick 路径与正式主链执行层分裂：`quick_motion_executor.py`、`legacy_fairino_bridge.py`、`quick_pouring_primitives.py` vs `execution_adapter_node.py`

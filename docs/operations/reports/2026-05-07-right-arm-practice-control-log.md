@@ -205,9 +205,9 @@
   - 已对 `robo_ctrl`、MoveIt、planner、`planning_scene_sync`、`execution_adapter`、右夹爪节点做清理。
   - `ros2 daemon stop` 后复查，没有有效 `ROS_DOMAIN_ID=0` 控制节点或关键进程残留。
 
-### ClaudeCode 架构审查接续
+### external review 架构审查接续
 
-用户提供了 ClaudeCode 全项目审查结论：当前项目存在正式主链、Quick 实机旁路和 Gazebo 仿真链三套执行路径，且 Orbbec bridge、camera matrix、任务编排、运动执行、pouring primitive、夹爪控制、launch、配置和右臂实机脚本均有重复或分裂。下个窗口要求先解决这些建议中体现的问题，再接续右臂夹取。
+用户提供了 external review 全项目审查结论：当前项目存在正式主链、Quick 实机旁路和 Gazebo 仿真链三套执行路径，且 Orbbec bridge、camera matrix、任务编排、运动执行、pouring primitive、夹爪控制、launch、配置和右臂实机脚本均有重复或分裂。下个窗口要求先解决这些建议中体现的问题，再接续右臂夹取。
 
 下窗口提示词已写入：
 
@@ -215,7 +215,7 @@
 
 下一窗口建议顺序：
 
-1. 先把 ClaudeCode 架构审查拆成 PRD Story 和小波次，不直接删文件。
+1. 先把 external review 架构审查拆成 PRD Story 和小波次，不直接删文件。
 2. 优先处理 P0/P1：重复 Orbbec bridge、重复 camera matrix、Quick 执行路径和 `execution_adapter` 分裂。
 3. 架构清理不触发真实硬件运动。
 4. 架构清理验证后，重新启动右臂控制图，重新采集 precheck，不复用旧 JSON 直接夹取。

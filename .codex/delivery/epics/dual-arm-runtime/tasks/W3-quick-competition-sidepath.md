@@ -36,7 +36,7 @@
 
 ## 2026-05-07 Architecture Review Update
 
-ClaudeCode 完整项目审查指出 Quick Sidepath 已从“临时保底旁路”演变成与正式主链并列的第二套执行路径，造成以下交付风险：
+external review 完整项目审查指出 Quick Sidepath 已从“临时保底旁路”演变成与正式主链并列的第二套执行路径，造成以下交付风险：
 
 - `quick_motion_executor.py` 与 `execution_adapter_node.py` 分裂，运动安全、平滑和错误闭环无法统一复用。
 - `legacy_fairino_bridge.py` 直连硬件路径与正式 `robo_ctrl`/EPG50 service 路径分裂，stop/error 语义不一致。

@@ -31,7 +31,7 @@
 - 右臂通过 MoveIt/`execution_adapter` 完成两段脚本化 `pregrasp` 靠近和一段视野恢复，执行均闭环到 `motion_done=true`、`error_code=0`。
 - 用户明确目标居中/TCP 对齐不应作为默认硬门禁，可以作为参考；完成夹取任务优先。
 - 靠近后目标持续贴到画面边缘，depth ROI 一度从约 `0.220 m` 跳到约 `0.802 m`，说明 bbox-to-depth ROI 混入背景。最终未合爪，夹爪保持打开。
-- ClaudeCode 架构审查指出项目存在正式主链、Quick 实机旁路、Gazebo 仿真链三套执行路径，以及感知、配置、launch、执行层和实机脚本重复。
+- external review 架构审查指出项目存在正式主链、Quick 实机旁路、Gazebo 仿真链三套执行路径，以及感知、配置、launch、执行层和实机脚本重复。
 
 ### Worked
 - 把 alignment 从默认硬阻断改成 advisory，符合用户“夹取任务第一位”的策略，同时保留 JSON 风险输出。
@@ -49,7 +49,7 @@
 - 每次实机接近后必须重新采集 precheck；禁止用旧 JSON 直接继续合爪。
 - 合爪成功只能由夹爪状态证明：EPG50 `gobj in {1,2}` 才能声明抓到，`gobj=3` 不能算成功。
 - 右臂实机脚本后续应收口到主链：优先复用 `orbbec_gemini_bridge`、detector、depth_handler 和 `execution_adapter`，不要继续扩大 tools 下的裸 ioctl/JSON 串联路径。
-- 下个窗口先处理 ClaudeCode 架构审查中的重复/分裂问题，再恢复硬件夹取；架构清理阶段不触发真实运动。
+- 下个窗口先处理 external review 架构审查中的重复/分裂问题，再恢复硬件夹取；架构清理阶段不触发真实运动。
 
 ## 2026-05-07 右臂深度建模预检与实践控制复盘
 
@@ -175,7 +175,7 @@
 - launch smoke 很早暴露了 `--ros-args` / argparse 兼容问题，修复后所有基础节点可用。
 
 ### Waste
-- Claude Code scout 两次没有返回可用证据：第一次 CLI 参数模式失败，第二次超过 0.50 USD 预算。对这种接口核对，本地 `rg`/`sed` 更快。
+- TNHTH scout 两次没有返回可用证据：第一次 CLI 参数模式失败，第二次超过 0.50 USD 预算。对这种接口核对，本地 `rg`/`sed` 更快。
 - quick v1 的 hardware IK preflight 仍是静态合同和 workspace 检查，不能被误报成完整运动学规划成功。
 - 默认 waypoint 仍为空，hardware 模式必须现场录 verified waypoint 后才能动。
 
