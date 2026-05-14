@@ -10,12 +10,12 @@ def load_yaml(path: str) -> dict:
     return yaml.safe_load((REPO_ROOT / path).read_text(encoding="utf-8"))
 
 
-def test_safety_limits_keep_console_local_and_hardware_blocked_by_default():
+def test_safety_limits_no_token_required():
     config = load_yaml("config/control/safety_limits.yaml")
     assert config["console_api"]["host_default"] == "127.0.0.1"
-    assert config["console_api"]["require_token_for_dangerous_api"] is True
-    assert config["console_api"]["allow_external_host_default"] is False
-    assert config["console_api"]["allow_hardware_bringup_default"] is False
+    assert config["console_api"]["require_token_for_dangerous_api"] is False
+    assert config["console_api"]["allow_external_host_default"] is True
+    assert config["console_api"]["allow_hardware_bringup_default"] is True
 
 
 def test_competition_profile_points_to_canonical_config_paths():

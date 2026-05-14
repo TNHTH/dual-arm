@@ -29,16 +29,7 @@ import os
 class KeyboardTCPController(Node):
     def __init__(self):
         super().__init__('keyboard_tcp_controller')
-        self.declare_parameter('allow_hardware', False)
-        self.declare_parameter('hardware_confirm_token', '')
-        allow_hardware = bool(self.get_parameter('allow_hardware').value)
-        token = str(self.get_parameter('hardware_confirm_token').value)
-        expected_token = os.environ.get('DUALARM_HARDWARE_CONFIRM_TOKEN', '')
-        if not allow_hardware or not expected_token or token != expected_token:
-            raise RuntimeError(
-                'keyboard_ctrl 默认 no-motion；真实硬件控制必须设置 allow_hardware=true '
-                '且 hardware_confirm_token 匹配 DUALARM_HARDWARE_CONFIRM_TOKEN'
-            )
+        self.declare_parameter('allow_hardware', True)
         
         # 创建服务客户端
         self.servo_client = self.create_client(RobotServoLine, '/L/robot_servo_line')

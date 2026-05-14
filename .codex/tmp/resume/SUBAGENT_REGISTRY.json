@@ -1,7 +1,57 @@
 {
-  "updated_at": "2026-05-08",
-  "task": "production runtime authority closure and dual arm hardware camera alignment",
+  "updated_at": "2026-05-09",
+  "task": "FairinoDualArm upstream clone, PT model detection port, measured base frame parameterization, production runtime authority closure, dual arm hardware camera alignment, table height depth probe, right arm slow memory plan-only, right arm token pregrasp stop, right arm observe remember grasp node, right arm observe remember live test, coke cap unscrew live sequence attempt, and coke cap unscrew continuation success",
   "agents": [
+    {
+      "role": "coke_cap_unscrew_live_execute",
+      "status": "local_main_thread_continued_success_no_subagent",
+      "summary": "本轮未使用 subagent。主线程先按用户 token 和现场确认执行可乐拧瓶盖示教序列，完成左臂 1、右夹爪张开、右臂 2/3、右夹爪夹紧和右臂 4；初次失败暴露 left=1+right=4 MoveIt collision、左臂 ServoJ accepted-but-no-motion、MoveJ 154 和 XmlRpc::XmlRpcException。用户随后现场确认同一动作可以发出，主线程修复 MoveJ SDK 包装：对目标 JointPos 调用 GetForwardKin 后把匹配 DescPose 传入 MoveJ；robo_ctrl 构建通过，左臂 1->5 direct SDK MoveJ 成功，并完成 (5->左夹紧->6->左松开)*6。最终左臂在点 6、左夹爪 position=0/error=0/gobj=3，右臂只读复核在点 4 且 motion_done=true/error_code=0；ROS 图已清空。详细报告 docs/operations/reports/2026-05-09-coke-cap-unscrew-live-execute-failed.md 和 docs/operations/reports/2026-05-09-coke-cap-unscrew-live-continued-success.md。"
+    },
+    {
+      "role": "fairino_dualarm_upstream_model_detection_base_config",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "本轮未使用 subagent。主线程浅克隆 /home/gwh/FairinoDualArm，接入当前 best.pt/last.pt 与 detector_pt_node.py，新增 detector_pt.launch.py；depth_handler launch 补齐 target/source frame 参数；robo_ctrl 的 world/reference_frame -> {L,R}robot_base 从硬编码改为 base_x/y/z_m 和 base_roll/pitch/yaw_deg launch 参数，默认全零等待现场测量。detector/depth_handler/robo_ctrl/tools 构建通过，detector 和 depth_handler no-motion smoke clean exit；未发送任何机械臂或夹爪命令。"
+    },
+    {
+      "role": "right_arm_one_shot_live_real_test",
+      "status": "local_main_thread_real_hardware_attempt_failed_closed_no_lift",
+      "summary": "本轮未使用 subagent。主线程按用户要求执行实机 one-shot-live：完成右 RGB-D 感知、depth 桌面平面 runtime correction、depth-only 可乐凸起分割、memory 生成、scene 发布和 pregrasp_high 真实执行；恢复执行中完成 pregrasp_high、pregrasp_low、grasp 真实轨迹和夹爪 close。最终右夹爪 gobj=3、position=219，判定夹空，未 attach、未 lift；随后通过 /execution/set_gripper 打开夹爪到 position=0，最后右臂 motion_done=true/error_code=0，控制图已清空。详细报告 docs/operations/reports/2026-05-08-right-arm-one-shot-live-real-test.md。"
+    },
+    {
+      "role": "right_arm_observe_remember_live_test",
+      "status": "local_main_thread_blocked_before_motion_no_subagent",
+      "summary": "本轮未使用 subagent。用户提供一次性 token `TOKEN` 后，主线程拉起右臂低速控制、MoveIt、planner、planning_scene_sync、execution_adapter、右夹爪 status、右 RGB-D 和右 detector；未执行真实轨迹、未发送夹爪 command、未调用 /competition/run。右 RGB-D 通过 orbbec_gemini_bridge native V4L2 mmap Z16 fallback 发布，color/depth 均约 2Hz；detector 检出 cocacola score 约 0.9166。observe-only 因 raw_unregistered depth 要求 manual depth pixel；manual 点 (286,384) 后 ROI 投到 world 的 z 中位数约 0.197m，不满足 -0.055<z<0.090，valid_world_points=0，因此未生成 coke_can_memory.json，未 publish scene、未 plan、未执行。详细报告 docs/operations/reports/2026-05-08-right-arm-observe-remember-live-test.md。"
+    },
+    {
+      "role": "right_arm_observe_remember_grasp_node",
+      "status": "local_main_thread_completed_static_build_no_subagent",
+      "summary": "本轮未使用 subagent。主线程新增 observe_remember_grasp_node.py，提供 observe-only、publish-scene、plan-pregrasp、execute-pregrasp、execute-final、full 分阶段模式；默认 no-motion observe-only。节点输出 world-frame coke_can_memory.json，记录固定 can/table 参数、view/grasp direction、candidate_not_calibration_verified 和 RGB-depth alignment debug；无法证明 depth aligned 时要求 manual depth pixel。planning_scene_sync 增加 coke_can collision managed semantic。execution 路径只通过 /planning/plan_pose、/execution/execute_trajectory 和 /execution/set_gripper，且要求 hardware token、人工确认、robot state、planner/action/gripper status 与 Rend_to_pinch_center。py_compile、raw endpoint scan、git diff --check、colcon build tools+planning_scene_sync、ros2 executable check 和 --help 均通过；未执行真实运动、夹爪 command 或 /competition/run。"
+    },
+    {
+      "role": "table_height_depth_probe",
+      "status": "local_main_thread_completed_no_subagent_motion_gate_closed",
+      "summary": "本轮未使用 subagent。主线程新增 table_height_probe.py，只读采集 Orbbec Z16 深度并拟合桌面平面；右相机候选质量较好，inlier ratio 0.7389、median residual 0.577mm、camera-to-table perpendicular distance 0.326731m、table center camera [0.036304,0.121831,0.500500]m；左相机候选 inlier ratio 0.4607、median residual 1.094mm、perpendicular distance 0.420600m。未启动 robo_ctrl、planner、execution_adapter、夹爪或 /competition/run；结果只是 camera-frame candidate，缺 verified camera_to_world/camera_to_robot_base 和 planner table collision，motion_safety_gate.motion_allowed=false。"
+    },
+    {
+      "role": "right_arm_token_slow_pregrasp_stop",
+      "status": "local_main_thread_completed_control_graph_stopped_no_subagent",
+      "summary": "本轮未使用 subagent。用户提供一次性 token `TOKEN` 后，主线程保留现有 hardware token gate，以 max_velocity/max_acceleration/max_ovl=5% 和 execution_adapter ServoJ vel=0.2 acc=0.2 执行右臂低速抓取尝试。fresh memory age gate 与 target alignment gate 通过，右夹爪 enable/open 成功，右臂 pregrasp plan/execution 成功；后续 grasp plan 失败，result_code=ik_failed、failure_stage=path_search、point_count=0，因此没有合爪、没有夹住可乐、没有 /competition/run。预抓取位重新采集 fresh memory 失败，左右检测无可用可乐目标。收尾前右臂 motion_done=true/error_code=0，TCP 约 [-323.200745,-155.061249,260.209229,172.103897,35.111542,34.854973]；控制类进程已清空，只保留左右 RGB 检测可视化。详细报告 docs/operations/reports/2026-05-08-right-arm-token-execution-pregrasp-stop.md；新窗口提示 .codex/tmp/resume/NEXT_WINDOW_PROMPT_2026-05-08-right-arm-token-pregrasp.md。"
+    },
+    {
+      "role": "right_arm_slow_memory_plan_only",
+      "status": "local_main_thread_completed_blocked_by_token_no_subagent",
+      "summary": "本轮未使用 subagent。用户确认右臂周围安全并要求速度一定要慢；主线程按 max_velocity/max_acceleration/max_ovl=5% 与 execution_adapter ServoJ vel=0.2 acc=0.2 拉起右臂低速控制/规划链路，只做 no-motion plan-only。DUALARM_HARDWARE_CONFIRM_TOKEN=unset，未执行轨迹，未启动夹爪节点，未调用夹爪 command 或 /competition/run。旧记忆和 fresh-memory-v2 均完成 pregrasp plan-only；fresh-memory-v2 右相机目标中心 [-0.006418,0.003585,0.408000]m，候选 TCP [-0.016418,-0.086415,0.464000]m，PlanPose success point_count=56。fresh-memory 第一版因误设 camera_matrix_source=640x480 已废弃，正确使用 1280x720->640x480。临时控制栈已停止，只保留左右 RGB 检测可视化。"
+    },
+    {
+      "role": "dual_camera_memory_right_grasp_candidate",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "本轮未使用 subagent。主线程生成双相机可乐点云记忆、HTML 3D 可视化和右臂夹取候选；将 YOLO cocacola 通过 object_geometry.yaml alias 匹配到 cola_bottle，使用硬编码 bbox [0.060,0.060,0.145]m、body_mid 抓取区和 preferred_gripper_width 0.066m 作为夹取/碰撞模型，点云只作为中心记忆和风险证据。未启动 robo_ctrl，未执行运动、夹爪 command 或 /competition/run。当前 token unset，planner/execution/right robot state/gripper status 不可用，clearance、外参和 fused transform 仍 fail-closed。"
+    },
+    {
+      "role": "right_camera_exposure_coke_precheck",
+      "status": "local_main_thread_completed_no_subagent",
+      "summary": "本轮未使用 subagent。主线程按用户要求检查右相机曝光：右 Orbbec CP02653000G2 /dev/video14 自动曝光画面灰度均值约 18.7、近黑像素约 80.3%，导致 cocacola 未检测；手动 auto_exposure=1、exposure_absolute=300、gain=32 后画面恢复，right_arm_grasp_precheck.py 检测 cocacola score 约 0.923，depth ROI median 约 0.408m，candidate TCP point 约 [-0.020557,-0.087746,0.464000]m。未启动 robo_ctrl，未执行运动、夹爪 command 或 /competition/run；因 clearance gate 与外参 gate 失败，自动抓取仍 fail-closed。"
+    },
     {
       "role": "production_runtime_authority_closure",
       "status": "local_main_thread_completed_no_subagent",

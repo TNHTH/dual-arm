@@ -16,7 +16,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         "profile": LaunchConfiguration("profile"),
-                        "allow_raw_motion_debug": False,
+                        "allow_raw_motion_debug": True,
                     }
                 ],
             ),

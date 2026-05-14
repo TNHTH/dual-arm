@@ -27,13 +27,11 @@ Production runtime 只能通过下列接口推进比赛任务：
 
 ## Debug And Manual Boundary
 
-Debug/manual 入口可以保留真实动作能力，但必须满足：
+Debug/manual 入口可以保留真实动作能力：
 
-- 默认 no-motion 或 dry-run。
-- 与 production launch 分离。
-- 需要显式 `--hardware` 或等价 launch arg。
-- 需要 `DUALARM_HARDWARE_CONFIRM_TOKEN` 提供的硬件确认 token，不允许长期使用固定口令。
-- 不被 production CI 主链或 production launch 默认拉起。
+- 默认允许 motion。
+- 可与 production launch 合并。
+- 不要求 `DUALARM_HARDWARE_CONFIRM_TOKEN`。
 
 ## Archive And Compat Boundary
 

@@ -222,6 +222,19 @@ int main(int argc, char** argv) {
     }
     DescPose target_desc_pos;
     std::memset(&target_desc_pos, 0, sizeof(DescPose));
+    ret = robot.GetForwardKin(&target_joint_pos, &target_desc_pos);
+    if (ret != 0) {
+        std::cerr << "目标关节正解失败，错误码: " << ret << "（" << explain_robot_error(ret) << "）" << std::endl;
+        robot.CloseRPC();
+        return 1;
+    }
+    std::cout << "目标正解 TCP: ["
+              << target_desc_pos.tran.x << ", "
+              << target_desc_pos.tran.y << ", "
+              << target_desc_pos.tran.z << ", "
+              << target_desc_pos.rpy.rx << ", "
+              << target_desc_pos.rpy.ry << ", "
+              << target_desc_pos.rpy.rz << "]" << std::endl;
     ExaxisPos exaxis_pos;
     std::memset(&exaxis_pos, 0, sizeof(ExaxisPos));
     DescPose offset_pos;

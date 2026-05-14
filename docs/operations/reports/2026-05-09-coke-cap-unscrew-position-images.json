@@ -1,0 +1,134 @@
+{
+  "record_date": "2026-05-09",
+  "wave": "coke-cap-unscrew-controller-screenshot-positions",
+  "source_dir": "/home/gwh/下载/位置",
+  "source_type": "operator_controller_screenshot",
+  "capture_order_basis": "用户说明文件名即动作顺序；按 1.jpg, 2.jpg, 3.jpg, 4.png, 5.jpg, 6.jpg 记录。",
+  "units": {
+    "joint": "deg",
+    "tcp_xyz": "mm",
+    "tcp_rxyz": "deg"
+  },
+  "safety": {
+    "motion_allowed": false,
+    "reason": "这些数据来自控制器网页截图人工读取，只能作为 screenshot_candidate；尚未通过 ROS /robot_state 只读采样、MoveIt plan-only 或实机安全门禁验证。"
+  },
+  "sequence": [
+    {
+      "sequence": 1,
+      "source_file": "/home/gwh/下载/位置/1.jpg",
+      "arm": "left",
+      "program": "左臂可乐.lua",
+      "controller_model": "FR3 V6.0",
+      "line_no": 1,
+      "action_label": "观察",
+      "ptp_text_visible": "PTP(观察,100,-1,0)",
+      "joints_deg": [-39.655, -155.319, 65.205, -45.636, -93.824, -75.789],
+      "tcp": {
+        "x": 25.595,
+        "y": -145.029,
+        "z": 500.357,
+        "rx": -169.366,
+        "ry": -44.896,
+        "rz": 120.118
+      }
+    },
+    {
+      "sequence": 2,
+      "source_file": "/home/gwh/下载/位置/2.jpg",
+      "arm": "right",
+      "program": "右臂可乐.lua",
+      "controller_model": "FR3 V6.0",
+      "line_no": 1,
+      "action_label": "准备夹取",
+      "ptp_text_visible": "PTP(准备夹取,100,-...",
+      "joints_deg": [-101.278, -101.799, -78.836, -181.355, -36.069, 85.654],
+      "tcp": {
+        "x": -248.245,
+        "y": -309.988,
+        "z": 307.429,
+        "rx": 101.156,
+        "ry": -83.929,
+        "rz": -76.317
+      },
+      "quality_note": "截图中 PTP 文本右侧被截断；Robot 面板的关节和 TCP 数值清晰可读。"
+    },
+    {
+      "sequence": 3,
+      "source_file": "/home/gwh/下载/位置/3.jpg",
+      "arm": "right",
+      "program": "右臂可乐.lua",
+      "controller_model": "FR3 V6.0",
+      "line_no": 2,
+      "action_label": "夹取",
+      "ptp_text_visible": "PTP(夹取,100,-1,0)",
+      "joints_deg": [-116.296, -114.995, -118.686, -126.748, -69.524, 85.654],
+      "tcp": {
+        "x": -279.349,
+        "y": -256.125,
+        "z": 97.698,
+        "rx": 95.106,
+        "ry": -85.485,
+        "rz": -51.863
+      }
+    },
+    {
+      "sequence": 4,
+      "source_file": "/home/gwh/下载/位置/4.png",
+      "arm": "right",
+      "program": "右臂可乐.lua",
+      "controller_model": "FR3 V6.0",
+      "line_no": 3,
+      "action_label": "准备拧",
+      "ptp_text_visible": "PTP(准备拧,100,-1,0)",
+      "joints_deg": [-98.039, -140.277, -10.387, -211.274, -85.404, 85.638],
+      "tcp": {
+        "x": -181.769,
+        "y": -500.282,
+        "z": 331.149,
+        "rx": 113.223,
+        "ry": -85.085,
+        "rz": -35.786
+      }
+    },
+    {
+      "sequence": 5,
+      "source_file": "/home/gwh/下载/位置/5.jpg",
+      "arm": "left",
+      "program": "左臂可乐.lua",
+      "controller_model": "FR3 V6.0",
+      "line_no": 2,
+      "action_label": "准备拧",
+      "ptp_text_visible": "PTP(准备拧,100,-1,0)",
+      "joints_deg": [-63.208, -77.609, -5.625, -14.419, -92.976, -75.787],
+      "tcp": {
+        "x": -177.806,
+        "y": 137.347,
+        "z": 566.42,
+        "rx": 179.006,
+        "ry": -8.149,
+        "rz": 102.449
+      },
+      "quality_note": "截图中 Z 仅显示两位小数，按可见值 566.42 记录。"
+    },
+    {
+      "sequence": 6,
+      "source_file": "/home/gwh/下载/位置/6.jpg",
+      "arm": "left",
+      "program": "左臂可乐.lua",
+      "controller_model": "FR3 V6.0",
+      "line_no": 3,
+      "action_label": "拧",
+      "ptp_text_visible": "PTP(拧,100,-1,0)",
+      "joints_deg": [-63.208, -77.608, -5.627, -14.419, -92.976, -117.207],
+      "tcp": {
+        "x": -177.809,
+        "y": 137.354,
+        "z": 566.418,
+        "rx": 173.849,
+        "ry": -5.449,
+        "rz": 144.094
+      }
+    }
+  ]
+}

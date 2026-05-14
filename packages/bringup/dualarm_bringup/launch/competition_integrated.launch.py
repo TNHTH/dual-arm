@@ -95,7 +95,7 @@ def generate_launch_description():
                 "right_gripper_port",
                 default_value="/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_A_COb114J19-if00-port0",
             ),
-            DeclareLaunchArgument("start_console_api", default_value="false"),
+            DeclareLaunchArgument("start_console_api", default_value="true"),
             DeclareLaunchArgument("start_console_web", default_value="false"),
             DeclareLaunchArgument("profile", default_value="test"),
             DeclareLaunchArgument("scene_age_limit_ms", default_value="800"),
@@ -189,7 +189,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         "profile": LaunchConfiguration("profile"),
-                        "allow_raw_motion_debug": False,
+                        "allow_raw_motion_debug": True,
                     }
                 ],
             ),

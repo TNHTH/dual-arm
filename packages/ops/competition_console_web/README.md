@@ -20,6 +20,16 @@ npm run build
 npx playwright test --reporter=line
 ```
 
+## 独立夹爪控制页
+
+构建后会生成一个只控制左右 EPG50 夹爪的独立页面：
+
+```text
+http://127.0.0.1:18081/gripper.html
+```
+
+该页面按钮通过同源 `/api/control/gripper` 调用 `competition_console_api`，再由后端调用 ROS `/execution/set_gripper`。页面不会直接发送机械臂运动命令，也不会调用右相机 pipeline。
+
 ## 上下游依赖
 
 - 上游：仓库根环境、Node.js、Playwright、`competition_console_api`。

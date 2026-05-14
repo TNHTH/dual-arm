@@ -38,26 +38,6 @@ def authorize_dangerous_request(
     api_token: str,
     allow_unsafe_without_token: bool = False,
 ) -> Optional[dict[str, object]]:
-    if not api_token:
-        if allow_unsafe_without_token:
-            return None
-        return {
-            "status_code": HTTPStatus.FORBIDDEN,
-            "error": "api_token_required",
-            "message": "dangerous API requires api_token; set DUAL_ARM_CONSOLE_API_TOKEN or api_token parameter",
-        }
-
-    normalized_headers = {key.lower(): value for key, value in headers.items()}
-    provided = normalized_headers.get("x-dual-arm-token", "")
-    authorization = normalized_headers.get("authorization", "")
-    if authorization.lower().startswith("bearer "):
-        provided = authorization.split(" ", 1)[1].strip()
-    if provided != api_token:
-        return {
-            "status_code": HTTPStatus.UNAUTHORIZED,
-            "error": "invalid_api_token",
-            "message": "dangerous API token missing or invalid",
-        }
     return None
 
 

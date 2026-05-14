@@ -140,6 +140,8 @@ private:
     double fill_target_offset_ {0.03};
     double roi_margin_ratio_ {0.1};
     double table_reject_distance_ {0.018};
+    double min_depth_m_ {0.05};
+    double max_depth_m_ {3.0};
     bool use_table_plane_ {true};
     std::string expected_detection_frame_;
     std::vector<std::string> allowed_semantic_types_;

@@ -24,6 +24,8 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>dualarm_interfaces</depend>
+  <depend>detector</depend>
+  <depend>epg50_gripper_ros</depend>
   <depend>libopencv-dev</depend>
   <depend>libcurl4-openssl-dev</depend>
   <depend>robo_ctrl</depend>

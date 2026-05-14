@@ -658,6 +658,7 @@ class PlanningSceneSyncNode(Node):
             "table_surface",
             "water_bottle",
             "cola_bottle",
+            "coke_can",
             "cup",
             "basketball",
             "soccer_ball",

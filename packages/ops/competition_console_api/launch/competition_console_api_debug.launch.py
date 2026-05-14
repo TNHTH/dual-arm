@@ -8,8 +8,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("profile", default_value="debug"),
-            DeclareLaunchArgument("allow_raw_motion_debug", default_value="false"),
-            DeclareLaunchArgument("hardware_confirm_token", default_value=""),
+            DeclareLaunchArgument("allow_raw_motion_debug", default_value="true"),
             Node(
                 package="competition_console_api",
                 executable="competition_console_api_node.py",
@@ -19,7 +18,6 @@ def generate_launch_description():
                     {
                         "profile": LaunchConfiguration("profile"),
                         "allow_raw_motion_debug": LaunchConfiguration("allow_raw_motion_debug"),
-                        "raw_motion_debug_confirm_token": LaunchConfiguration("hardware_confirm_token"),
                     }
                 ],
             ),

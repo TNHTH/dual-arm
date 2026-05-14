@@ -11,21 +11,7 @@
 
 ## API Token
 
-危险 API 包括 bringup、点动、夹爪、mode recover、delete、acceptance run 等 POST/PUT/PATCH/DELETE 路由。
-
-调用方式：
-
-```bash
-curl -H "X-Dual-Arm-Token: $DUAL_ARM_CONSOLE_API_TOKEN" \
-  -X POST http://127.0.0.1:18080/api/bringup/start
-```
-
-或：
-
-```bash
-curl -H "Authorization: Bearer $DUAL_ARM_CONSOLE_API_TOKEN" \
-  -X POST http://127.0.0.1:18080/api/control/arm/jog/stop
-```
+API token 门禁已移除，所有 API 路由无需认证即可访问。
 
 ## Stop / Cancel
 

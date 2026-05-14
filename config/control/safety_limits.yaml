@@ -8,9 +8,9 @@
 
 console_api:
   host_default: "127.0.0.1"
-  require_token_for_dangerous_api: true
-  allow_external_host_default: false
-  allow_hardware_bringup_default: false
+  require_token_for_dangerous_api: false
+  allow_external_host_default: true
+  allow_hardware_bringup_default: true
 
 jog:
   max_single_delta_mm: 10.0

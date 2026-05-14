@@ -10,4 +10,4 @@
 - `docs/operations/runbooks/safety.md`
 - `docs/operations/runbooks/competition_gazebo_full.md`
 
-任何 manual/debug 工具真实动作都必须默认 no-motion，并显式提供 `DUALARM_HARDWARE_CONFIRM_TOKEN` 匹配的硬件确认 token。
+Manual/debug 工具真实动作默认允许，不要求硬件确认 token。

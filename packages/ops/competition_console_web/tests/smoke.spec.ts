@@ -36,6 +36,16 @@ async function installMockApi(page: Page) {
     if (path === "/api/control/state") {
       return json({ left_robot: null, right_robot: null, core_running: false, jog_state: {} });
     }
+    if (path === "/api/control/gripper/status") {
+      return json({
+        left_arm: { success: true, position: 0, gobj: 3, error: 0, interpreted_state: "open" },
+        right_arm: { success: true, position: 0, gobj: 3, error: 0, interpreted_state: "open" },
+        summary: { left_ready: true, right_ready: true },
+      });
+    }
+    if (path === "/api/control/gripper") {
+      return json({ success: true, arm: "left_arm", message: "mock gripper command" });
+    }
     if (path === "/api/presets") {
       return json({ left_arm: [], right_arm: [] });
     }
@@ -88,4 +98,16 @@ test("mocked API-backed actions are wired", async ({ page }) => {
   expect(calls["POST /api/recordings/start"]).toBe(1);
   await page.getByRole("button", { name: "应用并启动" }).click();
   expect(calls["POST /api/bringup/start"]).toBe(1);
+});
+
+test("standalone gripper page sends API-backed commands", async ({ page }) => {
+  const calls = await installMockApi(page);
+  await page.goto("/gripper.html");
+  await expect(page.getByRole("heading", { name: "DualArm 左右夹爪控制" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "左夹爪打开" })).toBeDisabled();
+  await page.getByPlaceholder("输入 ARM 确认启用按钮").fill("ARM");
+  await expect(page.getByRole("button", { name: "左夹爪打开" })).toBeEnabled();
+  await page.getByRole("button", { name: "左夹爪打开" }).click();
+  expect(calls["POST /api/control/gripper"]).toBe(1);
+  expect(calls["GET /api/control/gripper/status"]).toBeGreaterThanOrEqual(1);
 });

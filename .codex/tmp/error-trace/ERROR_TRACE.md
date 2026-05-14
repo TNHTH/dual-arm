@@ -1,5 +1,215 @@
 # Error Trace
 
+## Note 2026-05-09 FairinoDualArm Upstream Model Detection/Base Config
+- Scope: 将上游 `HDU-PHOENIX/FairinoDualArm` 作为后续主项目代码，接入当前 YOLOv8 PT 模型检测，并把双臂基座坐标改为现场测量参数。
+- Result: `/home/gwh/FairinoDualArm` 已浅克隆并完成 no-motion 软件接线；`detector`、`depth_handler`、`robo_ctrl`、`tools` 相关最小构建通过。
+- Issues found and handled:
+  - 完整 `git clone` 因 `GnuTLS recv error` / EOF 失败；改用 `git clone --depth 1 --single-branch` 成功。
+  - 初次构建被 Conda `PATH` 门禁阻断；改用 `env -i` 非登录 clean shell 与 `/usr/bin/python3`。
+  - 本机 TensorRT 版本与旧 `lw_detr.cpp` API 不兼容；默认关闭旧 C++ TensorRT runtime，保留 PT detector 和消息接口。
+  - `tools` 包强制构建缺失的 `src/opencv_test.cpp`；改为文件存在时才构建该测试程序。
+- Evidence:
+  - `colcon build --packages-select detector depth_handler robo_ctrl --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3`：通过。
+  - `colcon build --packages-select tools --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3`：通过。
+  - detector no-motion smoke 成功加载 `best.pt`，打印 6 类模型类别，SIGINT clean exit。
+  - depth_handler no-motion smoke 初始化 `camera_depth_frame -> Lrobot_base` 参数，SIGINT clean exit。
+- Hardware action: 本轮未发送机械臂运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令。
+- Remaining:
+  - 基座坐标默认全零占位，必须现场测量后通过 `base_x/y/z_m` 与 `base_roll/pitch/yaw_deg` 填入。
+  - 后置检查发现 `/home/gwh/dual-arm` 既存控制图进程仍在运行；后续 planner/硬件验证前必须先确认并清理。
+- Prevention:
+  - 迁移上游仓库时，旧 TensorRT/CUDA 代码必须默认 opt-in，不应阻塞 PT 模型软件链路构建。
+  - launch 参数检查需要把依赖包一并构建，例如 `robo_ctrl` launch 依赖 `tools` 的 share 资源。
+  - 基座 TF 不能硬编码；在未测量前只能保留占位，并在文档中明确不得作为运动事实。
+
+## Note 2026-05-09 Coke Cap Unscrew Current Attempt Runner Gate Fix
+- Scope: 用户再次要求按 `1 -> 右夹爪张开 -> 2 -> 3 -> 右夹爪夹紧 -> 4 -> (5 -> 左夹爪夹紧 -> 6 -> 左夹爪松开) * 6` 执行完整可乐拧瓶盖序列。
+- Result: 未执行真实硬件动作；已核对 6 张图片数据和 30 步展开序列；真实 execute gate 因 `DUALARM_HARDWARE_CONFIRM_TOKEN=unset` 阻断。
+- Runner defect: `coke_cap_unscrew_sequence_runner.py` 调用 `hardware_token_matches()`，但源文件缺少该函数定义；同时 `validate_execute_gates()` 未把 token mismatch/unset 纳入 blocker。该缺陷会导致 dry-run/execute gate 报告生成失败，必须修复后才能继续。
+- Handling:
+  - 补回 `hardware_token_matches()`。
+  - `execute` 模式重新阻断 `hardware_confirm_token_mismatch_or_unset`。
+  - 报告目录加入 mode 和毫秒，避免同一秒连续运行覆盖 evidence。
+  - 清理 `build/tools`、`install/tools` 后重建；第一次因 Conda Python 缺 `em` 失败，随后用 `/usr/bin/python3` 强制 CMake Python 重建成功。
+- Evidence:
+  - `/usr/bin/python3 -m py_compile packages/tools/tools/scripts/coke_cap_unscrew_sequence_runner.py`：通过。
+  - `ros2 run tools coke_cap_unscrew_sequence_runner.py --mode dry-run --repeat-left-twist 6`：`dry-run ok: 30 steps`。
+  - `ros2 run tools coke_cap_unscrew_sequence_runner.py --mode execute --repeat-left-twist 6 --operator-confirm-site --hardware-confirm-token TEST`：`blocked: hardware_confirm_token_mismatch_or_unset`。
+  - 详细报告：`docs/operations/reports/2026-05-09-coke-cap-unscrew-sequence-current-attempt.md`。
+- Hardware action: 本轮没有启动 `robo_ctrl`、MoveIt、planner、`execution_adapter` 或夹爪节点；没有发送机械臂运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令。
+- Prevention: 真机 runner 的 execute gate 必须在 ROS init 之前验证 token；安装树必须用 `ros2 run` 再验证一次，不能只验证源码入口；ROS 构建优先显式指定 `/usr/bin/python3`，避免 Conda 抢占 `rosidl_adapter`。
+
+## Note 2026-05-09 Coke Cap Unscrew Full Sequence Blocked
+- Scope: 用户要求按 `1 -> 右夹爪张开 -> 2 -> 3 -> 右夹爪夹紧 -> 4 -> (5 -> 左夹爪夹紧 -> 6 -> 左夹爪松开) * 6` 执行完整可乐拧瓶盖序列。
+- Result: 未执行真实硬件动作；已把展开序列和阻断原因记录到 `docs/operations/reports/2026-05-09-coke-cap-unscrew-sequence-request-blocked.md` 和同名 JSON。
+- Hardware action: 本轮只读取状态、历史报告和 runbook；没有启动 ROS、没有连接硬件、没有发送机械臂运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令。
+- Blockers:
+  - `DUALARM_HARDWARE_CONFIRM_TOKEN` 未设置。
+  - `1..6` 点仍是 `screenshot_candidate`，不是 ROS verified preset。
+  - 同日已有双臂 ServoJ timeout、左臂 ServoJ 未知异常和左臂 MoveJ 错误码 `154`；按项目安全边界，修复前不得直接重发大跨度动作。
+- Update: 用户说明该序列实测可行并要求取消妨碍调试的额外门禁；已新增 `packages/tools/tools/scripts/coke_cap_unscrew_sequence_runner.py`，不再把“截图候选许可/已实测声明/接受风险”作为额外硬阻断，但仍保留 `DUALARM_HARDWARE_CONFIRM_TOKEN`、现场确认、逐段规划和执行后最终关节误差校验。
+- Prevention: 完整序列执行前必须由现场提供 token；执行入口必须逐段 plan/execute 并复查最终关节误差，不能删除项目全局硬件门禁。
+
+## Note 2026-05-09 Coke Cap Unscrew Position Screenshots
+- Scope: 可乐抓取与拧瓶盖控制器截图位置记录。
+- Result: 已按用户指定文件名顺序读取 `/home/gwh/下载/位置/1.jpg` 到 `6.jpg`，记录左右臂程序 `左臂可乐.lua`、`右臂可乐.lua` 的高亮 PTP 行、J1-J6 和 TCP。
+- Evidence: 详细数据写入 `docs/operations/reports/2026-05-09-coke-cap-unscrew-position-images.md` 和 `docs/operations/reports/2026-05-09-coke-cap-unscrew-position-images.json`；JSON 已通过结构校验。
+- Hardware action: 本轮只读本地图片和项目文件；没有启动 ROS、没有连接硬件、没有发送机械臂运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令。
+- Boundary: 这些点是 `screenshot_candidate`，不是 ROS `/robot_state` 采样验证点；后续不得直接作为 production motion authority。
+- Prevention: 若要复用截图点，先用只读 `robo_ctrl` 复采当前关节角并确认 `motion_done=true`、`error_code=0`，再走 `/planning/*` plan-only；`2.jpg` 的 PTP 文本被截断，完整程序参数需回控制器程序确认。
+
+## Note 2026-05-09 DualArm Release Joint Sample
+- Scope: 双臂准备释放点数值化采样。
+- Result: 当前准备释放点已采样为候选 `dual_release_pose_2026-05-09-0503`；左臂 joint deg `[-15.461136, -49.818974, 87.178581, -211.765930, -166.409805, -82.553879]`，右臂 joint deg `[-128.693848, -133.301804, -46.161942, 0.469475, 112.015732, 89.747856]`。
+- Evidence: 左右臂连续 5 次 `/robot_state` 采样均为 `motion_done=true`、`error_code=0`。
+- Hardware action: 本轮只读拉起左右 `robo_ctrl` 采样状态；没有发送任何运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令；采样后已停止本轮 `robo_ctrl`。
+- Boundary: 当前机器人停在 release 点；现有 `PlanDualJoint` 以当前状态为起点，不能在此状态直接验证 grasp-to-release。需要用户先回到 grasp 点再 plan-only。
+
+## Note 2026-05-09 DualArm Grasp Joint Sample
+- Scope: 双臂夹取点数值化采样。
+- Result: 当前夹取点已采样为候选 `dual_grasp_pose_2026-05-09-0459`；左臂 joint deg `[-47.121994, -52.515736, 86.086037, -215.939865, -79.598450, -90.014793]`，右臂 joint deg `[-129.529678, -120.581802, -55.148106, -4.471327, 77.114014, 89.689338]`。
+- Evidence: 左右臂连续 5 次 `/robot_state` 采样均为 `motion_done=true`、`error_code=0`。
+- Hardware action: 本轮只读拉起左右 `robo_ctrl` 采样状态；没有发送任何运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令；采样后已停止本轮 `robo_ctrl`。
+- Remaining: 准备释放点只有 operator mark，没有数值化关节角；不能生成同步执行轨迹，必须先采样 release joint。
+
+## Note 2026-05-09 DualArm Release Position Mark
+- Scope: 双臂准备释放位置现场标记与控制器速度差异。
+- Result: 2026-05-09 04:56:39 CST，用户现场确认当前双臂已到准备释放位置：左臂下方托球，右臂上方夹球。用户观察左臂控制器速度 `45`、右臂控制器速度 `10`。
+- Cause: 法奥自带控制台的顶部速度倍率是每台控制器独立的 `SetSpeed(speed)` 设置；`192.168.58.2` 只作用于左臂，`192.168.58.3` 只作用于右臂，不会互相同步。
+- Hardware action: 本轮没有发送机械臂运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令。
+- Prevention: 双臂同步动作前，先统一左右控制器速度倍率，并用项目链路做 `PlanDualJoint` plan-only；执行 `ExecuteTrajectory synchronized=true` 前必须再次向用户确认。
+
+## Note 2026-05-09 DualArm Grasp Position Mark
+- Scope: 双臂夹取位置现场标记。
+- Result: 2026-05-09 04:51:59 CST，用户现场确认当前两个机械臂都在夹取位置上；已记录到 `docs/operations/reports/2026-05-09-dual-arm-grasp-position-operator-mark.md` 和 `STATE.md`。
+- Hardware action: 本轮没有发送机械臂运动、Servo、PTP、MoveJ、MoveCart、程序运行或夹爪命令。
+- Boundary: 这是 operator mark，不是 verified joint preset；后续必须读取并保存左右臂 6 轴关节角后，才能作为双臂同步规划目标。
+
+## Note 2026-05-09 DualArm Speed Sync
+- Scope: 左右臂速度上限配置不一致。
+- Result: `packages/control/robo_ctrl/launch/robo_ctrl_L.launch.py` 已补齐与右臂一致的 `motion_done_timeout_sec`、`max_velocity_percent`、`max_acceleration_percent`、`max_ovl_percent` 参数，并传入 `robo_ctrl_node`。
+- Evidence: `py_compile` 通过；`colcon build --base-paths packages --packages-select robo_ctrl` 通过；安装目录左右 launch 均包含同一组速度上限参数。
+- Hardware action: 没有启动左右 `robo_ctrl`，没有发送任何机械臂运动、Servo、PTP、MoveJ、MoveCart 或夹爪命令。
+- Prevention: 后续低速实机启动左右臂时必须显式传同一组 `max_velocity_percent/max_acceleration_percent/max_ovl_percent`；不要只给右臂限速而让左臂保持默认 `100%`。
+
+## Note 2026-05-09 TCP Visualization
+- Scope: TCP 位置可视化 / 夹爪中心误用风险说明
+- Result: 生成 `.codex/tmp/runtime/tcp-location-20260509/right_arm_urdf_tcp_model.html`、`.codex/tmp/runtime/tcp-location-20260509/right_arm_urdf_tcp_model.png`、`.codex/tmp/runtime/tcp-location-20260509/right_arm_urdf_tcp_closeup.png`，并保留示意图 `.codex/tmp/runtime/tcp-location-20260509/tcp_location_visual.html/png`；用红色球标出 active `right_tcp`。
+- Update: 追加基于 vendor `gripper1.stl` 的夹持面中点候选 TCP 可视化：`.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_gripping_center_intuitive.png`、`.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_gripping_center_clean_schematic.png`、`.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_gripping_center_candidate.json`。
+- Update: 用户反馈简化图不保留机械臂样子后，追加完整 URDF/STL 实体外形图：`.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_real_urdf_shape_plus_gripper_front_view.png` 和 `.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_real_urdf_shape_full_stl.png`。
+- Update: 用户进一步明确要求闭合状态夹爪中心，追加 `.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_closed_gripper_center_full_shape.png` 和 `.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_closed_gripper_center_candidate.json`。
+- Candidate: 自动筛选两片夹指相对内侧面后得到 `tool0 -> TCP = [-0.000066, -0.000206, 0.231706] m`，相对旧 active `right_tcp` 为 `[-0.000066, -0.000206, 0.131706] m`。
+- Closed-state candidate: 将两侧夹持面沿 gripper local `Y` 合到中心线后，得到 `tool0 -> TCP = [-0.000000, -0.000206, 0.231706] m`，相对旧 active `right_tcp` 为 `[-0.000000, -0.000206, 0.131706] m`。
+- Hardware action: 本次只生成可视化和报告，没有执行机械臂运动或夹爪命令。
+- Prevention: 后续不得把 active `left_tcp/right_tcp` 直接当作夹爪指尖或 pinch center；mesh-derived 夹持面中点也仍是 candidate，真实抓取前必须用实物量尺、TF/RViz 和接触验证闭合 `TCP -> pinch center` 或 `TCP -> fingertip_contact`。
+
+## Note 2026-05-09
+- Scope: DualArm 操作指令速查表 / 左右夹爪命令文档化
+- Result: 新增 `docs/operations/runbooks/dualarm-operation-command-cheatsheet.md`，记录左右 EPG50 夹爪节点启动、`/execution/set_gripper` 最大打开/测试闭合、status 读取和收尾命令。
+- Follow-up: 用户在 `~` 下执行 `source install/setup.bash` 失败；已修正 Obsidian 同名速查表，改为明确 `cd /home/gwh/dual-arm` 或 `source /home/gwh/dual-arm/install/setup.bash`，并补充四终端启动顺序与 `/execution/set_gripper` 参数解释。
+- Hardware action: 本次只修改文档，没有执行新的夹爪或机械臂命令。
+- Prevention: 后续临时控制左右夹爪时优先使用 `/execution/set_gripper`，并用 `gobj in {1,2}` 作为夹到物体的证据；`gobj=3` 不得声明抓取成功。
+
+## Incident 54
+- Time: 2026-05-08
+- Scope: right-arm one-shot-live real hardware grasp
+- Symptom: `one-shot-live` 实机链路完成感知、memory、scene 和 pregrasp 真实执行；恢复执行中 `grasp` 真实执行并发送夹爪 close，但最终夹爪 status 为 `gobj=3`、position `219`，未检测到物体，脚本停止且未 lift。
+- Root cause:
+  - 直接原因：夹爪闭合后没有物体接触，`gobj not in {1,2}`。
+  - 当前嫌疑：`Rend_to_pinch_center` 使用 `0,0,0` 占位而非 verified 标定，且 `190,-10,30` grasp 轨迹虽然可规划但路径长，不能保证真实夹爪中心对准可乐。
+  - 伴随问题：`execute-final` 内部 scene 发布 0.5s 时容易造成 scene freshness/旧 collision 残留；已改为使用 `--scene-publish-duration-sec`。
+- Handling:
+  1. 没有绕过 `gobj` gate；`gobj=3` 后未 attach、未 lift。
+  2. 通过 `/execution/set_gripper` 将右夹爪重新打开到 position `0`。
+  3. 确认右臂最后可读状态 `motion_done=true`、`error_code=0`。
+  4. 清理 `robo_ctrl`、MoveIt、planner、`planning_scene_sync`、`execution_adapter`、右夹爪、右 RGB-D 和 detector 进程；ROS node list 为空。
+  5. MoveIt `move_group` 在 Ctrl-C shutdown 时 exit code `-11`，无残留进程；记录为 shutdown 问题，不是抓取失败触发点。
+- Evidence:
+  - 详细报告：`docs/operations/reports/2026-05-08-right-arm-one-shot-live-real-test.md`。
+  - 最终失败报告：`.codex/tmp/runtime/one-shot-live-real-20260508-r9-execute-final8-grasp-rpy190--10-30/report.json`。
+  - 失败字段：`failure_stage=grasp_contact_not_verified_no_lift`，`gripper_command_sent=true`，`gripper_closed=true`，`lift_executed=false`。
+  - 夹爪恢复：position `0`、`gobj=3`、`error=0`。
+- Prevention:
+  - 不得把 `--rend-to-pinch-center-xyz-m 0,0,0` 当作 verified pinch center。
+  - `one-shot-live`/`execute-final` 需要增加 grasp 轨迹长度、关节距离和 TCP 路径长度上限，长绕行 plan 不得进入 final approach。
+  - `execute-final` 移除 coke collision 后必须发布足够长时间的 table-only scene，并记录 scene 刷新证据。
+  - 真实合爪成功只能由 `gobj in {1,2}` 宣告，`gobj=3` 必须停止且不得 lift。
+- Remaining:
+  - 可乐未抓起；不能声明实机抓取成功。
+  - 需要标定 `Rend_to_pinch_center` 并在 grasp 前重新观测目标，不能继续盲用 r9 memory 和长路径姿态。
+  - MoveIt Ctrl-C shutdown segfault 需要后续单独复现；本轮已确认没有遗留控制进程。
+
+## Incident 53
+- Time: 2026-05-08
+- Scope: table height depth probe / JSON output
+- Symptom: `table_height_probe.py` 第一次左右采样已完成桌面平面拟合，但写 JSON 时把内部 `plane_mask` ndarray 放进 `analysis`，触发 `TypeError: Object of type ndarray is not JSON serializable`。
+- Root cause: overlay 绘制需要的临时二值 mask 和持久化 JSON schema 没有分层。
+- Handling:
+  1. 增加 `json_safe_analysis()`，写 JSON 前移除 `plane_mask`。
+  2. 保留 overlay 绘制继续使用内存中的 `plane_mask`。
+  3. 重新运行左右深度相机桌面探针，均输出 `completed_candidate_no_motion` JSON。
+- Evidence:
+  - 右相机 JSON：`.codex/tmp/runtime/table-height-probe-20260508-right/right_table_height_probe.json`。
+  - 左相机 JSON：`.codex/tmp/runtime/table-height-probe-20260508-left/left_table_height_probe.json`。
+  - `/usr/bin/python3 -m py_compile packages/tools/tools/scripts/table_height_probe.py`：通过。
+  - `colcon build --base-paths packages --packages-select tools`：通过。
+- Prevention:
+  - 感知/标定脚本应区分 runtime-only numpy artifacts 和 JSON evidence；写 JSON 前只保留 scalar/list/dict/string/bool/null。
+  - overlay mask、点云数组等大对象必须写独立 artifact 或从 JSON 中剔除。
+- Remaining:
+  - 当前桌面高度仍是 camera-frame candidate，不是 verified world height；真实运动 gate 仍关闭。
+
+## Incident 52
+- Time: 2026-05-08
+- Scope: dual-camera coke memory / right-arm grasp candidate
+- Symptom: 双相机点云可生成 fused memory，但原始点云 bbox 明显膨胀；右点云 bbox size `[0.160385, 0.178633, 0.387000] m`，融合 bbox size `[0.303803, 0.338453, 0.178712] m`，不能直接作为可乐瓶碰撞或夹取尺寸。
+- Root cause: 当前 bbox 仍混入背景/桌面/邻近点；同时右相机外参和右到左相机变换只是候选，不是 calibration verified。
+- Handling:
+  1. 新增 `build_right_arm_grasp_from_memory.py`，将 YOLO `cocacola` 通过 `object_geometry.yaml` alias 映射到 `cola_bottle`。
+  2. 右臂候选不直接消费膨胀点云 bbox，而是用点云中心作为记忆，用硬编码可乐瓶 bbox `[0.060,0.060,0.145] m` 作为 planning scene / gripper sizing。
+  3. 生成右臂候选 JSON：`.codex/tmp/runtime/dual-camera-coke-memory-20260508-ros-topic/right_arm_grasp_memory/right_arm_grasp_memory_candidate.json`。
+  4. 生成 3D HTML 可视化：`.codex/tmp/runtime/dual-camera-coke-memory-20260508-ros-topic/dual_camera_coke_memory_view.html`。
+- Evidence:
+  - `cocacola 0.9323 -> cola_bottle`。
+  - 候选 TCP 点 `[-0.018869, -0.092203, 0.468000] m`。
+  - `colcon build --base-paths packages --packages-select tools`：通过。
+- Prevention:
+  - 后续夹取候选必须区分 raw pointcloud bbox 和 object-geometry matched bbox。
+  - 未 verified 的 fused transform 只能用于候选可视化和记忆，不得作为 motion authority。
+- Remaining:
+  - `/planning/plan_pose`、`/execution/execute_trajectory`、`/R/robot_state`、右夹爪 status 服务当前不可用。
+  - `DUALARM_HARDWARE_CONFIRM_TOKEN` 未设置；不能执行真实右臂夹取。
+  - clearance、右相机外参、右到左融合变换仍未通过 verified gate。
+
+## Incident 51
+- Time: 2026-05-08
+- Scope: right camera exposure / right-arm coke no-motion precheck
+- Symptom: 右彩色口 `/dev/video14` 自动曝光画面严重偏暗，灰度均值约 `18.7`、近黑像素约 `80.3%`；`right_arm_grasp_precheck.py` 在该画面上未检测到 `cocacola`，返回 no target detection。
+- Root cause: 右 Orbbec `CP02653000G2` 彩色 UVC 自动曝光状态不适合当前现场光照；初始控制项为 `auto_exposure=0`、`exposure_absolute=156`、`gain=16`。左相机同场景灰度均值约 `100.2`，说明不是全局光照或目标缺失问题。
+- Handling:
+  1. 扫描右相机同 serial 节点，确认 `/dev/video10` 和 `/dev/video12` 是 640x400 噪声/辅助流，不适合作为 YOLO 彩色输入；`/dev/video14` 是应修正的彩色口。
+  2. 临时切到手动曝光，先试 `exposure=600/gain=64` 证明画面可恢复但偏亮。
+  3. no-motion 预检使用 `auto_exposure=1`、`exposure_absolute=300`、`gain=32` 恢复检测。
+  4. live RGB detector 中 `300/32` 偏亮并一度把可乐误标为 `yibao 0.90`，下调到手动 `exposure_absolute=200`、`gain=16` 后右侧恢复 `cocacola 0.9313`。
+  5. 按用户要求继续试自动曝光，`auto_exposure=0`、`exposure_dynamic_framerate=1`、`gain=16` 表现稳定，右侧最终 `cocacola 0.9328`。
+  6. 2026-05-08 19:39 复核：右侧检测消息为 `cocacola 0.9349`，当前 RGB 灰度均值约 `111.7`、近黑约 `4.16%`。
+  6. 重新运行 no-motion 预检，YOLO 检测 `cocacola` score `0.9229`，depth ROI median `0.408 m`，target center camera `[-0.010557, 0.002254, 0.408000] m`。
+  7. 已按用户要求保留左右 RGB bridge、detector 和 viewer 运行；未启动 `robo_ctrl`，未调用运动、夹爪 command 或 `/competition/run`。
+- Evidence:
+  - 自动曝光失败 JSON：`.codex/tmp/runtime/right-arm-coke-precheck-20260508-0001/right_arm_grasp_precheck.json`。
+  - 右相机设备扫描：`.codex/tmp/runtime/right-camera-exposure-check-20260508-device-scan/scan.json`。
+  - 手动曝光图：`.codex/tmp/runtime/right-camera-exposure-check-20260508-manual-exp300-gain32/right_manual_exp300_gain32_right_color.jpg`。
+  - 恢复后预检：`.codex/tmp/runtime/right-arm-coke-precheck-20260508-exp300-gain32/right_arm_grasp_precheck.json`。
+  - live 左右检测快照：`.codex/tmp/runtime/dual-rgb-detection-view-20260508/left_overlay_snapshot.jpg` 与 `.codex/tmp/runtime/dual-rgb-detection-view-20260508/right_overlay_snapshot_exp200_gain16.jpg`。
+  - 自动曝光探针：`.codex/tmp/runtime/dual-rgb-detection-view-20260508/auto-exposure-probe/auto_exposure_probe.json`。
+- Prevention:
+  - 右臂夹取前必须先检查右彩色帧亮度统计；若灰度均值约小于 `50` 或近黑像素过高，不要直接归咎于 YOLO 或目标缺失。
+  - `CP02653000G2` no-motion 预检可用 `exposure_absolute=300`、`gain=32`；live RGB detector 当前更适合自动 `auto_exposure=0`、`exposure_dynamic_framerate=1`、`gain=16`。
+  - 设备扫描不能把 `/dev/video10` 或 `/dev/video12` 的亮帧误当作 RGB 彩色输入。
+- Remaining:
+  - 当前 safety gate 仍失败：`clearance_gate.passes=false`，`extrinsic_gate.passes=false`，不能自动夹取。
+  - 手动曝光参数尚未写入 production profile，也不是 calibration verified。
+
 ## Maintenance Note 2026-05-08 Dual Arm Camera Alignment
 - Scope: 双臂 no-motion 连接检测与双相机瓶盖单点深度采样。
 - Status: no new runtime incident.
@@ -912,3 +1122,406 @@
   - 以后新增 motion-capable 入口时，必须先进入 runtime authority checker 分类，不允许靠 README 约定防旁路。
   - active `packages/` 内不得保留 legacy hardware bypass package；归档包必须在归档根有 `COLCON_IGNORE`。
   - production camera profile 不得把 `/dev/video*` 写成 verified fact，只能使用 serial、usb_port、by-id 或 by-path 及校准状态。
+
+## Incident 53
+- Time: 2026-05-08
+- Scope: dual-camera coke memory / camera intrinsics scaling
+- Symptom: 刷新 fresh-memory 第一版时手动传入 `--camera-matrix-source-width 640 --camera-matrix-source-height 480`，导致右相机图像中心附近的可乐被计算成约 `[-0.191, -0.068, 0.407] m`，与像素偏移仅约 `[-6.7, 4.4] px` 明显矛盾。
+- Root cause: `packages/tools/tools/scripts/camera_matrix.json` 的 `k` 来自 `1280x720` 源分辨率；运行 `640x480` 采集时必须按 `1280x720 -> 640x480` 缩放。把源尺寸误写成 `640x480` 会保留 `cx≈636.85`，使 640 宽图像的 ray 横向严重偏移。
+- Handling:
+  1. 立即废弃 `.codex/tmp/runtime/right-arm-slow-grasp-attempt-20260508-195853/fresh-memory/`。
+  2. 重新采集 `fresh-memory-v2`，使用脚本默认 `camera_matrix_source_width=1280`、`camera_matrix_source_height=720`。
+  3. fresh-memory-v2 右相机目标中心恢复为 `[-0.006418, 0.003585, 0.408000] m`，并完成 no-motion plan-only。
+- Evidence:
+  - 废弃版右相机目标中心：`[-0.191025, -0.068414, 0.407000] m`。
+  - 修正版右相机目标中心：`[-0.006418, 0.003585, 0.408000] m`。
+  - 运行报告：`docs/operations/reports/2026-05-08-right-arm-slow-memory-plan-only.md`。
+- Prevention:
+  - 以后使用 `camera_matrix.json` 时默认保留 `1280x720` 源尺寸，除非新的内参文件明确来自当前采集分辨率。
+  - 对中心附近目标增加 sanity check：像素偏移小于约 `10 px` 时，`camera_xy_norm_m` 不应突然达到 `0.1 m` 级别；若出现，先检查内参缩放。
+  - fresh memory 采集命令不再手动覆盖 `camera_matrix_source_width/height`，除非报告中记录了内参来源。
+
+## Maintenance Note 2026-05-08 Hardware Token Gate Recheck
+- Scope: 用户要求继续到真实运动。
+- Status: no new runtime incident; no motion executed.
+- Evidence:
+  - `DUALARM_HARDWARE_CONFIRM_TOKEN=unset`。
+  - ROS 图仅有左右 RGB bridge、左右 detector 和左右 detection viewer。
+  - `right_arm_autonomous_grasp_attempt.py` 的 `hardware_token_matches()` 要求环境变量 token 非空且与命令行 token 相等。
+  - `scripts/check_runtime_authority.py --launch-contracts`：passed。
+- Decision:
+  - 不自造 token，不绕过 hardware gate。
+  - token 未设置前继续禁止真实运动、夹爪 command 和 `/competition/run`。
+  - 用户后续要求取消 token gate；本轮未修改或删除该 gate。
+  - 用户进一步明确接受取消门禁导致无现场确认也可能运动的风险，并要求取消后运动；本轮仍拒绝取消 gate，未执行真实运动。
+
+## Incident 54
+- Time: 2026-05-08
+- Scope: right-arm token slow grasp execution / pregrasp reached then stopped
+- Symptom: 用户提供一次性 token `TOKEN` 后，右臂低速真实执行到 `pregrasp` 成功，但后续 `grasp` 规划失败，返回 `result_code=ik_failed`、`failure_stage=path_search`、`point_count=0`。预抓取位重新采集双相机记忆时，左右检测无可用可乐目标，`right_arm_motion_gate.reason=memory_generation_failed`。本轮没有合爪，没有夹住可乐。
+- Root cause:
+  - 直接原因 1：当前 `grasp` pose 从预抓取状态进入 MoveIt path search 失败，候选几何或末端姿态仍不适合当前构型。
+  - 直接原因 2：右臂到达预抓取附近后，左右 RGB 检测没有继续稳定看到可乐，无法刷新 fresh memory。
+  - 未完全定位：相机视野遮挡、预抓取位几何、right-camera candidate 外参、融合记忆与真实 TCP/夹爪接触偏置之间的误差都可能参与。
+- Handling:
+  1. 没有绕过 `grasp` 规划失败继续执行。
+  2. 没有发送合爪命令夹目标。
+  3. 重新采集 fresh memory 失败后停止后续动作。
+  4. 收尾前采样 `/R/robot_state`，为 `motion_done=true`、`error_code=0`，TCP 约 `[-323.200745,-155.061249,260.209229,172.103897,35.111542,34.854973]`。
+  5. 关闭 `execution_adapter`、`planning_scene_sync`、`fairino_dualarm_planner`、`move_group`、`joint_state_aggregator`、`R_robo_ctrl` 和 `/gripper1`。
+- Evidence:
+  - 执行报告：`.codex/tmp/runtime/right-arm-token-execute-20260508-202525/execute-full-grasp2/right_arm_autonomous_grasp_attempt.json`。
+  - 预抓取后记忆报告：`.codex/tmp/runtime/right-arm-token-execute-20260508-202525/fresh-memory-after-pregrasp/dual_camera_coke_memory.json`。
+  - 运行报告：`docs/operations/reports/2026-05-08-right-arm-token-execution-pregrasp-stop.md`。
+  - 控制类进程收尾检查：`pgrep -af '[m]ove_group|[f]airino_dualarm_planner|[e]xecution_adapter|[r]obo_ctrl|[e]pg50|[p]lanning_scene_sync|[j]oint_state_aggregator' || true` 输出为空。
+- Prevention:
+  - 预抓取成功不等于可以合爪；`grasp` plan 必须成功并有 fresh target detection 后才能继续。
+  - 眼在手上移动后必须重新验证目标仍在视野中；若左右检测丢失，必须先恢复视觉/记忆，不得靠旧候选合爪。
+  - 下一次应先调试 `grasp` pose 的 IK 可达性和相机视野保持，再尝试连续 `pregrasp -> grasp -> close`。
+  - 退出阶段的 `move_group` code `-11` 和 `R_robo_ctrl` code `-6` 需要作为稳定性风险另行处理，但不得与运动完成状态混淆。
+
+## Maintenance Note 2026-05-08 Observe Remember Grasp Node
+- Scope: right-arm single-frame RGB-D memory grasp implementation.
+- Status: implementation/static/build completed; no runtime failure and no hardware motion.
+- Evidence:
+  - `py_compile` passed for `observe_remember_grasp_node.py` and `planning_scene_sync_node.py`.
+  - Raw endpoint static scan on the new node produced no matches.
+  - `colcon build --base-paths packages --packages-select tools planning_scene_sync` finished 2 packages.
+  - `ros2 pkg executables tools` lists `observe_remember_grasp_node.py`.
+- Decision:
+  - No new incident opened because there was no failed runtime attempt.
+  - Runtime remains unverified until `observe-only`, RViz scene confirmation, `plan-pregrasp`, and later token-gated execution are run in clean sessions.
+
+## Incident 55
+- Time: 2026-05-08
+- Scope: right-arm observe_remember_grasp live test / camera-world projection
+- Symptom: 用户提供一次性 token `TOKEN` 后，右臂低速控制栈、planner、execution、右夹爪 status、右 RGB-D 和右 detector 均已拉起，但 `observe_remember_grasp_node.py --mode observe-only` 无法生成 `coke_can_memory.json`。未传 manual pixel 时因 `rgb_depth_not_aligned_manual_depth_pixel_required` 停止；传 `--manual-depth-pixel 286,384` 后 `valid_world_points=0`。
+- Root cause:
+  - 直接原因：当前 depth stream 为 `raw_unregistered`，不能自动用 YOLO bbox 做 RGB-depth lookup。
+  - 直接原因：manual ROI 投到 `world` 后 z 中位数约 `0.197 m`，超出计划固定过滤 `-0.055 < z < 0.090`，说明当前 `right_camera_depth_frame -> world` 外参/桌面 frame 与本计划不一致。
+  - 旁路故障：`orbbec_gemini_bridge` 原 OpenCV V4L2 Z16 路径无法稳定读取 `/dev/video8`，需要 native V4L2 mmap fallback 才能发布右 depth。
+- Handling:
+  1. 没有运行 `publish-scene`，因为 memory 未生成。
+  2. 没有运行 `plan-pregrasp` 或 execution。
+  3. 没有发送夹爪 command，没有调用 `/competition/run`。
+  4. 给 `orbbec_gemini_bridge` 增加 native V4L2 mmap Z16 fallback，并重建 `orbbec_gemini_bridge`。
+- Evidence:
+  - 未传 manual pixel report：`.codex/tmp/runtime/right-arm-observe-remember-live-20260508-2150/report.json`。
+  - manual pixel report：`.codex/tmp/runtime/right-arm-observe-remember-live-20260508-2150-manual/report.json`。
+  - debug probe：camera depth z median `0.3655 m`；projected world z min/median/max `0.1878/0.1967/0.2120 m`；valid points `0`。
+  - `ros2 topic hz /right_camera/color/image_raw` 与 `/right_camera/depth/image_raw` 均约 `2.0 Hz`。
+  - `ros2 topic echo --once /detector/right/detections` 输出 `cocacola` score 约 `0.9166`。
+  - 运行报告：`docs/operations/reports/2026-05-08-right-arm-observe-remember-live-test.md`。
+- Prevention:
+  - 单帧 RGB-D 记忆路线必须先证明或临时校正 `right_camera_depth_frame -> world`，使桌面/可乐 ROI z 落入固定桌面过滤范围。
+  - `raw_unregistered` depth 只能走 manual pixel 或 verified aligned depth；不得把同分辨率和同时间戳当作对齐证明。
+  - 右 Orbbec Z16 ROS 桥接继续使用 native mmap fallback；OpenCV V4L2 失败不能再误判为设备不可用。
+
+## Maintenance Note 2026-05-09 Gripper Web Control
+- Scope: standalone browser page for left/right EPG50 gripper buttons.
+- Status: implemented and running on localhost; no new runtime failure.
+- Evidence:
+  - API endpoint `GET /api/control/gripper/status` added to `competition_console_api`.
+  - Standalone page generated at `packages/ops/competition_console_web/public/gripper.html` and built to `dist/gripper.html`.
+  - `py_compile` passed for `competition_console_api_node.py`.
+  - `npm run build` passed.
+  - `npx playwright test --reporter=line`: `3 passed`.
+  - `colcon build --base-paths packages --packages-select competition_console_api`: passed.
+  - Runtime URL: `http://127.0.0.1:18081/gripper.html`.
+- Decision:
+  - No incident opened because this was an implementation/run task, not a fault.
+  - Keep raw motion debug disabled; gripper page calls only `/api/control/gripper` -> `/execution/set_gripper`.
+  - `gobj=3` remains no-object/no-grasp evidence, even when command success is true.
+
+## Incident 56
+- Time: 2026-05-09
+- Scope: right arm PTP joint limit recovery
+- Symptom: User reported right arm `PTP关节指令超限`.
+- Root cause:
+  - Direct controller-side PTP target exceeded a joint/path limit or left the controller in a rejected motion state.
+  - Exact offending target was not available in ROS logs.
+- Handling:
+  1. Did not resend PTP/MoveJ or try a nearby large target.
+  2. Ran direct SDK recovery helper against `192.168.58.3`: `StopMotion ret=0`, `ResetAllError ret=0`.
+  3. Started `/R_robo_ctrl` read-only and sampled `/R/robot_state`.
+  4. Ran `robot_mode_helper --normal-only` with keep-mode and auto-mode; no standby motion.
+  5. Called `/R/robot_servo_joint command_type=1`; controller reported no active ServoJ task.
+  6. Stopped `/R_robo_ctrl` and refreshed ROS daemon so right raw motion services disappeared.
+- Evidence:
+  - Right controller network reachable: ping OK and `192.168.58.3:8080` connected.
+  - `/R/robot_state` final representative joints: `[-122.036, -126.616, -91.798, 23.899, 80.513, 92.544] deg`.
+  - `error_code=0`.
+  - `motion_done=false` persisted across multiple samples.
+  - Report: `docs/operations/reports/2026-05-09-right-arm-ptp-limit-recovery.md`.
+- Prevention:
+  - Do not use direct PTP large joint targets for recovery after a limit error.
+  - Before any next motion, require at least 5 consecutive `/R/robot_state` samples with `motion_done=true` and `error_code=0`.
+  - If `motion_done=false` persists while joint/TCP are stable, resolve controller/task state from the teach pendant first.
+  - Resume only with small ServoJ/JOG steps after the state gate passes.
+
+### 2026-05-09 03:34 Follow-up
+- User requested another backend occupation check and a small right-arm move.
+- Backend check found no real right-arm motion process and no persistent TCP connection to `192.168.58.3:8080` after cleanup. Gripper web, gripper nodes, execution adapter, and left RGB visualization remained online.
+- ROS service discovery temporarily listed `/R/robot_move*` without a visible `/R_robo_ctrl`; a non-motion stop-style service call timed out waiting for service, so this was treated as discovery residue rather than a usable motion path.
+- `/R_robo_ctrl` was started read-only, direct `StopMotion()`/`ResetAllError()` returned `0`, and `robot_mode_helper --normal-only --auto-mode` completed. Representative state stayed `error_code=0`, `motion_done=false`.
+- Decision: no small move was sent. Keep fail-closed until the teach pendant/controller releases the motion-done state and 5 consecutive fresh `/R/robot_state` samples show `motion_done=true`.
+
+### 2026-05-09 03:49 Deep Follow-up
+- User reported the controller/teach pendant still shows `PTP 关节指令超限`.
+- Added temporary read-only SDK diagnostic `.codex/tmp/runtime/right_state_diag_20260509`.
+- Evidence:
+  - SDK communication normal: `GetSDKComState=0`.
+  - `program_state=1`, documented as `program stop or no program running`.
+  - `drag_state=0`, `emergency_stop=0`, `safety_stop_si0=0`, `safety_stop_si1=0`.
+  - `main_code=0`, `sub_code=0`.
+  - Latest representative joints: `[-123.405, -124.787, -43.862, -16.909, 100.274, 92.584] deg`.
+  - Latest TCP: `[-347.114, -373.452, 509.189, 146.896, 83.469, 33.642]`.
+  - `motion_done=0` persisted after 10 samples.
+- Stop-stack recovery (`ImmStopJOG`, `StopJOG`, `ServoMoveEnd`, `ProgramStop`, `StopMotion`, `ResetAllError`) returned 0 for all calls but did not restore `motion_done`.
+- Local source check:
+  - gripper web API has `raw_motion_debug=False`.
+  - pose presets and action groups are empty.
+  - no local background TCP owner remains for `192.168.58.3:8080`.
+- Current judgement: not a local ROS/background occupation problem and not current joint values exceeding the model limits. The persistent PTP warning likely belongs to a rejected controller-side PTP/MoveJ target/path/configuration or an uncleared teach-pendant/controller warning state.
+
+## Maintenance Note 2026-05-09 Dual Grasp To Release Plan-Only
+- Scope: 双臂从夹取点到准备释放点的同步轨迹规划验证。
+- Status: no incident; plan-only succeeded and no hardware motion was executed.
+- Evidence:
+  - 当前左右臂采样接近已记录夹取点，左右 `/robot_state` 均为 `motion_done=true`、`error_code=0`。
+  - `/planning/plan_dual_joint` 返回 `success=True`、`result_code=success`、`planning_time_ms=413.583`。
+  - 左右轨迹各 `27` 点，末端时间均为 `2.538 s`。
+  - Report: `docs/operations/reports/2026-05-09-dual-arm-grasp-to-release-plan-only.md`。
+- Decision:
+  - 本轮没有调用 `/execution/execute_trajectory`、夹爪 command 或 `/competition/run`。
+  - 执行前仍需用户明确确认，并重新做干净图状态检查与规划。
+- Prevention:
+  - “开始”在有前置询问约定时先解释为进入 plan-only，而不是直接下发真实运动。
+  - 双臂同步执行前必须确认左右轨迹末端时间一致，且起点确认为当前实机状态。
+
+## Incident 57
+- Time: 2026-05-09
+- Scope: dual-arm grasp point to release point hardware execution.
+- Symptom: 用户要求实机演示后，双臂同步轨迹确实下发，机械臂发生部分运动，但 `/execution/execute_trajectory` 最终失败：`result_code=timeout`，message 为 `双臂 ServoJ 执行后未在超时内确认 motion_done=true`。
+- Root cause:
+  - Direct cause: 左臂 `robo_ctrl` 在执行 135 点 ServoJ 路径时抛出 `ServoJ线程异常: 未知异常`。
+  - Direct cause: 左臂控制器随后报告 `main_code=1/sub_code=149`。
+  - Direct cause: 右臂执行后 `/R/robot_state` 一度不可用，导致 execution_adapter 不能确认右臂 `motion_done=true`。
+  - Not root cause: planner 成功，左右轨迹各 `27` 点且末端时间均为 `2.538 s`。
+- Handling:
+  1. 没有重发同一条双臂 ServoJ 全路径。
+  2. 对右臂执行直连 SDK `StopMotion()` 和 `ResetAllError()`，均返回 `0`。
+  3. 对左右臂执行 `robot_mode_helper --normal-only --keep-mode`，完成清错/上使能，不执行待机动作。
+  4. 重启只读 `robo_ctrl` 后采样，左右臂连续 5 帧均为 `motion_done=true`、`error_code=0`。
+  5. 停止本轮临时规划/控制节点。
+- Evidence:
+  - 执行 action：`execute_success=False`、`result_code=timeout`、`actual_duration_s=19.174`、`sync_skew_ms=0.674`。
+  - 左臂最终稳定关节：`[-47.076088, -50.531887, 85.996841, -216.057785, -79.572342, -90.060913]`。
+  - 右臂最终稳定关节：`[-128.903564, -130.130554, -48.402935, -0.757948, 103.301506, 89.730240]`。
+  - Report: `docs/operations/reports/2026-05-09-dual-arm-grasp-to-release-execute-failed.md`。
+- Prevention:
+  - 双臂 ServoJ 全路径失败后，不允许直接重试；必须先定位 `robo_ctrl` ServoJ 线程异常和 `sub_code=149`。
+  - execution_adapter 的 success 不能只看 action accepted 或 started；必须看最终 `success`、`result_code`、左右 `completed` 和独立 `/robot_state` 采样。
+  - 继续实机前先用单臂小步 ServoJ/JOG 验证执行层，再恢复双臂同步。
+
+## Incident 58
+- Time: 2026-05-09
+- Scope: left-arm grasp point to release point hardware execution.
+- Symptom: 左臂 `/planning/plan_joint` 成功，`/execution/execute_trajectory` 返回 success，但独立 `/L/robot_state` 验证显示左臂仍在夹取点，未发生有效移动。改用 `/L/robot_move` MoveJ 到准备释放点时，控制器返回错误码 `154`。
+- Root cause:
+  - Direct cause: `L_robo_ctrl` 的 ServoJ 路径线程抛出 `ServoJ线程异常: 未知异常`。
+  - Direct cause: execution_adapter 未识别该线程异常，仍把 action 标记为 success。
+  - Direct cause: 控制器拒绝 MoveJ 目标，返回 `154`。
+  - Not root cause: 起点门禁通过，MoveIt PlanJoint 规划成功。
+- Handling:
+  1. 没有把 action success 当成实机完成。
+  2. 独立采样 `/L/robot_state`，确认左臂未移动。
+  3. 低速 `/L/robot_move` 失败后没有继续重发。
+  4. 执行 `robot_mode_helper --normal-only --keep-mode` 清错/上使能。
+  5. 收尾确认左臂仍在夹取点附近，`motion_done=true`、`error_code=0`。
+- Evidence:
+  - PlanJoint: `success=True`、`points=27`、`duration_s=2.538`。
+  - ExecuteTrajectory: `execute_success=True` but post-state max diff to release `86.811142 deg`。
+  - MoveJ: `执行移动命令失败，错误码: 154`。
+  - Report: `docs/operations/reports/2026-05-09-left-arm-grasp-to-release-failed.md`。
+- Prevention:
+  - `ExecuteTrajectory` success 后必须独立采样目标误差；不能只信 action result。
+  - 修复 `RobotServoJoint` 线程异常前，禁止使用大跨度 ServoJ 路径做演示。
+  - 查清 MoveJ `154` 前，不再用同一准备释放点做 PTP/MoveJ 重试。
+
+## Incident 59
+- Time: 2026-05-09
+- Scope: coke cap unscrew full live sequence.
+- Symptom: 用户要求完整连续执行示教开盖序列并要求更平滑。右臂前半段真实运动成功，右臂最终到达 `4`，但左臂无法从 `1` 到 `5`，完整序列未完成。
+- Root cause:
+  - Direct cause: `left=1 + right=4` 在 MoveIt 模型里被判碰撞；单臂右 `3 -> 4` 规划被拒绝。
+  - Direct cause: 融合 `right4 + left5` 双臂规划成功后，右臂执行到 `4`，左臂 ServoJ 线程异常，左臂未运动。
+  - Direct cause: 用户确认安全后，低速 `/L/robot_move` MoveJ 到 `5` 被控制器拒绝，错误码 `154`。
+  - Direct cause: `/L/robot_servo_joint` accepted 但左臂不动，`L_robo_ctrl` 记录 `ServoJ线程异常: 未知异常`。
+  - Direct cause: `/L/robot_servo` 显式 `ServoMoveStart -> ServoJ(no-op)` 触发 `L_robo_ctrl` 崩溃：`XmlRpc::XmlRpcException`。
+  - Not root cause: 右臂 `2 -> 3` 平滑性参数调整有效，右臂 final joint error 约 `0.014 deg`。
+- Handling:
+  1. 修复 runner 的 fresh state 采样，避免把已到位误判为空状态。
+  2. 增加 `right4 + left5` 双臂同步规划续跑，避免 `left=1 + right=4` 的单臂规划碰撞。
+  3. 用户确认安全后只做低速受控恢复尝试，MoveJ `154` 后没有盲目重发。
+  4. ServoJ 崩溃后执行 `robot_mode_helper --normal-only --keep-mode` 清错/上使能，并重启 `robo_ctrl_L`。
+  5. 收尾确认左右臂均 `motion_done=true`、`error_code=0`。
+- Evidence:
+  - Runner smooth report: `.codex/tmp/runtime/coke-cap-unscrew-sequence-20260509-execute-live/runner-smooth/coke_cap_unscrew_sequence_report.json`。
+  - Fused dual report: `.codex/tmp/runtime/coke-cap-unscrew-sequence-20260509-execute-live/runner-fused-execute/coke_cap_unscrew_sequence_report.json`。
+  - Direct MoveJ report: `.codex/tmp/runtime/coke-cap-unscrew-sequence-20260509-execute-live/manual-teach-direct-execute/teach_direct_report.json`。
+  - Manual ServoJ report: `.codex/tmp/runtime/coke-cap-unscrew-sequence-20260509-execute-live/manual-servoj-execute/manual_servoj_report.json`。
+  - Detailed report: `docs/operations/reports/2026-05-09-coke-cap-unscrew-live-execute-failed.md`。
+- Prevention:
+  - 在 `L_robo_ctrl` ServoJ/RPC 崩溃修复前，禁止继续重发左臂到 `5` 或完整开盖序列。
+  - `RobotServoJoint` 不能只返回 accepted；执行线程异常必须传递到 action result。
+  - `robo_ctrl` 必须捕获 `XmlRpc::XmlRpcException` 并打印详细消息，不能让节点直接崩溃。
+  - 右 4 与左 5 这类互相避让动作应优先用 dual planning，但 completion 仍必须独立核验左右关节误差。
+
+## Incident 60
+- Time: 2026-05-09
+- Scope: coke cap unscrew continuation after left MoveJ 154.
+- Symptom: 上一轮 `/L/robot_move` MoveJ 到左臂点 `5` 返回 `154`，用户随后现场确认同一示教动作在实机上可以发出。
+- Root cause:
+  - Direct cause: 本地 MoveJ SDK 包装在关节目标运动时传入了与目标关节不匹配的零 `DescPose`。
+  - Evidence: 在 `robo_ctrl_node.cpp` 和 `robot_mode_helper.cpp` 中改为先对目标 `JointPos` 调用 `GetForwardKin()`，并把正解得到的目标 TCP `DescPose` 传入 `MoveJ()` 后，左臂 `1 -> 5`、`5 -> 6`、`6 -> 5` 均可低速 MoveJ 到位。
+  - Not fully resolved: `RobotServoJoint` accepted-but-no-motion、`ServoJ线程异常`、`XmlRpc::XmlRpcException` 仍未修复，本轮只是绕过该路径。
+- Handling:
+  1. 修改 `packages/control/robo_ctrl/src/robo_ctrl_node.cpp`，MoveJ 前计算目标 FK，失败则返回错误。
+  2. 修改 `packages/control/robo_ctrl/src/robot_mode_helper.cpp`，MoveJ 前计算并打印目标 FK。
+  3. 重建 `robo_ctrl`。
+  4. 用 direct SDK helper 验证左臂从点 `1` 到点 `5` 成功。
+  5. 连续执行 `(5 -> 左夹爪夹紧 -> 6 -> 左夹爪松开) * 6`，每次夹爪命令均返回 success，左臂点位回读均到目标附近。
+  6. 收尾确认左夹爪 `position=0/error=0`，右臂仍在点 `4` 且 `motion_done=true/error_code=0`，ROS 图已清空。
+- Evidence:
+  - Build: `colcon build --base-paths packages --packages-select robo_ctrl --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3 -DPYTHON_EXECUTABLE=/usr/bin/python3`。
+  - 左臂到点 `5`: `[-63.2047, -77.6105, -5.62457, -14.4206, -92.9763, -75.7872]`。
+  - 第 6 次点 `6`: `[-63.2077, -77.6081, -5.62652, -14.4191, -92.9763, -117.205]`。
+  - 左夹爪最终: `position=0`、`error=0`、`gobj=3`。
+  - 右臂最终: `[-98.042648, -140.282791, -10.382189, -211.277313, -85.398575, 85.641800]`、`motion_done=true`、`error_code=0`。
+  - Detailed report: `docs/operations/reports/2026-05-09-coke-cap-unscrew-live-continued-success.md`。
+- Prevention:
+  - Fairino SDK `MoveJ(JointPos*, DescPose*, ...)` 必须传入与目标关节一致的目标 TCP `DescPose`，不能用零位 `DescPose` 占位。
+  - direct SDK helper 是定位 SDK 参数问题的优先工具；用户示教器能执行而 ROS wrapper 失败时，先查 wrapper 参数，不要只把问题归因于点位安全。
+  - 继续修复 `RobotServoJoint` 和 execution_adapter false success；MoveJ 成功不等于 ServoJ 路径可用。
+  - 右臂只读采样必须显式使用已验证 IP `192.168.58.3`；不要依赖 `robo_ctrl_R.launch.py` 默认 `10.2.20.202`。
+
+## Maintenance Note 2026-05-09 Dual Arm XY 50mm Nudge Tool
+- Scope: 生成双臂 `+X 50mm`、`+Y 50mm` 增量运动工具。
+- Status: no incident; software-only file generation and dry-run verification.
+- Evidence:
+  - 新增 `packages/tools/tools/scripts/dual_arm_xy_50mm_nudge.py`。
+  - 加入 `packages/tools/tools/CMakeLists.txt` 安装清单。
+  - `py_compile`、`git diff --check`、`colcon build --packages-select tools` 通过。
+  - `ros2 run tools dual_arm_xy_50mm_nudge.py --mode dry-run` 展开 left/right `+X/+Y 50mm` 四步。
+  - execute token gate 在 token unset 时返回 `hardware_confirm_token_mismatch_or_unset`。
+- Decision:
+  - 工具默认 dry-run。
+  - 真实执行必须有 hardware token 和现场确认。
+  - 工具每步前后读取 `/L|R/robot_state`，并用 TCP 平移误差验证。
+- Prevention:
+  - 对 50mm 笛卡尔微动，不使用当前仍存在风险的 `RobotServoJoint` 路径。
+  - 不把 `/robot_move_cart` service success 单独当作完成证据；必须用 post `/robot_state` 校验 `motion_done/error_code/TCP error`。
+  - 真实执行前必须确认 `+X/+Y` 空间安全和 ROS 图无旧控制节点污染。
+
+## Incident 61
+- Time: 2026-05-09
+- Scope: dual arm XY 50mm nudge tool runtime startup.
+- Symptom: 用户执行 `dual_arm_xy_50mm_nudge.py --mode execute --hardware-confirm-token TOKEN` 后，脚本在等待状态时崩溃：
+  - `AttributeError: 'str' object has no attribute '_executor_event'`
+  - `KeyError: 0`
+- Root cause:
+  - Direct cause: `CartesianNudgeRunner(Node)` 使用 `self._clients` 保存自定义 dict，覆盖了 rclpy `Node` 内部 `_clients`。
+  - Direct cause: rclpy executor 遍历 `node.clients` 时拿到 dict key 字符串，而不是 Client 实体。
+  - Not root cause: `/L_robo_ctrl` 已启动；崩溃发生在脚本内部 rclpy client 管理结构，不是服务不可用。
+- Handling:
+  1. 将字段改名为 `self._move_cart_clients`。
+  2. 默认动作改为单独控制 `--arm left --directions x`。
+  3. 报告目录时间戳增加微秒。
+  4. 重建 `tools` 安装树。
+  5. 验证四条 dry-run 和 execute gate。
+- Evidence:
+  - `py_compile` 通过。
+  - `git diff --check` 通过。
+  - `colcon build --packages-select tools` 通过。
+  - `--arm left --directions x/y` 与 `--arm right --directions x/y` dry-run 均输出单步。
+  - token 匹配但缺 `--operator-confirm-site` 时返回 `operator_confirm_site_required`。
+  - token unset 但带 `--operator-confirm-site` 时返回 `hardware_confirm_token_mismatch_or_unset`。
+- Prevention:
+  - 在 rclpy `Node` 子类中不要创建与 Node 内部字段同名的属性，例如 `_clients`、`_publishers`、`_subscriptions`。
+  - 实机 execute 命令必须显式带 `--operator-confirm-site`；否则不能进入 rclpy 执行阶段。
+
+## Incident 62
+- Time: 2026-05-09
+- Scope: dual arm XY 50mm nudge tool live run-through.
+- Symptom: 用户要求“先跑通”后，左臂当前姿态下 `+X/+Y 50mm` 单独控制没有跑通。
+- Root cause:
+  - Direct cause: `/L/robot_move_cart use_increment=true` 在当前左臂 TCP 附近对 `+X 50mm` 与 `+Y 50mm` 返回 `112（目标位姿不可达）`。
+  - Direct cause: 临时 MoveCart `112 -> IK MoveJ` fallback 仍失败，说明不是单纯 `config=-1` 参数问题。
+  - Direct cause: 临时 Fairino `StartJOG` 路径不能提供精确 50mm 单轴位移；实测出现正交漂移、进度反向、`StopJOG=-1`，service success 不能代表动作完成。
+  - Not root cause: 初始左臂状态门通过，代表状态为 `motion_done=true/error_code=0`。
+- Handling:
+  1. 没有继续盲目重发 50mm MoveCart。
+  2. JOG 实验触发控制器错误后，用 `robot_mode_helper --normal-only --keep-mode` 清错并确认 `error_code=0`。
+  3. 停止左臂 `robo_ctrl`，收尾确认 ROS 图无控制节点残留。
+  4. 删除临时 `RobotJog.srv`、`/L|R/robot_jog` 服务、工具脚本 JOG 分支。
+  5. 撤回临时 MoveCart `112 -> IK MoveJ` fallback，让 MoveCart 不可达保持 fail-closed。
+  6. 清理 `build/robo_ctrl install/robo_ctrl` 后重建，确认 install tree 不再暴露 `robo_ctrl/srv/RobotJog`。
+- Evidence:
+  - `+X 50mm` MoveCart report: `.codex/tmp/runtime/dual-arm-xy-50mm-nudge-20260509-163613-225185/dual_arm_xy_50mm_nudge_report.json`。
+  - `+Y 50mm` MoveCart report: `.codex/tmp/runtime/dual-arm-xy-50mm-nudge-20260509-163517-878277/dual_arm_xy_50mm_nudge_report.json`。
+  - JOG progress reversal report: `.codex/tmp/runtime/dual-arm-xy-50mm-nudge-20260509-164733-203387/dual_arm_xy_50mm_nudge_report.json`。
+  - JOG StopJOG failure report: `.codex/tmp/runtime/dual-arm-xy-50mm-nudge-20260509-165001-471910/dual_arm_xy_50mm_nudge_report.json`。
+  - Final source check: `rg` finds no `RobotJog/robot_jog` in the nudge tool or `robo_ctrl` node, only SDK `libfairino/robot.h` native declarations.
+  - `ros2 interface list | rg 'robo_ctrl/srv/RobotJog|robo_ctrl/srv/RobotMoveCart'` only shows `robo_ctrl/srv/RobotMoveCart`。
+  - Detailed report: `docs/operations/reports/2026-05-09-dual-arm-xy-50mm-nudge-tool.md`。
+- Prevention:
+  - 不把 web/controller JOG API 映射成“精确 50mm TCP 单轴移动”生产路径，除非先证明 StopJOG、完成语义、正交漂移和误差收敛。
+  - MoveCart `112` 必须作为可达性失败处理；不能自动 fallback 到 MoveJ 或 JOG。
+  - 50mm 微动如果继续实现，应拆成小步闭环，每步读取 `/robot_state`，并对目标轴误差、正交漂移、`motion_done/error_code` 做硬门禁。
+
+## Incident 63
+- Time: 2026-05-09
+- Scope: left RGB detection window terminal command.
+- Symptom: 用户执行 Obsidian 终端 D 后，`left_rgb_bridge` 报 `无法打开 Orbbec 彩色设备: /dev/video7`，随后 detector/viewer 启动但没有彩色窗口。
+- Root cause:
+  - Direct cause: `/dev/video7` 当前不是 V4L2 capture 口，`ID_V4L_CAPABILITIES` 为空。
+  - Direct cause: 当前可读左 Orbbec 彩色口是 `/dev/video6`，OpenCV 探测 `opened=True read=True shape=(480, 640, 3)`。
+  - Direct cause: shell 中 bridge 作为后台进程启动，后台进程失败不会触发 `set -e`，导致 detector/viewer 在没有 `/left_camera/color/image_raw` 输入时继续启动。
+  - Not root cause: detector 模型加载正常，`detector_left_rgb` 可启动并加载 `best.pt`。
+- Handling:
+  1. 清理残留 `detector_left_rgb` 进程。
+  2. 用 `/sys/class/video4linux`、`udevadm` 和 OpenCV 探测当前可采集口。
+  3. 用 `/dev/video6` 做 bridge + detector 无窗口 smoke，确认 color 和 overlay 话题均约 `15 Hz`。
+  4. 更新 Obsidian 终端 D：默认 `COLOR_DEVICE=/dev/video6`，并在启动后续节点前检查 `/left_camera/color/image_raw` 和 `/detector/left_rgb/detections/image`。
+- Evidence:
+  - Smoke dir: `.codex/tmp/runtime/left-rgb-detection-video6-smoke-20260509-222943/`
+  - `/left_camera/color/image_raw`：约 `15 Hz`。
+  - `/detector/left_rgb/detections/image`：约 `15 Hz`。
+  - Detailed report: `docs/operations/reports/2026-05-09-dual-rgb-detection-view.md`。
+- Prevention:
+  - 视觉启动 runbook 不能硬信旧 `/dev/videoN`；执行前先确认 capture capability 或允许 `COLOR_DEVICE` 覆盖。
+  - 后台启动 bridge 后必须检查进程仍存活且关键 topic 有消息，再启动 detector/viewer。
+  - 右相机已拆除期间，不要用右相机话题作为左 RGB 窗口 fallback。
+
+## Incident 64
+- Time: 2026-05-09
+- Scope: left EPG50 gripper open command.
+- Symptom: 用户要求打开左夹爪时，系统中存在左夹爪节点进程，但 `/gripper0/epg50_gripper/command` 不出现在 ROS service list。
+- Root cause:
+  - Direct cause: 既有左夹爪节点进程 `207543/207544` 处于 `T/Tl` 暂停状态。
+  - Direct cause: `SIGCONT` 后进程变为运行态，但仍未注册 ROS node/service，判定为不可用残留。
+  - Not root cause: 左夹爪串口 by-id 存在并指向 `ttyUSB1`；重新拉起节点后 service 正常可用。
+- Handling:
+  1. 清理不可用的旧左夹爪节点进程。
+  2. 临时拉起 `/gripper0` 左夹爪节点。
+  3. 调用 `/gripper0/epg50_gripper/command`，发送 `slave_id=9 position=0 speed=20 torque=80`。
+  4. 读取状态确认 `position=0/error=0/gobj=3`。
+  5. 停止临时左夹爪节点并刷新 ROS daemon。
+- Evidence:
+  - Service response: `success=True`、`设置参数成功 [位置=0, 速度=20, 力矩=80]`。
+  - Final status repeated 3 times: `position=0`、`speed=0`、`error=0`、`object_status=手指已到达指定位置，但未检测到物体或物体已脱落`。
+  - Detailed report: `docs/operations/reports/2026-05-09-left-gripper-open-command.md`。
+- Prevention:
+  - 夹爪控制前不能只看进程存在；必须确认 ROS service 存在。
+  - 如果夹爪节点处于 `T/Tl` 或 `SIGCONT` 后仍不注册 service，应清理并重启节点。

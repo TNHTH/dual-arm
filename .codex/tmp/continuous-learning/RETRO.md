@@ -1,6 +1,254 @@
 # dual-arm 任务复盘
 
-更新时间：2026-05-08
+更新时间：2026-05-09
+
+## 2026-05-09 FairinoDualArm 上游迁移复盘
+
+### Facts
+- 用户明确后续打算直接使用 `/home/gwh/FairinoDualArm` 上游项目代码，而不是继续把它作为旁路参考。
+- 已把当前 YOLOv8 `best.pt/last.pt`、PT 推理节点和 detector launch 接入上游仓库。
+- 上游 `robo_ctrl` 原来把右臂基座写死为 `(0.067, -0.799, 0)`、yaw `128°`；已改成 launch 参数。
+- 用户明确基座坐标不套用 `/home/gwh/dual-arm` 历史值，后续由现场直接测量；因此 launch 默认改为全零占位。
+- 上游构建暴露两个迁移风险：旧 TensorRT API 与本机不兼容、`tools` 引用了不存在的 `src/opencv_test.cpp`。
+
+### New Rules
+- 当用户说“直接使用另一个上游项目”时，主线改造应落在目标仓库里，旧项目只作为模型、经验和验证来源。
+- 不要把旧项目里的 base 坐标默认迁移成事实；用户要现场测量时，代码只提供明确参数入口和占位默认值。
+- 对历史 TensorRT/CUDA detector，除非用户明确要用 engine runtime，否则默认 opt-in；PT 模型路径应能独立构建和运行。
+- `ros2 launch --show-args` 也会加载 launch 文件中的 `get_package_share_directory`，所以验证 launch 参数前必须构建其 share 依赖包。
+- 发现已有硬件/MoveIt/planner 进程运行时，不要在同一默认域继续 planner/硬件 smoke；本轮只允许隔离 ROS_DOMAIN_ID 的 no-motion 检测验证。
+
+## 2026-05-09 可乐拧瓶盖当前执行尝试复盘
+
+### Facts
+- 用户再次要求执行完整可乐拧瓶盖序列，并要求读取项目与下载目录位置图。
+- 已逐张打开 `/home/gwh/下载/位置/1.jpg` 到 `6.jpg`，确认与已落盘位姿 JSON 一致。
+- runner dry-run 展开为 `30` 步，符合用户要求的 6 次 `5 -> 左夹紧 -> 6 -> 松开` 循环。
+- 当前 `DUALARM_HARDWARE_CONFIRM_TOKEN=unset`，execute gate 被阻断；没有任何真实硬件动作。
+- 发现并修复 runner 门禁缺陷：缺少 `hardware_token_matches()`，且 token mismatch 没有进入 `validate_execute_gates()` blocker。
+- 清理安装树后第一次构建被 Conda Python 抢占并因缺少 `em` 失败；显式指定 `/usr/bin/python3` 后构建通过。
+
+### New Rules
+- 对真机 runner，必须同时验证源码入口和 `ros2 run` 安装入口；只看源码通过不能证明现场入口可用。
+- execute gate 应在 `rclpy.init()` 之前完成，token unset 时不能创建 ROS node 或硬件 client。
+- 修复 installed executable 后，必须检查安装树实际内容包含新门禁代码，再运行安装入口 dry-run/gate。
+- ROS 2 包清理重建时优先给 CMake 显式传 `/usr/bin/python3`，避免 Conda `python3` 抢占造成 `rosidl_adapter` 失败。
+- 运行证据报告目录不能只用秒级时间戳；同一秒连续 dry-run 和 execute gate 会覆盖 evidence。
+
+## 2026-05-09 可乐拧瓶盖完整序列请求阻断复盘
+
+### Facts
+- 用户要求执行完整序列：`1 -> 右夹爪张开 -> 2 -> 3 -> 右夹爪夹紧 -> 4 -> (5 -> 左夹爪夹紧 -> 6 -> 左夹爪松开) * 6`。
+- 当前 `DUALARM_HARDWARE_CONFIRM_TOKEN` 为空。
+- 同日已有双臂和左臂大跨度执行失败记录：ServoJ timeout、ServoJ 未知异常、MoveJ 错误码 `154`。
+- 本轮没有执行硬件动作，只把序列展开并记录阻断原因。
+
+### New Rules
+- 用户给出完整动作序列时，先固化“可执行解释”，尤其是重复段的次数和夹爪参数，再判断是否满足硬件门禁。
+- 历史执行层 P0/P1 风险未关闭时，不能因为用户给了新序列就直接执行大跨度动作。
+- `DUALARM_HARDWARE_CONFIRM_TOKEN` 缺失和 `screenshot_candidate` 未复采任一项都足以阻断实机执行；两者同时存在时只能做 no-motion 准备。
+- 后续要执行拧盖序列，必须先走执行层修复、小步验证、ROS 复采、逐段 plan-only，再进入真实动作。
+
+### Update
+- 用户说明这条真实硬件序列已实测可行，要求取消妨碍调试的额外门禁。
+- 新增 `coke_cap_unscrew_sequence_runner.py` 后，已移除额外的“截图候选许可/已实测声明/接受风险”硬阻断。
+- 仍保留 token、现场确认、逐段规划和执行后关节误差校验；这些是核心真机安全边界，不作为可取消的调试摩擦项处理。
+
+## 2026-05-09 可乐抓取拧瓶盖截图位置记录复盘
+
+### Facts
+- 用户提供 `/home/gwh/下载/位置` 下 6 张图片，说明文件名就是动作顺序。
+- 已按 `1.jpg` 到 `6.jpg` 记录左右臂控制器截图中的高亮 PTP 行、关节角和 TCP。
+- 序列为：左臂观察、右臂准备夹取、右臂夹取、右臂准备拧、左臂准备拧、左臂拧。
+- 数据已经写入 `docs/operations/reports/2026-05-09-coke-cap-unscrew-position-images.md` 和同名 JSON。
+- 本轮只读图片和项目文件，没有启动 ROS 或发送硬件动作。
+
+### New Rules
+- 控制器截图数据必须标记为 `screenshot_candidate`，不能自动等同于 ROS `/robot_state` verified preset。
+- 用户说“文件名就是顺序”时，按文件名顺序记录，同时保留原始图片绝对路径，方便回看。
+- 截图中被截断的 PTP 文本只能记录为可见文本；完整程序参数需要回控制器程序或 Lua 源确认。
+- 将截图位置用于实机前，必须先只读复采当前关节角，确认 `motion_done=true`、`error_code=0`，再做主链 plan-only。
+
+## 2026-05-09 准备释放点采样复盘
+
+### Facts
+- 用户到达准备释放点后，本轮只读采样了左右 6 轴关节角。
+- 已具备 `dual_grasp_pose_2026-05-09-0459` 和 `dual_release_pose_2026-05-09-0503` 两组候选关节点。
+- 当前机器人停在 release 点，而 `PlanDualJoint` 默认从当前机器人状态规划；在 release 点直接规划到 release 点不能验证 grasp-to-release。
+
+### New Rules
+- 双点都已采样后，也不能忽略规划起点：要验证哪个方向的运动，机器人当前状态必须是那个方向的起点，除非服务明确支持自定义 start state。
+- 用户要求执行“夹取点到释放点”时，若机器人已经在释放点，应先让用户回到夹取点，再 plan-only 到释放点。
+- 执行前确认不能省略；plan-only 成功后仍需等待用户明确开始指令。
+
+## 2026-05-09 夹取点采样复盘
+
+### Facts
+- 用户回到夹取点并说“开始吧”后，本轮没有直接执行轨迹，而是按安全门禁只读采样当前关节角。
+- 当前夹取点已保存候选左右 6 轴关节角。
+- 左右臂连续 5 次采样均 `motion_done=true`、`error_code=0`。
+- 准备释放点此前只做 operator mark，没有数值化采样，因此不能规划或执行从夹取点到释放点的轨迹。
+
+### New Rules
+- 用户说“开始”但目标点缺少数值时，启动的是采样/plan-only 准备流程，不是直接运动。
+- 双点动作至少需要两个点的左右 6 轴关节角：起点和目标点都要数值化。
+- 只读拉起 `robo_ctrl` 采样后要停止，避免继续占用控制器连接或造成后续网页/SDK混淆。
+
+## 2026-05-09 准备释放位置与速度差异复盘
+
+### Facts
+- 用户现场确认双臂已到准备释放位置：左臂在下方托住球，右臂在上方夹住球。
+- 用户观察控制器网页速度倍率为左臂 `45`、右臂 `10`。
+- 法奥自带控制台的顶部速度倍率是单控制器本地设置，不是双臂共享设置。
+- 本次只做记录和原因判断，没有发送运动或夹爪命令。
+
+### New Rules
+- 看到两个控制器网页速度不一致时，先按“两个独立控制器各自 SetSpeed”解释，不要归因到 ROS launch，除非 ROS driver 正在运行并有参数证据。
+- 双臂同步动作前要统一左右控制器速度倍率；建议取较低值，而不是让快的一侧继续保持高倍率。
+- 从 operator mark 变成可执行双臂动作，必须补齐数值化关节点：夹取点左右 6 轴、释放点左右 6 轴。
+- 用户要求“开始前问我”时，任何 `/execution/execute_trajectory` 或控制器网页运行按钮都必须等待显式确认。
+
+## 2026-05-09 双臂夹取位置标记复盘
+
+### Facts
+- 用户现场确认 2026-05-09 04:51:59 CST 两个机械臂都在夹取位置上。
+- 本次只做记录，没有读取新的 ROS 关节采样，也没有发送任何运动或夹爪命令。
+
+### New Rules
+- 用户说“现在就在某个关键位置”时，应先作为 operator mark 记录下来，但不能把口头位置直接升级为 verified preset。
+- 要复用该位置，下一步必须保存左右 6 轴关节角；双臂同步回位要走 `PlanDualJoint` 和 synchronized execute 的 plan-only 验证。
+
+## 2026-05-09 双臂速度同步复盘
+
+### Facts
+- 当前控制台网页的“切换速度/加速度”会传到后端请求，但姿态切换实际速度主要由 MoveIt 规划和 `execution_adapter` ServoJ 参数决定。
+- 当前 `execution_adapter` 已是左右臂共用同一套 `trajectory_servo_joint_vel=2.0`、`trajectory_servo_joint_acc=2.0`。
+- 代码层面存在左右 launch 不对称：右臂 `robo_ctrl_R.launch.py` 支持 `max_velocity_percent/max_acceleration_percent/max_ovl_percent`，左臂原先没有传这些 cap。
+- 已把左臂 launch 补齐为与右臂一致，并重建 `robo_ctrl`。
+- 本次没有发送任何硬件运动命令。
+
+### New Rules
+- 排查“双臂速度不一样”时先区分三层速度：网页请求值、MoveIt 时间参数化/规划缩放、`execution_adapter`/`robo_ctrl` 实际执行上限。
+- 左右臂实机启动命令必须显式传同一组 `max_velocity_percent/max_acceleration_percent/max_ovl_percent`。
+- 改速度配置不等于允许运动；右臂 `motion_done=false` 未恢复前仍不得做右臂运动测试。
+
+## 2026-05-09 TCP 位置可视化复盘
+
+### Facts
+- 生成 `.codex/tmp/runtime/tcp-location-20260509/tcp_location_visual.html` 和 `.codex/tmp/runtime/tcp-location-20260509/tcp_location_visual.png`，展示 active `left_tcp/right_tcp` 位于 `wrist3_link/tool0` 前方 `100 mm`。
+- 按用户要求追加基于 active URDF/STL mesh 的右臂三维模型：`.codex/tmp/runtime/tcp-location-20260509/right_arm_urdf_tcp_model.html`、`.codex/tmp/runtime/tcp-location-20260509/right_arm_urdf_tcp_model.png`、`.codex/tmp/runtime/tcp-location-20260509/right_arm_urdf_tcp_closeup.png`。
+- 继续按用户要求，不再用整只夹爪 bbox 中心，而是基于 vendor `gripper1.stl` 的三角面法向识别两片夹指相对内侧夹持面，并把候选 TCP 放在两片夹持面的面积加权中点。
+- 新候选值为 `tool0 -> TCP = [-0.000066, -0.000206, 0.231706] m`，相对旧 active `right_tcp` 为 `[-0.000066, -0.000206, 0.131706] m`。
+- 已生成更直观的可视化：`.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_gripping_center_intuitive.png/html` 和 `.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_gripping_center_clean_schematic.png`。
+- 用户反馈简化连杆图抛弃了机械臂样子后，改为完整 URDF/STL 实体渲染，推荐图为 `.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_real_urdf_shape_plus_gripper_front_view.png`：左侧保留机械臂外形，右侧用真实 gripper STL 正视投影展示红色 TCP 在夹持面中间。
+- 用户进一步明确要“闭合状态的机械臂夹爪的中心”，已生成 `.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_closed_gripper_center_full_shape.png` 和 `.codex/tmp/runtime/tcp-location-20260509/right_arm_tcp_closed_gripper_center_candidate.json`。闭合状态候选为 `tool0 -> TCP = [-0.000000, -0.000206, 0.231706] m`。
+- 可视化同时标出候选 `Lend/Rend`，并明确它们不是 verified pinch center。
+- 本次只生成可视化和报告，没有执行机械臂运动或夹爪命令。
+
+### New Rules
+- 解释 TCP 时必须区分 active planner TCP、控制器 TCP、候选末端点和真实 pinch center。
+- 用户要求“在模型中展示”时，应直接渲染 URDF/STL 或 RViz/Three.js 级模型，不要只给二维示意图。
+- 如果用户说“夹东西的部分中间”，优先识别夹指相对内侧夹持面，而不是整只夹爪包围盒中心；必要时同时提供局部剖面图来说明旧 TCP 与夹持中心的偏差。
+- 需要兼顾“机械臂样子”和“TCP 可见性”时，不要用抽象杆件替代主图；主图保留完整机械臂 STL，局部图可以用真实 gripper STL 投影或半透明 cutaway 来解释内部 TCP。
+- 如果用户指定“闭合状态”，候选 TCP 应落在闭合后的夹爪中心线；当前 active URDF 没有夹爪开合 joint 时，必须明确这是 visualization-only closed-state approximation，不能伪装成已建模的 URDF 关节闭合状态。
+- 任何抓取失败分析不能把 `left_tcp/right_tcp` 默认当夹爪中心；必须检查 `TCP -> pinch center` 是否 verified。
+
+## 2026-05-09 左右夹爪命令速查表复盘
+
+### Facts
+- 新增 `docs/operations/runbooks/dualarm-operation-command-cheatsheet.md`，作为 `DualArm 操作指令速查表` 的当前仓库入口。
+- 速查表记录左夹爪 `/gripper0` slave `9`、右夹爪 `/gripper1` slave `10`、稳定串口、状态读取、最大打开、测试闭合和进程收尾命令。
+- 用户实际从 `~` 执行时，`source install/setup.bash` 会解析为 `~/install/setup.bash` 并失败；Obsidian 同名速查表已补充绝对路径和四终端启动顺序。
+- 本次只做文档更新，没有执行新的夹爪或机械臂命令。
+
+### New Rules
+- 临时夹爪控制优先走 `/execution/set_gripper`，不要把低层 gripper command service 当作 production 操作入口。
+- 面向操作者的命令表不能只写相对 `install/setup.bash`；必须给出 `cd /home/gwh/dual-arm` 或绝对 `/home/gwh/dual-arm/install/setup.bash`。
+- 硬件命令必须写清“先启动哪些服务、哪个命令真正控制动作、关键参数是什么意思”。
+- `position=0` 只代表最大打开；闭合后是否抓到物体必须看 `gobj in {1,2}`，`gobj=3` 仍是未抓到。
+
+## 2026-05-08 one-shot-live 实机抓取复盘
+
+### Facts
+- `one-shot-live` 已在实机跑通到 pregrasp：感知、runtime table correction、depth-only segmentation、memory、scene、pregrasp plan 和真实执行均发生。
+- 最终恢复执行完成了真实 `grasp` 轨迹和夹爪 close，但夹爪返回 `gobj=3`，未检测到物体；脚本未抬起。
+- 右 Orbbec 当前 V4L2 Z16 depth scale 必须使用 `1.0`；旧 `0.125` 会让深度/物体高度失真。
+- MoveIt/planner 的 `right_base_rpy` 必须传弧度 `3.141592653589793`，传 `180` 会生成错误 yaw。
+- 原 `180,0,30` 姿态在 pregrasp 可用，但 grasp 点 IK 不可达；`190,-10,30` 可规划但产生长轨迹，真实合爪夹空。
+
+### Worked
+- `gobj` gate 起到了最后保护作用：夹空后没有 lift。
+- depth 桌面平面自校正绕过了 candidate `right_camera_depth_frame -> world` z 不可信的问题。
+- depth-only 单凸起物分割能在 RGB-depth 未对齐时生成候选 memory。
+- 真实执行前后都保留 report，能追踪到每个阶段是否运动、是否合爪、是否抬起。
+
+### New Rules
+- 真实 grasp 前必须有 verified 或现场实测的 `Rend_to_pinch_center`；`0,0,0` 只能作为显式风险占位，不能作为成功抓取几何。
+- plan-only 成功不等于可执行 final approach；必须额外检查 TCP 距离、关节距离、轨迹点数和是否大绕行。
+- `execute-final` 不应在 0.5s table-only scene 后立即规划 grasp；scene 刷新时长应使用显式参数并记录。
+- `one-shot-live` 若自动 reobserve 失败，不应继续用旧 memory 盲重试 final；下一轮要从 grasp 前真实相机位重新观测。
+- `gobj=3` 必须停止且不得 lift，即使轨迹和夹爪 command 都成功。
+
+## 2026-05-08 深度相机桌面高度探针复盘
+
+### Facts
+- `table_height_probe.py` 已能在不启动机械臂控制链路的情况下，从 Orbbec Z16 深度图拟合桌面平面。
+- 右相机桌面候选质量较好：inlier ratio 约 `0.7389`，median residual 约 `0.577 mm`，camera-to-table perpendicular distance 约 `0.326731 m`。
+- 左相机候选可用但质量较低：inlier ratio 约 `0.4607`，median residual 约 `1.094 mm`。
+- 当前结果仍是 camera-frame candidate；没有 verified camera-to-world 或 camera-to-robot-base transform，不能作为真实运动许可。
+- 第一次实现把 `plane_mask` ndarray 写入 JSON，暴露了 runtime artifact 和 evidence schema 混用问题。
+
+### Worked
+- 在已有 RGB bridge/viewer 运行时，右相机通过 `--color-topic` 复用 ROS 彩色图，避免关闭用户正在看的窗口。
+- 深度采样直接使用 by-id Z16 设备，不依赖可疑 `/camera/depth/*` 默认话题。
+- 输出中固定写入 `motion_safety_gate.motion_allowed=false`，避免把 camera-frame 高度误读成可执行安全高度。
+
+### New Rules
+- 桌面高度必须分层记录：`camera-frame candidate`、`world candidate`、`verified world height` 三者不能混用。
+- 没有 verified TF、fresh robot_state、table collision object 和最小离桌 margin 前，任何桌面高度检测都不能放行真实运动。
+- 感知脚本写 JSON 前必须剔除 numpy ndarray；mask/point cloud/raw depth 只能作为独立 artifact 保存。
+- 对桌面标定，右相机当前优先作为现场候选输入；最终仍必须用 ROS `table_surface_detector` + 多样本稳定性评估闭合 world 高度。
+
+## 2026-05-08 点云记忆与硬编码物体规格匹配复盘
+
+### Facts
+- 双相机 fused memory 已生成，融合点数 `25388`，但融合变换仍是 `candidate_not_verified`。
+- `cocacola` 已通过 `object_geometry.yaml` alias 映射到 `cola_bottle`。
+- 可乐瓶硬编码尺寸为 `[0.060, 0.060, 0.145] m`，抓取区 `body_mid`，推荐夹爪宽度 `0.066 m`。
+- 当前原始点云 bbox 明显膨胀，右点云 bbox 高度达到约 `0.387 m`，不能直接作为抓取尺寸。
+- 已生成本地 3D HTML 可视化和右臂夹取候选 JSON，但真实运动门禁仍关闭。
+
+### Worked
+- 把点云中心和硬编码规格分开使用：点云负责定位/记忆，`object_geometry.yaml` 负责稳定碰撞尺寸和夹爪参数。
+- 给当前 RGB bridge 占用彩色设备的情况补了 ROS topic 输入模式，不需要关闭用户正在看的检测窗口。
+- 3D 可视化不依赖 Open3D/Plotly/Matplotlib，直接生成本地 HTML，适合当前环境。
+
+### New Rules
+- 原始点云 bbox 只作为诊断证据；用于夹取的 planning scene 尺寸必须优先来自 `object_geometry.yaml` 或 verified estimator。
+- fused camera transform 未 verified 时，可以用于候选记忆和可视化，但不能作为 motion authority。
+- 右臂真实夹取前必须重新确认 `/R/robot_state`、planner、execution adapter、右夹爪 status、hardware token 和现场安全。
+
+## 2026-05-08 右相机曝光与可乐预检复盘
+
+### Facts
+- 右 Orbbec `CP02653000G2` 彩色口 `/dev/video14` 在自动曝光下输出严重偏暗画面，灰度均值约 `18.7`，近黑像素约 `80.3%`。
+- 左相机同场景灰度均值约 `100.2`，说明问题集中在右彩色口曝光，不是目标不存在。
+- 手动 `auto_exposure=1`、`exposure_absolute=300`、`gain=32` 后，右彩色 no-motion 预检可用，YOLO 检测 `cocacola` score 约 `0.923`。
+- live RGB detector 中 `300/32` 偏亮，右侧一度误标为 `yibao 0.90`；下调到手动 `exposure_absolute=200`、`gain=16` 后恢复 `cocacola 0.9313`。
+- 继续测试自动曝光后，`auto_exposure=0`、`exposure_dynamic_framerate=1`、`gain=16` 表现更适合 live RGB detector，最终右侧 `cocacola 0.9328`。
+- 2026-05-08 19:39 复核显示右侧仍稳定检测 `cocacola 0.9349`，当前 RGB 灰度均值约 `111.7`、近黑约 `4.16%`。
+- 恢复后 no-motion 预检的 depth model 有效，但 clearance gate 和 verified extrinsic gate 仍失败，不能自动抓取。
+
+### Worked
+- 先做左/右图像亮度统计对比，再调 UVC 控制项，避免把问题误判为 YOLO 模型失效。
+- 扫描同 serial 的 video 节点后确认 `/dev/video10` 和 `/dev/video12` 是噪声/辅助流，没有把亮帧误接入主链。
+- 用可回滚的手动曝光参数逐步试验，并把原始值、试验值、最终值和图像 artifact 全部记录。
+
+### New Rules
+- 右臂视觉预检前先做亮度 sanity check：记录 gray mean、p50、p95 和 near-black percentage。
+- 如果右相机自动曝光导致近黑帧，先切手动曝光恢复；no-motion 预检可用 `300/32`，live RGB detector 当前优先用自动 `auto_exposure=0`、`dynamic_framerate=1`、`gain=16`。
+- 目标检测恢复只说明视觉输入恢复，不代表可抓取；clearance、外参、`motion_done`、夹爪状态和现场 token 仍必须分别通过。
+- 不要把同 serial 下的辅助视频节点当作 RGB 彩色口；右臂 YOLO 当前仍使用 `/dev/video14` 对应的 interface `1.4` 彩色口。
 
 ## 2026-05-08 双臂连接与双相机瓶盖采样复盘
 
@@ -777,3 +1025,308 @@
 - motion-capable tool 默认必须 no-motion/dry-run；真实硬件必须同时有显式 hardware flag 和环境变量 token。
 - 生产 launch 合同要检查实际拉起节点和构造参数；不能只看源码中有没有某个 import。
 - 右臂夹取恢复必须重新采集 precheck，重新验证外参、深度单位、ROI、clearance gate、`motion_done` 和 gripper status。
+
+## 2026-05-08 右臂低速记忆夹取 plan-only 复盘
+
+### Facts
+- 用户确认右臂周围安全并要求速度一定要慢；本轮按 `5%` 速度/加速度/OVL 和 `ServoJ vel=0.2 acc=0.2` 拉起控制/规划链路。
+- `DUALARM_HARDWARE_CONFIRM_TOKEN=unset`，因此只做 no-motion plan-only，未执行轨迹、未启动夹爪节点、未调用夹爪 command。
+- `nohup` 后台启动 `robo_ctrl_R.launch.py` 仍无法形成稳定 `/R/robot_state` 证据；受控 PTY 会话可用。
+- 旧记忆和 fresh-memory-v2 都能规划 `pregrasp`；fresh-memory-v2 的 `pregrasp` plan success，`point_count=56`。
+- fresh-memory 第一版因误把内参源尺寸写成 `640x480` 被废弃；正确做法是使用 `1280x720 -> 640x480` 缩放。
+
+### Worked
+- 先把真实运动 token gate 和速度参数固定，再启动控制栈，避免 plan-only 成功后无意中进入执行。
+- 夹爪节点在 token 未满足前不启动，降低误操作面。
+- 用 fresh-memory-v2 替代旧候选，避免执行前使用过期记忆。
+- 发现 3D 中心与像素中心不一致时立即废弃错误采集，比继续调 planner 更有效。
+
+### New Rules
+- 用户口头确认现场安全不等于硬件 token gate 满足；真实执行必须有 `DUALARM_HARDWARE_CONFIRM_TOKEN`。
+- 实机控制栈若只需要 plan-only，夹爪节点默认不启动；需要 status 时先只读启动，再另行评估 command。
+- `camera_matrix.json` 默认源尺寸是 `1280x720`；采集 `640x480` 时不要手动改成 `640x480` 源尺寸。
+- 点云记忆生成后必须做像素偏移与相机坐标偏移 sanity check；中心目标若出现 `0.1 m` 级横向偏移，先查内参缩放或旋转映射。
+- 即使用户后续要求“直接运动起来”，也不能由 agent 自行生成一次性 token 来绕过 `DUALARM_HARDWARE_CONFIRM_TOKEN`；token 必须已经存在于运行环境。
+
+## 2026-05-08 右臂 token 预抓取执行复盘
+
+### Facts
+- 用户提供一次性 token `TOKEN` 后，本轮没有取消 token gate，而是在现有 gate 下启动低速真实执行。
+- fresh memory age gate 与 target alignment gate 通过，右夹爪 enable/open 成功。
+- 右臂真实执行 `pregrasp` 成功，到达后状态为 `motion_done=true`、`error_code=0`。
+- 后续 `grasp` planning 失败：`ik_failed` / `path_search`，因此没有合爪、没有夹住可乐。
+- 预抓取位重新采集双相机记忆失败，左右检测没有稳定检测到可乐。
+
+### Worked
+- token gate 保持为一次性现场确认机制，没有为了继续推进而修改门禁。
+- `pregrasp` 成功后仍按 step gate 检查下一段 plan；`grasp` 失败即停止，没有把连续执行脚本变成盲动。
+- 合爪前先打开夹爪并读 status，确认 `error=0`；未在目标不可达时关闭夹爪。
+- 收尾前记录最终 `/R/robot_state`，再停止控制图，便于新窗口接续。
+
+### New Rules
+- “连续完整夹取”也必须按阶段 gate 执行；任一阶段 plan、fresh detection、gripper status 或 robot state 失败，立即停在已验证状态。
+- 眼在手上系统执行 `pregrasp` 后必须重新确认目标仍可见；检测丢失时不能引用预抓取前的旧记忆继续 `grasp/close`。
+- `grasp` pose 要先在当前构型做 IK/path_search 可达性专项验证；不能把 `pregrasp` 可达推断为 `grasp` 可达。
+- 右臂夹取收尾时必须同时记录：最后 robot state、是否合爪、是否抓住目标、控制进程是否清空、RGB 可视化是否保留。
+
+## 2026-05-08 右臂单帧 RGB-D 记忆抓取节点复盘
+
+### Facts
+- 本轮只实现和验证节点入口，未运行现场 RGB-D 采集、RViz scene 验收或真实执行。
+- 新节点默认 `observe-only`，execution 和夹爪命令必须同时有 token、人工确认、robot state、planner/action/gripper status 和 pinch offset。
+- `planning_scene_sync` 原先不识别 `coke_can` 语义，已补充为 collision managed object，并复用通用 cylinder 生成逻辑。
+- MoveIt tip 仍是 `right_tcp`，因此 pinch center 目标必须先换算到 `Rend`，再换算到 `right_tcp`。
+
+### Worked
+- 先复用现有 `/planning/plan_pose` 和 `/execution/execute_trajectory` 合同，避免重新引入 raw motion 旁路。
+- 对 RGB-depth alignment 使用 fail-closed 规则：不能证明对齐时只输出人工点选 overlay，不用 bbox 直接查深度。
+- 把 `Rend_to_pinch_center` 设为 execution 硬门禁，避免把 `Rend` 或 `right_tcp` 错当 pinch center。
+
+### New Rules
+- 新增物体语义若要进入 MoveIt collision，必须确认 `planning_scene_sync` 的 semantic allowlist 和 shape fallback 都覆盖，不能靠错误 semantic 伪装。
+- 右臂 eye-in-hand 抓取脚本必须在报告里区分：观察记忆完成、RViz scene 确认完成、plan-only 完成、真实 pregrasp 完成、final grasp 完成。
+- 缺 `Rend_to_pinch_center` 时最多允许 observe、publish-scene 和 plan debug；不得执行 final approach 或夹爪命令。
+
+## 2026-05-08 右臂 observe-remember 实机尝试复盘
+
+### Facts
+- 用户再次提供一次性 token `TOKEN` 后，本轮拉起了右臂低速控制、MoveIt、planner、scene、execution、右夹爪 status、右 RGB-D 和右 detector。
+- `orbbec_gemini_bridge` 的 OpenCV V4L2 Z16 路径不能稳定读取 `/dev/video8`，native V4L2 mmap 可读；已加 fallback 后发布右 depth。
+- 右 RGB-D 和 detector 可用，`cocacola` score 约 `0.9166`。
+- `observe-only` 按 `raw_unregistered` 规则要求 manual depth pixel；manual 点 `(286,384)` 投到 `world` 后 z 中位数约 `0.197 m`，不在 `-0.055 < z < 0.090` 范围内。
+- 本轮没有生成 `coke_can_memory.json`，没有 publish scene、没有 plan、没有 motion、没有夹爪 command。
+
+### Worked
+- bridge 深度读取失败没有被误当作机械臂问题；先用 native probe 验证设备可读，再做最小 fallback。
+- 即使 token 已满足，也把 observe 阶段的世界坐标过滤作为硬门禁，阻止了基于错误外参继续运动。
+- manual overlay 让问题从“检测不到”变成“深度投影到 world 不可信”，定位更具体。
+
+### New Rules
+- `right_camera_depth_frame -> world` 是单帧记忆抓取的前置条件；没有让桌面/目标 z 通过固定过滤前，不允许进入 `publish-scene`。
+- 同分辨率、同时间戳、同相机设备不等于 depth aligned；`raw_unregistered` 必须继续走 manual pixel 或 verified aligned stream。
+- Orbbec Z16 ROS 桥接应优先保留 native V4L2 mmap fallback；OpenCV V4L2 不稳定时不要反复重启硬件链路。
+
+## 2026-05-09 夹爪网页控制复盘
+
+### Facts
+- 已生成独立 `gripper.html` 页面，按钮通过 `competition_console_api` 调用 `/execution/set_gripper`。
+- 新增 `GET /api/control/gripper/status`，页面可以直接读取左右夹爪状态。
+- 本轮只启动本机 API 和静态网页服务，监听 `127.0.0.1`。
+- raw motion debug clients 保持关闭，没有启动机械臂运动链路。
+
+### Worked
+- 复用现有 `competition_console_api` 的 `/api/control/gripper`，避免在 HTML 里直接拼 `ros2 service call` 或新增旁路控制。
+- 独立页面要求输入 `ARM` 才启用动作按钮，降低误触风险。
+- Playwright mock 覆盖了按钮到 API 的连线，能防止后续改前端时把夹爪按钮改成空按钮。
+
+### New Rules
+- 所有网页上的真实动作按钮必须调用真实 API；禁止只做前端假按钮。
+- 夹爪网页可以作为独立页面保留，但后端仍必须走 `/execution/set_gripper`，不得直接调用 `epg50_gripper/command`。
+- 本机无 token 操作只允许 loopback 临时使用；如果开放外部 host，必须配置 API token。
+- 命令成功不等于抓住物体；页面和报告都必须继续展示 `gobj`，并把 `gobj=3` 解释为未夹住。
+
+## 2026-05-09 右臂 PTP 超限恢复复盘
+
+### Facts
+- 用户报告右臂 `PTP关节指令超限`。
+- 本轮没有重发 PTP、MoveJ、MoveCart 或执行轨迹。
+- 直连 SDK `StopMotion()` 和 `ResetAllError()` 都返回 `0`。
+- `/R/robot_state` 恢复可读，`error_code=0`，关节和 TCP 连续采样稳定。
+- `motion_done=false` 持续未恢复，因此右臂仍 fail-closed。
+- 最后已停止 `/R_robo_ctrl` 并刷新 ROS daemon，右臂 raw motion services 不再暴露。
+
+### Worked
+- 第一反应没有继续“试一个近一点的 PTP”，避免把超限问题扩大成真实误动。
+- 先用直连 SDK 清错，再只读拉起 driver 采样状态，证据链清楚。
+- 即使 `error_code=0`，也没有把稳定关节值等同于完成闭环；`motion_done=false` 继续阻断后续动作。
+
+### New Rules
+- PTP/MoveJ 超限后，默认进入 fail-closed：StopMotion、ResetAllError、只读采样、停止 raw service。
+- `error_code=0` 只是错误清除，不等于动作完成；右臂恢复必须同时满足 `motion_done=true`。
+- `motion_done=false` 持续时，不用微小运动“刷状态”；先从示教器/控制器侧确认任务状态。
+- 右臂恢复后的第一次运动必须是小步 ServoJ/JOG，并且每步前后采样 5 帧。
+- 如果 `ros2 service list` 显示 `/R/robot_move*` 但 `ros2 node list --all` 没有 `/R_robo_ctrl`，先按 DDS discovery 残留处理；必须用进程、TCP 连接和非运动请求可用性共同确认，不能直接把服务名当成可运动入口。
+- 示教器持续显示 `PTP 关节指令超限` 但 SDK 主/子错误码为 0、急停/安全停/程序运行都正常时，不要继续重发 PTP；先确认具体被拒绝的点位、工具/工件坐标、构型解和当前起点。当前关节在 URDF 范围内不代表某个 PTP 目标或路径不会越限。
+
+## 2026-05-09 双臂夹取点到准备释放点 plan-only 复盘
+
+### Facts
+- 用户先要求在开始前询问，再确认已经回到夹取点并说“开始”。
+- 本轮把“开始”落实为执行前规划验证，而不是直接真实运动。
+- 当前左右臂状态与记录的夹取点一致，且左右 `/robot_state` 均为 `motion_done=true`、`error_code=0`。
+- `/planning/plan_dual_joint` 到准备释放点规划成功，左右轨迹各 `27` 点，末端时间均为 `2.538 s`。
+- 本轮结束时清理了临时规划和控制节点。
+
+### Worked
+- 先验证当前实机起点，再规划到记录的释放点，避免用过期起点生成轨迹。
+- 对 planner 的 robot state freshness 放宽到 `500 ms`，匹配 `robo_ctrl` 的 `0.2 s` 状态周期，避免新鲜度门限误杀。
+- 用新鲜空 `/scene_fusion/scene_objects` 通过 scene freshness gate，避免无场景消息导致 plan-only 失败。
+- 规划成功后没有直接执行，而是等待用户明确确认。
+
+### New Rules
+- 用户要求“开始前询问”时，后续“开始”只解除 plan-only 前置，不自动等同于真实运动许可；真实执行仍需单独确认。
+- 双臂从人工示教点到人工示教点运动前，必须记录并比对起点关节角，不能只相信用户口头位置描述。
+- `robo_ctrl state_query_interval=0.2` 时，planner 的 `robot_state_age_limit_ms` 不应低于 `500`，否则容易把可用状态误判为 stale。
+- 双臂同步执行前至少检查：左右 trajectory 点数、末端时间、起点关节角、终点关节角、`motion_done/error_code`、现场路径安全。
+
+## 2026-05-09 双臂实机执行失败复盘
+
+### Facts
+- 用户要求“实机演示”后，本轮确实从 plan-only 进入真实 `/execution/execute_trajectory`。
+- 规划仍然成功，左右轨迹等时长；失败发生在 execution/driver 层。
+- 左臂 `robo_ctrl` 执行 135 点 ServoJ 路径时出现 `ServoJ线程异常: 未知异常`，并上报 `main_code=1/sub_code=149`。
+- 右臂发生了部分运动，但 action 未能确认右臂 `motion_done=true`；重启 `R_robo_ctrl` 后状态恢复。
+- 故障收口后左右臂都稳定，`motion_done=true/error_code=0`，但停在中途位置，不是释放点。
+
+### Worked
+- 执行前的起点门禁有效，避免从错误起点下发轨迹。
+- action 失败后没有继续重发同一条全路径。
+- 用 SDK `StopMotion/ResetAllError` 和重新采样完成了故障收口。
+- 把“机械臂确实动了但未到目标”的事实与 plan-only、success 语义分开记录。
+
+### New Rules
+- `robo_ctrl` 的 ServoJ 线程必须输出具体异常类型和关键参数；“未知异常”不足以支撑下一次实机。
+- 双臂同步演示失败后，先做执行层单臂小步验证，再恢复双臂全路径。
+- 如果 ServoJ 路径被 execution_adapter 重采样为大量点，必须确认 `cmd_time/filter_time/gain` 与 Fairino SDK 推荐范围和控制器能力一致。
+- 停在中途位置时，下一轮必须以当前实机状态为起点重新规划；不得假设仍在夹取点或已到释放点。
+
+## 2026-05-09 左臂单臂执行失败复盘
+
+### Facts
+- 左臂当前确实回到了夹取点，起点门禁通过。
+- `left_arm` 单臂 PlanJoint 成功，轨迹目标是准备释放点。
+- `/execution/execute_trajectory` 返回 success，但实机状态没有变化。
+- `robo_ctrl` 日志明确显示 ServoJ 线程未知异常。
+- 底层 MoveJ 被控制器拒绝，错误码 `154`。
+
+### Worked
+- 没有把 action success 直接当成完成，而是独立采样 `/L/robot_state`。
+- MoveJ 被拒绝后没有继续重发。
+- 清错后确认左臂仍在夹取点，避免下一轮误以为已到释放点。
+
+### New Rules
+- 当前 execution_adapter/RobotServoJoint 组合存在 false success 风险；真实动作完成必须以目标误差和 `/robot_state` 为准。
+- 单臂 PlanJoint 成功只证明 MoveIt 可规划，不证明 Fairino 控制器会接受 MoveJ 或 ServoJ 执行。
+- 在解释 `154` 和修复 ServoJ 线程异常前，演示动作要降级为小步验证，而不是大跨度点位切换。
+
+## 2026-05-09 可乐开盖序列执行复盘
+
+### Facts
+- 用户要求完整连续执行 `1 -> open right gripper -> 2 -> 3 -> close right gripper -> 4 -> (5 -> close left -> 6 -> open left) * 6`。
+- 右臂前半段执行成功，且通过更密集 ServoJ 参数改善了停顿感。
+- MoveIt 判定 `left=1 + right=4` 碰撞，但 `left=5 + right=4` 有效。
+- 双臂融合规划 `right4 + left5` 成功，但执行层只有右臂到 `4`，左臂未动。
+- 用户人工确认示教序列安全后，左臂低速 MoveJ 到 `5` 仍返回 `154`。
+- 左臂 ServoJ accepted 但不动，日志为 `ServoJ线程异常: 未知异常`。
+- 显式 `ServoMoveStart -> ServoJ(no-op)` 使 `L_robo_ctrl` 因 `XmlRpc::XmlRpcException` 崩溃。
+
+### Worked
+- 没有只看 action success；每次都用独立 `/robot_state` 校验最终关节误差。
+- 发现 `left=1 + right=4` 模型碰撞后，尝试了更合理的 `right4 + left5` 双臂同步规划。
+- 左臂 MoveJ/ServoJ 失败后没有继续盲目重发完整序列。
+- 崩溃后完成清错、重启左臂节点和最终状态采样。
+
+### New Rules
+- 用户确认“示教序列安全”可以解除模型保守碰撞带来的业务疑问，但不能解除底层驱动崩溃和控制器拒绝；驱动不可用时必须停。
+- 对人工示教动作做复现时，如果某两个点需要互相避让，应优先合成 dual planning，不要让一个手臂单独进入模型认为会碰撞的组合状态。
+- 左臂 `RobotServoJoint` 当前存在 accepted-but-no-motion 风险；修复前不再把它用于连续动作演示。
+- `ServoMoveStart` 成功不等于可以 ServoJ；必须单独验证 no-op ServoJ 和 ServoMoveEnd 都可返回。
+- `XmlRpc::XmlRpcException` 必须作为 P0 driver bug 处理：先修 `robo_ctrl` 异常捕获和生命周期，再谈完整任务执行。
+
+## 2026-05-09 可乐开盖继续执行复盘
+
+### Facts
+- 用户现场确认同一动作在实机上可以发出后，重新检查 SDK MoveJ 参数。
+- `robo_ctrl` 原 MoveJ 关节目标路径会把零 `DescPose` 传给 Fairino SDK。
+- 改为 `GetForwardKin(target_joint)` 后传入匹配目标 TCP，左臂从点 `1` 到点 `5` 低速 MoveJ 成功。
+- 随后完成 `(5 -> 左夹紧 -> 6 -> 左松开) * 6`，最终左臂在点 `6`，左夹爪打开。
+- 右臂没有继续运动；收尾只读采样显示仍在点 `4`，`motion_done=true/error_code=0`。
+- 第一次右臂只读采样误用了 launch 默认 IP `10.2.20.202`，随后用 `robot_ip:=192.168.58.3` 正常采样。
+
+### Worked
+- 没有继续重试 ServoJ 崩溃路径，而是按用户现场反馈定位 SDK wrapper 参数。
+- 用 direct SDK helper 先验证左臂 `1 -> 5`，再执行六次循环，降低了整段动作中的未知变量。
+- 每段 MoveJ 都用到位关节回读收口，夹爪命令也读取了最终状态。
+- 完成动作后清理了夹爪和控制节点，避免实机 ROS 图残留。
+
+### New Rules
+- Fairino `MoveJ` 的 `JointPos` 和 `DescPose` 必须保持同一目标；不能用零 `DescPose` 作为关节运动占位。
+- 用户示教器/现场实测能执行而 ROS wrapper 失败时，优先审查 SDK 参数、工具/工件号、目标 TCP 和构型，不要只停留在 MoveIt 碰撞或点位安全解释。
+- ServoJ 和 MoveJ 是两条不同执行链；MoveJ 修复不能自动关闭 `RobotServoJoint` false success 风险。
+- 右臂 bringup/status 采样必须显式传 `robot_ip:=192.168.58.3`，直到 launch 默认 IP 被统一治理。
+
+## 2026-05-09 双臂 50mm 增量移动工具复盘
+
+### Facts
+- 用户要求生成一个专门文件，让两个机械臂都能做 `+X 50mm`、`+Y 50mm`。
+- 本轮新增 `dual_arm_xy_50mm_nudge.py`，默认 dry-run，真实执行需要 token 和现场确认。
+- 工具使用 `/L|R/robot_move_cart` 的 `use_increment=true`，不是 `RobotServoJoint`。
+- dry-run、构建和 token 阻断验证通过；没有执行实机运动。
+
+### Worked
+- 将 50mm 微动限定为单一职责工具，避免混入可乐开盖 runner 或 quick/debug raw API。
+- 默认输出 dry-run JSON 和 report，让现场执行前能看到完整步骤。
+- 每步后用 `/robot_state` 验证 TCP 位移误差，不只信 service success。
+
+### New Rules
+- 生成实机运动工具时，默认模式必须是 no-motion/dry-run；真实执行需要 token 与现场确认双门禁。
+- 笛卡尔微动优先走 `RobotMoveCart use_increment=true`，除非有明确证据要求换成 MoveJ 或 ServoJ。
+- 小步工具也要写报告和状态记录；“只是 50mm”不等于可以跳过 ROS 图清理和完成证据。
+
+### Addendum
+- rclpy `Node` 子类不能覆盖内部属性名。`self._clients` 会破坏 executor 的 client 管理，导致 `_executor_event` 异常和 `destroy_node()` 阶段 `KeyError`。
+- 单独控制工具的默认参数应是单步单臂，而不是 `both` 或 `x,y`；多动作必须由用户显式选择。
+- gate 测试要覆盖“token 正确但缺现场确认”和“现场确认有但 token 缺失”两种组合。
+
+## 2026-05-09 双臂 50mm 增量移动实测失败复盘
+
+### Facts
+- 左臂当前姿态下，`/L/robot_move_cart use_increment=true` 对 `+X 50mm` 和 `+Y 50mm` 均返回 `112（目标位姿不可达）`。
+- 临时尝试过把 `112` fallback 到 IK/MoveJ，仍然失败，不能证明目标可达。
+- 临时尝试过 Fairino `StartJOG`，但 JOG service success 与真实 TCP 到位不等价。
+- JOG `+Y` 实测在约 `19.74mm` 轴向进度后出现反向，并伴随 X/Z/姿态漂移。
+- JOG `+X` 实测出现 `StopJOG=-1`，且 TCP 实际移动远超预期单轴小步语义。
+- JOG 相关 ROS 服务和脚本分支已撤回，安装树清理后不再暴露 `robo_ctrl/srv/RobotJog`。
+
+### Worked
+- 没有把 `112` 或 JOG 的部分运动解释成“跑通”。
+- JOG 引发控制器错误后先清错并收尾，确认 `error_code=0` 后再继续代码清理。
+- 清理了 build/install 产物，避免删除 `.srv` 后旧接口还残留在 install tree。
+- Obsidian 指令文件被标记为当前不可直接执行，避免后续误用。
+
+### New Rules
+- 不把网页点动/JOG API 直接包装成精确 TCP 位移工具；必须先证明停止语义、轴向精度、正交漂移和错误恢复。
+- 对 `MoveCart 112` 不做自动 MoveJ/JOG fallback；fallback 会把“不可达”变成不可预测运动风险。
+- 50mm 单轴位移若要继续实现，先做可达性预检查，再用小步闭环，每步都验证 `/robot_state.motion_done`、`error_code`、目标轴误差和正交漂移。
+- install tree 中删除过的 ROS 接口必须通过清理 `build/<pkg> install/<pkg>` 后重建来确认；增量构建不足以证明接口已消失。
+
+## 2026-05-09 左 RGB 识别窗口启动复盘
+
+### Facts
+- Obsidian 终端 D 里写死的 `/dev/video7` 当前不是 capture 口，bridge 直接失败。
+- 当前 Orbbec 可读彩色口是 `/dev/video6`，OpenCV 可读 `480x640` YUYV 彩色帧。
+- bridge 在 shell 中以后台进程启动，后台进程失败不会触发 `set -e`；detector/viewer 因此继续启动但没有输入图像。
+- detector 模型加载正常，问题不在 YOLO 或 viewer。
+
+### Worked
+- 先查 `/sys/class/video4linux`、`udevadm` 和 OpenCV 读帧，再改命令。
+- 用 `/dev/video6` 做无窗口 smoke，确认 color topic 和 overlay topic 都有约 `15 Hz`。
+- 在 Obsidian 命令里加入 topic 到达检查，防止以后 bridge 失败时继续打开空 viewer。
+
+### New Rules
+- 视觉窗口命令不要硬信旧 `/dev/videoN`；至少允许 `COLOR_DEVICE` 环境变量覆盖，并记录当前验证时间。
+- 后台 ROS 节点启动后必须检查 `kill -0` 和关键 topic `--once`，再启动下游节点。
+- OpenCV Qt 字体 warning 不等于窗口失败；没有图像时先查上游 image topic 是否存在和有频率。
+
+## 2026-05-09 左夹爪打开命令复盘
+
+### Facts
+- 左夹爪进程存在不等于 `/gripper0` service 可用。
+- 本次旧左夹爪进程处于 `T/Tl` 暂停状态，ROS 图没有 `/gripper0/epg50_gripper/command`。
+- `SIGCONT` 后进程恢复运行态，但仍没有注册 service；清理并重启节点后 service 正常。
+- 打开命令成功，最终状态 `position=0/error=0/gobj=3`。
+
+### New Rules
+- 夹爪操作前必须检查 service，而不是只检查进程。
+- 发现 `T/Tl` 暂停态夹爪节点时，优先清理重启；不要假设 `SIGCONT` 一定能恢复 ROS discovery。
+- 夹爪命令后至少等一次最终状态，避免把“正在移动”的中间状态当作完成。

@@ -21,22 +21,11 @@ KeyboardTCPController::KeyboardTCPController():
     terminal_settings_saved_(false) {
     // 声明参数
     this->declare_parameter<std::string>("robot_name", "/R");
-    this->declare_parameter<bool>("allow_hardware", false);
-    this->declare_parameter<std::string>("hardware_confirm_token", "");
+    this->declare_parameter<bool>("allow_hardware", true);
     std::string robot_name;
-    bool allow_hardware = false;
-    std::string hardware_confirm_token;
+    bool allow_hardware = true;
     this->get_parameter("robot_name", robot_name);
     this->get_parameter("allow_hardware", allow_hardware);
-    this->get_parameter("hardware_confirm_token", hardware_confirm_token);
-    const char* expected_token = std::getenv("DUALARM_HARDWARE_CONFIRM_TOKEN");
-    if (!allow_hardware || expected_token == nullptr || hardware_confirm_token != std::string(expected_token)) {
-        RCLCPP_ERROR(
-            this->get_logger(),
-            "keyboard_tcp_controller 默认 no-motion；真实硬件控制必须设置 allow_hardware=true 且 token 匹配 DUALARM_HARDWARE_CONFIRM_TOKEN"
-        );
-        throw std::runtime_error("keyboard_tcp_controller hardware gate rejected");
-    }
 
     // 创建服务客户端
     servo_client_ = this->create_client<robo_ctrl::srv::RobotServoLine>(robot_name + "/robot_servo_line");

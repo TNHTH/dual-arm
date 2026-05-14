@@ -152,6 +152,8 @@ void DepthProcessorNode::declareParameters() {
     declare_parameter("fill_target_offset", 0.03);
     declare_parameter("roi_margin_ratio", 0.1);
     declare_parameter("table_reject_distance", 0.018);
+    declare_parameter("min_depth_m", 0.05);
+    declare_parameter("max_depth_m", 3.0);
     declare_parameter("use_table_plane", true);
     declare_parameter(
         "allowed_semantic_types",
@@ -184,6 +186,8 @@ void DepthProcessorNode::loadParameters() {
     fill_target_offset_ = get_parameter("fill_target_offset").as_double();
     roi_margin_ratio_ = get_parameter("roi_margin_ratio").as_double();
     table_reject_distance_ = get_parameter("table_reject_distance").as_double();
+    min_depth_m_ = get_parameter("min_depth_m").as_double();
+    max_depth_m_ = get_parameter("max_depth_m").as_double();
     use_table_plane_ = get_parameter("use_table_plane").as_bool();
     allowed_semantic_types_ = get_parameter("allowed_semantic_types").as_string_array();
 }
@@ -673,12 +677,19 @@ std::optional<float> DepthProcessorNode::readDepthMeters(
         if (depth_mm == 0) {
             return std::nullopt;
         }
-        return static_cast<float>(depth_mm) / 1000.0f;
+        const float depth_m = static_cast<float>(depth_mm) / 1000.0f;
+        if (depth_m < min_depth_m_ || depth_m > max_depth_m_) {
+            return std::nullopt;
+        }
+        return depth_m;
     }
     if (depth_image->encoding == "32FC1") {
         const auto* raw = reinterpret_cast<const float*>(depth_image->data.data());
         const float depth_m = raw[index];
         if (!std::isfinite(depth_m) || depth_m <= 0.0f) {
+            return std::nullopt;
+        }
+        if (depth_m < min_depth_m_ || depth_m > max_depth_m_) {
             return std::nullopt;
         }
         return depth_m;

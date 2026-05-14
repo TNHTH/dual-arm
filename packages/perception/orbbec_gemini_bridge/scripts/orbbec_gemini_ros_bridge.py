@@ -5,11 +5,13 @@ from __future__ import annotations
 import ctypes
 import fcntl
 import json
+import mmap
 import os
+import select
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import cv2
 import numpy as np
@@ -20,7 +22,17 @@ from sensor_msgs.msg import CameraInfo, Image
 
 
 VIDIOC_ENUM_FMT = 0xC0405602
+VIDIOC_S_FMT = 0xC0D05605
+VIDIOC_REQBUFS = 0xC0145608
+VIDIOC_QUERYBUF = 0xC0585609
+VIDIOC_QBUF = 0xC058560F
+VIDIOC_DQBUF = 0xC0585611
+VIDIOC_STREAMON = 0x40045612
+VIDIOC_STREAMOFF = 0x40045613
 V4L2_BUF_TYPE_VIDEO_CAPTURE = 1
+V4L2_MEMORY_MMAP = 1
+V4L2_FIELD_ANY = 0
+V4L2_PIX_FMT_Z16 = 0x2036315A
 
 
 class V4L2FormatDesc(ctypes.Structure):
@@ -35,10 +47,214 @@ class V4L2FormatDesc(ctypes.Structure):
     ]
 
 
+class TimeVal(ctypes.Structure):
+    _fields_ = [("tv_sec", ctypes.c_long), ("tv_usec", ctypes.c_long)]
+
+
+class V4L2TimeCode(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("frames", ctypes.c_uint8),
+        ("seconds", ctypes.c_uint8),
+        ("minutes", ctypes.c_uint8),
+        ("hours", ctypes.c_uint8),
+        ("userbits", ctypes.c_uint8 * 4),
+    ]
+
+
+class V4L2PixFormat(ctypes.Structure):
+    _fields_ = [
+        ("width", ctypes.c_uint32),
+        ("height", ctypes.c_uint32),
+        ("pixelformat", ctypes.c_uint32),
+        ("field", ctypes.c_uint32),
+        ("bytesperline", ctypes.c_uint32),
+        ("sizeimage", ctypes.c_uint32),
+        ("colorspace", ctypes.c_uint32),
+        ("priv", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("ycbcr_enc", ctypes.c_uint32),
+        ("quantization", ctypes.c_uint32),
+        ("xfer_func", ctypes.c_uint32),
+    ]
+
+
+class V4L2FormatUnion(ctypes.Union):
+    _fields_ = [
+        ("pix", V4L2PixFormat),
+        ("raw_data", ctypes.c_uint8 * 200),
+        ("align", ctypes.c_uint64),
+    ]
+
+
+class V4L2Format(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_uint32), ("fmt", V4L2FormatUnion)]
+
+
+class V4L2RequestBuffers(ctypes.Structure):
+    _fields_ = [
+        ("count", ctypes.c_uint32),
+        ("type", ctypes.c_uint32),
+        ("memory", ctypes.c_uint32),
+        ("capabilities", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+    ]
+
+
+class V4L2BufferM(ctypes.Union):
+    _fields_ = [
+        ("offset", ctypes.c_uint32),
+        ("userptr", ctypes.c_ulong),
+        ("planes", ctypes.c_ulong),
+        ("fd", ctypes.c_int32),
+    ]
+
+
+class V4L2Buffer(ctypes.Structure):
+    _fields_ = [
+        ("index", ctypes.c_uint32),
+        ("type", ctypes.c_uint32),
+        ("bytesused", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("field", ctypes.c_uint32),
+        ("timestamp", TimeVal),
+        ("timecode", V4L2TimeCode),
+        ("sequence", ctypes.c_uint32),
+        ("memory", ctypes.c_uint32),
+        ("m", V4L2BufferM),
+        ("length", ctypes.c_uint32),
+        ("reserved2", ctypes.c_uint32),
+        ("request_fd", ctypes.c_int32),
+    ]
+
+
+class NativeV4L2Z16Stream:
+    def __init__(self, device: str, width: int = 640, height: int = 480, timeout_sec: float = 1.0) -> None:
+        self.device = device
+        self._requested_width = width
+        self._requested_height = height
+        self._timeout_sec = timeout_sec
+        self._fd: int | None = None
+        self._maps: list[mmap.mmap] = []
+        self.width = width
+        self.height = height
+        self.open()
+
+    def open(self) -> None:
+        self._fd = os.open(self.device, os.O_RDWR)
+        width, height, pixfmt = self._set_format()
+        if pixfmt != V4L2_PIX_FMT_Z16:
+            raise RuntimeError(f"{self.device} 当前格式不是 Z16: {fourcc_to_str(pixfmt)}")
+        self.width = width
+        self.height = height
+        self._request_buffers()
+        for index in range(len(self._maps)):
+            self._queue_buffer(index)
+        self._stream_on()
+
+    def release(self) -> None:
+        self._stream_off()
+        for item in self._maps:
+            try:
+                item.close()
+            except Exception:
+                pass
+        self._maps = []
+        if self._fd is not None:
+            try:
+                os.close(self._fd)
+            except OSError:
+                pass
+            self._fd = None
+
+    def read(self) -> tuple[bool, Optional[np.ndarray]]:
+        if self._fd is None:
+            return False, None
+        try:
+            ready, _, _ = select.select([self._fd], [], [], self._timeout_sec)
+            if not ready:
+                return False, None
+            buf = V4L2Buffer()
+            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+            buf.memory = V4L2_MEMORY_MMAP
+            fcntl.ioctl(self._fd, VIDIOC_DQBUF, buf)
+            mapped = self._maps[int(buf.index)]
+            expected = self.width * self.height * 2
+            bytesused = int(buf.bytesused) or expected
+            raw = mapped[:bytesused]
+            if len(raw) < expected:
+                self._queue_buffer(int(buf.index))
+                return False, None
+            frame = np.frombuffer(raw[:expected], dtype=np.uint16).reshape((self.height, self.width)).copy()
+            self._queue_buffer(int(buf.index))
+            return True, frame
+        except Exception:
+            return False, None
+
+    def _set_format(self) -> tuple[int, int, int]:
+        assert self._fd is not None
+        fmt = V4L2Format()
+        fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+        fmt.fmt.pix.width = self._requested_width
+        fmt.fmt.pix.height = self._requested_height
+        fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_Z16
+        fmt.fmt.pix.field = V4L2_FIELD_ANY
+        fcntl.ioctl(self._fd, VIDIOC_S_FMT, fmt)
+        return int(fmt.fmt.pix.width), int(fmt.fmt.pix.height), int(fmt.fmt.pix.pixelformat)
+
+    def _request_buffers(self) -> None:
+        assert self._fd is not None
+        req = V4L2RequestBuffers()
+        req.count = 4
+        req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+        req.memory = V4L2_MEMORY_MMAP
+        fcntl.ioctl(self._fd, VIDIOC_REQBUFS, req)
+        if req.count < 2:
+            raise RuntimeError(f"{self.device} V4L2 mmap buffer 数不足: {req.count}")
+        for index in range(int(req.count)):
+            buf = V4L2Buffer()
+            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+            buf.memory = V4L2_MEMORY_MMAP
+            buf.index = index
+            fcntl.ioctl(self._fd, VIDIOC_QUERYBUF, buf)
+            self._maps.append(
+                mmap.mmap(
+                    self._fd,
+                    int(buf.length),
+                    mmap.MAP_SHARED,
+                    mmap.PROT_READ | mmap.PROT_WRITE,
+                    offset=int(buf.m.offset),
+                )
+            )
+
+    def _queue_buffer(self, index: int) -> None:
+        assert self._fd is not None
+        buf = V4L2Buffer()
+        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+        buf.memory = V4L2_MEMORY_MMAP
+        buf.index = index
+        fcntl.ioctl(self._fd, VIDIOC_QBUF, buf)
+
+    def _stream_on(self) -> None:
+        assert self._fd is not None
+        buf_type = ctypes.c_int(V4L2_BUF_TYPE_VIDEO_CAPTURE)
+        fcntl.ioctl(self._fd, VIDIOC_STREAMON, buf_type)
+
+    def _stream_off(self) -> None:
+        if self._fd is None:
+            return
+        buf_type = ctypes.c_int(V4L2_BUF_TYPE_VIDEO_CAPTURE)
+        try:
+            fcntl.ioctl(self._fd, VIDIOC_STREAMOFF, buf_type)
+        except OSError:
+            pass
+
+
 @dataclass
 class StreamState:
     color_cap: cv2.VideoCapture
-    depth_cap: Optional[cv2.VideoCapture]
+    depth_cap: Optional[Any]
     depth_backend: str
     color_device: str
     depth_device: str
@@ -52,6 +268,10 @@ class CameraModel:
     cx: float
     cy: float
     distortion: list[float]
+
+
+def fourcc_to_str(value: int) -> str:
+    return "".join(chr((int(value) >> (8 * index)) & 0xFF) for index in range(4)).strip()
 
 
 def parameter_bool(value: object) -> bool:
@@ -168,7 +388,7 @@ class OrbbecGeminiRosBridge(Node):
     def destroy_node(self) -> bool:
         try:
             self._streams.color_cap.release()
-            if self._streams.depth_cap is not None:
+            if self._streams.depth_cap is not None and self._streams.depth_cap is not self._streams.color_cap:
                 self._streams.depth_cap.release()
         finally:
             return super().destroy_node()
@@ -280,12 +500,24 @@ class OrbbecGeminiRosBridge(Node):
                 if depth_cap.isOpened():
                     depth_cap.set(cv2.CAP_PROP_CONVERT_RGB, 0)
                     depth_cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"Z16 "))
-                    for _ in range(10):
+                    for _ in range(20):
                         ok, depth = depth_cap.read()
                         if ok and depth is not None and depth.dtype == "uint16":
                             return depth_cap, "v4l2_z16", resolved_depth_device
                         time.sleep(0.1)
                     depth_cap.release()
+                try:
+                    native_depth = NativeV4L2Z16Stream(resolved_depth_device)
+                    ok, depth = native_depth.read()
+                    if ok and depth is not None and depth.dtype == "uint16":
+                        self.get_logger().warn(
+                            f"OpenCV V4L2 无法稳定读取 {resolved_depth_device}，"
+                            "已回退到 native_v4l2_mmap Z16。"
+                        )
+                        return native_depth, "native_v4l2_z16", resolved_depth_device
+                    native_depth.release()
+                except Exception as exc:  # pylint: disable=broad-except
+                    self.get_logger().warn(f"native V4L2 Z16 fallback 打开失败: {exc}")
             if backend == "v4l2":
                 raise RuntimeError(f"无法通过 V4L2 打开 Z16 深度设备: {resolved_depth_device}")
 
@@ -302,6 +534,17 @@ class OrbbecGeminiRosBridge(Node):
             if not ok or depth is None:
                 return False, None
             if len(depth.shape) != 2 or depth.dtype != "uint16":
+                return False, None
+            depth = np.clip(
+                depth.astype(np.float32) * self._v4l2_depth_unit_to_mm_scale,
+                0.0,
+                float(np.iinfo(np.uint16).max),
+            ).astype(np.uint16)
+            return True, depth
+
+        if self._streams.depth_backend == "native_v4l2_z16":
+            ok, depth = self._streams.depth_cap.read()
+            if not ok or depth is None:
                 return False, None
             depth = np.clip(
                 depth.astype(np.float32) * self._v4l2_depth_unit_to_mm_scale,

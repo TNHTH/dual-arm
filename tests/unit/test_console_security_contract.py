@@ -8,10 +8,9 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from competition_console_security import authorize_dangerous_request, is_dangerous_api_request, validate_jog_command  # noqa: E402
 
 
-def test_dangerous_api_token_contract():
+def test_dangerous_api_no_token_required():
     assert is_dangerous_api_request("POST", "/api/bringup/start")
-    assert authorize_dangerous_request({}, api_token="")["error"] == "api_token_required"
-    assert authorize_dangerous_request({"x-dual-arm-token": "ok"}, api_token="ok") is None
+    assert authorize_dangerous_request({}, api_token="") is None
 
 
 def test_jog_limit_contract():

@@ -201,11 +201,18 @@ install(DIRECTORY
 # Install Python scripts
 install(PROGRAMS
   scripts/capture_table_calibration_sample.py
+  scripts/cap_depth_alignment_probe.py
+  scripts/build_right_arm_grasp_from_memory.py
+  scripts/dual_camera_coke_memory.py
+  scripts/visualize_dual_camera_coke_memory.py
   scripts/evaluate_table_calibration_run.py
   scripts/keyboard_ctrl.py
   scripts/pick_assist_auto_grasp.py
   scripts/right_arm_grasp_precheck.py
   scripts/right_arm_autonomous_grasp_attempt.py
+  scripts/observe_remember_grasp_node.py
+  scripts/coke_cap_unscrew_sequence_runner.py
+  scripts/dual_arm_xy_50mm_nudge.py
   scripts/single_arm_pick_debug.py
   scripts/smoke_dual_camera_scene_dedup.py
   scripts/smoke_dual_camera_scene_fusion.py
@@ -213,6 +220,7 @@ install(PROGRAMS
   scripts/smoke_planning_scene_sync.py
   scripts/smoke_resume_checkpoint.py
   scripts/smoke_scene_freshness.py
+  scripts/table_height_probe.py
   scripts/table_surface_detector.py
   DESTINATION lib/${PROJECT_NAME}
 )

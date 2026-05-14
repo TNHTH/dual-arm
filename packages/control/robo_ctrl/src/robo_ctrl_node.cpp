@@ -282,7 +282,14 @@ void RoboCtrlNode::handle_robot_move(
 
             float blendT       = -1.0f; // 平滑时间，-1表示阻塞运动
             uint8_t offsetflag = 0;     // 偏移标志，0表示无偏移
-            // 不需要的设为memset(0)
+            DescPose target_desc_pos;
+            memset(&target_desc_pos, 0, sizeof(DescPose));
+            ret = robot_->GetForwardKin(&joint_pos, &target_desc_pos);
+            if (ret != 0) {
+                response->success = false;
+                response->message = "MoveJ 目标关节正解失败，错误码: " + std::to_string(ret);
+                return;
+            }
             DescPose offset_pos;
             memset(&offset_pos, 0, sizeof(DescPose));
             ExaxisPos exaxis_pos;
@@ -291,7 +298,7 @@ void RoboCtrlNode::handle_robot_move(
             // 调用MoveJ函数，根据头文件定义提供所有必需的参数
             ret = robot_->MoveJ(
                 &joint_pos,                                // 关节位置
-                &offset_pos,                               // 笛卡尔位置
+                &target_desc_pos,                          // 与关节目标一致的笛卡尔位置
                 0,                                         // 工具号
                 0,                                         // 工件号
                 static_cast<float>(request->velocity),     // 速度

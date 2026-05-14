@@ -1,0 +1,122 @@
+{
+  "record_date": "2026-05-09",
+  "wave": "coke-cap-unscrew-full-sequence-request",
+  "status": "controlled_runner_added_no_motion_core_gate_retained",
+  "user_requested_order": "1-右夹爪张开-2-3-右夹爪夹紧-4-5-左夹爪夹紧-6-左夹爪松开-5-左夹紧-6-松开，5-左夹紧-6-松开这个重复6次",
+  "interpretation": "按 1 -> 右夹爪张开 -> 2 -> 3 -> 右夹爪夹紧 -> 4，然后将 5 -> 左夹爪夹紧 -> 6 -> 左夹爪松开 作为一个循环，总共循环 6 次。",
+  "source_positions_json": "docs/operations/reports/2026-05-09-coke-cap-unscrew-position-images.json",
+  "gripper_parameters": {
+    "open_position": 0,
+    "close_position": 220,
+    "speed": 20,
+    "torque": 80,
+    "left_slave_id": 9,
+    "right_slave_id": 10
+  },
+  "core_execute_blockers_now": [
+    "DUALARM_HARDWARE_CONFIRM_TOKEN is unset in the Codex execution environment."
+  ],
+  "extra_gates_removed_from_new_runner": [
+    "allow_screenshot_candidates_required",
+    "operator_confirm_tested_sequence_required",
+    "accept_execution_layer_risk_required"
+  ],
+  "core_gates_retained_in_new_runner": [
+    "hardware_confirm_token must match DUALARM_HARDWARE_CONFIRM_TOKEN",
+    "operator_confirm_site must be passed for execute mode",
+    "each joint move calls /planning/plan_joint before execution",
+    "each executed joint move verifies final joint error"
+  ],
+  "risk_context_not_extra_gate": [
+    "The 1-6 points are screenshot_candidate values, but the user stated this real hardware sequence has been tested as feasible.",
+    "Previous hardware execution reports on 2026-05-09 show ServoJ unknown exception, dual-arm timeout, and left MoveJ error code 154."
+  ],
+  "hardware_actions_sent": false,
+  "ros_started": false,
+  "sequence": [
+    {
+      "step": 1,
+      "type": "move_joint_candidate",
+      "arm": "left_arm",
+      "position_sequence": 1,
+      "label": "左臂观察"
+    },
+    {
+      "step": 2,
+      "type": "gripper",
+      "arm": "right_arm",
+      "command": "open",
+      "position": 0,
+      "slave_id": 10
+    },
+    {
+      "step": 3,
+      "type": "move_joint_candidate",
+      "arm": "right_arm",
+      "position_sequence": 2,
+      "label": "右臂准备夹取"
+    },
+    {
+      "step": 4,
+      "type": "move_joint_candidate",
+      "arm": "right_arm",
+      "position_sequence": 3,
+      "label": "右臂夹取"
+    },
+    {
+      "step": 5,
+      "type": "gripper",
+      "arm": "right_arm",
+      "command": "close",
+      "position": 220,
+      "slave_id": 10
+    },
+    {
+      "step": 6,
+      "type": "move_joint_candidate",
+      "arm": "right_arm",
+      "position_sequence": 4,
+      "label": "右臂准备拧"
+    },
+    {
+      "step": 7,
+      "type": "repeat_block",
+      "repeat_count": 6,
+      "block": [
+        {
+          "type": "move_joint_candidate",
+          "arm": "left_arm",
+          "position_sequence": 5,
+          "label": "左臂准备拧"
+        },
+        {
+          "type": "gripper",
+          "arm": "left_arm",
+          "command": "close",
+          "position": 220,
+          "slave_id": 9
+        },
+        {
+          "type": "move_joint_candidate",
+          "arm": "left_arm",
+          "position_sequence": 6,
+          "label": "左臂拧"
+        },
+        {
+          "type": "gripper",
+          "arm": "left_arm",
+          "command": "open",
+          "position": 0,
+          "slave_id": 9
+        }
+      ]
+    }
+  ],
+  "expanded_step_count": 30,
+  "next_safe_entry": [
+    "Set DUALARM_HARDWARE_CONFIRM_TOKEN in the shell that starts the runner.",
+    "Pass --hardware-confirm-token with the same value.",
+    "Pass --operator-confirm-site after confirming the physical workcell is clear.",
+    "Run plan-only before execute when possible, then execute through the controlled runner."
+  ]
+}

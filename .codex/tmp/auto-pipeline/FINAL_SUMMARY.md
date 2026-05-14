@@ -163,3 +163,39 @@
 - Incident 16 / 18：competition_console_api shutdown 收口
 - Incident 24 / 25 / 26 / 27 / 28：Wave 5 运行态与 build / teardown 收口
 - Incident 29：repo reorg closeout / subagent registry hygiene
+
+---
+
+# 右臂单帧 RGB-D 记忆抓取节点 FINAL SUMMARY
+
+完成时间：2026-05-08
+
+## 任务目标
+- 实现 `observe_remember_grasp_node.py`，支持右臂单帧 RGB-D 记忆、固定 table/coke collision、pregrasp plan-only 和受门禁保护的分阶段 execution。
+
+## 完成项
+- 新增 `packages/tools/tools/scripts/observe_remember_grasp_node.py`。
+- 新增 `observe-only`、`publish-scene`、`plan-pregrasp`、`execute-pregrasp`、`execute-final`、`full` 模式；默认只观察。
+- `coke_can_memory.json` 输出 world frame、固定可乐尺寸、固定桌面高度、view/grasp direction、candidate calibration status 和 RGB-depth alignment debug。
+- RGB-depth alignment 不可信时禁止 YOLO-depth lookup，并要求 `--manual-depth-pixel`。
+- PlanningScene 发布 `table_surface_manual` 与 `coke_can_snapshot`；`planning_scene_sync` 增加 `coke_can` collision 管理。
+- execution 模式要求 hardware token、人工确认、robot state、planner/action/gripper status 和 `Rend_to_pinch_center`。
+
+## 未完成项
+- 2026-05-08 已做 `one-shot-live` 实机测试，但最终夹爪 `gobj=3`，未抓起可乐，未抬起。
+- RViz table/coke 对齐仍未形成稳定验收。
+- `Rend_to_pinch_center` 仍未 verified；本轮 `0,0,0` 仅为现场占位参数。
+- `execute-final` 真实合爪发生，但最终验收未通过。
+
+## 证据位置
+- 运行报告：`docs/operations/reports/2026-05-08-right-arm-observe-remember-grasp-node.md`
+- 实机测试报告：`docs/operations/reports/2026-05-08-right-arm-one-shot-live-real-test.md`
+- 设计记录：`docs/plans/2026-05-08-right-arm-observe-remember-grasp-design.md`
+- Delivery task：`.codex/delivery/epics/dual-arm-runtime/tasks/W4-observe-remember-grasp.md`
+
+## 关键验证摘要
+- `py_compile` 通过。
+- raw endpoint 静态扫描无命中。
+- `git diff --check` 通过。
+- `colcon build --base-paths packages --packages-select tools planning_scene_sync`：2 packages finished。
+- `ros2 pkg executables tools` 已包含 `observe_remember_grasp_node.py`。

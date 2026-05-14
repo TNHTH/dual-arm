@@ -89,8 +89,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gripper-position-tolerance", type=int, default=3)
     parser.add_argument("--right-gripper-slave-id", type=int, default=10)
     parser.add_argument("--execute", action="store_true")
-    parser.add_argument("--hardware", action="store_true")
-    parser.add_argument("--hardware-confirm-token", default="")
     parser.add_argument("--skip-gripper", action="store_true")
     parser.add_argument("--disable-reopen-on-grasp-miss", action="store_true")
     parser.add_argument("--allow-extrinsic-candidate", action="store_true")
@@ -955,11 +953,6 @@ def parse_floats(raw: str, count: int) -> list[float]:
     if len(values) != count:
         raise ValueError(f"参数数量错误: expected={count}, actual={len(values)}, raw={raw}")
     return values
-
-
-def hardware_token_matches(token: str) -> bool:
-    expected = os.environ.get("DUALARM_HARDWARE_CONFIRM_TOKEN", "")
-    return bool(expected and token and token == expected)
 
 
 def load_contact_offset_tcp(path: Path, child_frame: str) -> np.ndarray:

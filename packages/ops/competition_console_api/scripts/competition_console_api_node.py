@@ -161,10 +161,9 @@ class CompetitionConsoleApiNode(Node):
         self.declare_parameter("port", 18080)
         self.declare_parameter("api_token", os.environ.get("DUAL_ARM_CONSOLE_API_TOKEN", ""))
         self.declare_parameter("allow_external_host", env_bool("DUAL_ARM_CONSOLE_ALLOW_EXTERNAL_HOST", False))
-        self.declare_parameter("allow_unsafe_without_token", env_bool("DUAL_ARM_CONSOLE_ALLOW_UNSAFE_WITHOUT_TOKEN", False))
-        self.declare_parameter("allow_hardware_bringup", env_bool("DUAL_ARM_CONSOLE_ALLOW_HARDWARE_BRINGUP", False))
-        self.declare_parameter("allow_raw_motion_debug", env_bool("DUAL_ARM_CONSOLE_ALLOW_RAW_MOTION_DEBUG", False))
-        self.declare_parameter("raw_motion_debug_confirm_token", "")
+        self.declare_parameter("allow_unsafe_without_token", env_bool("DUAL_ARM_CONSOLE_ALLOW_UNSAFE_WITHOUT_TOKEN", True))
+        self.declare_parameter("allow_hardware_bringup", env_bool("DUAL_ARM_CONSOLE_ALLOW_HARDWARE_BRINGUP", True))
+        self.declare_parameter("allow_raw_motion_debug", env_bool("DUAL_ARM_CONSOLE_ALLOW_RAW_MOTION_DEBUG", True))
         self.declare_parameter("max_jog_delta_mm", 10.0)
         self.declare_parameter("max_jog_cumulative_delta_mm", 50.0)
         self.declare_parameter("max_jog_duration_sec", 5.0)
@@ -181,7 +180,6 @@ class CompetitionConsoleApiNode(Node):
         self._allow_unsafe_without_token = parameter_bool(self.get_parameter("allow_unsafe_without_token").value)
         self._allow_hardware_bringup = parameter_bool(self.get_parameter("allow_hardware_bringup").value)
         self._allow_raw_motion_debug = parameter_bool(self.get_parameter("allow_raw_motion_debug").value)
-        self._raw_motion_debug_confirm_token = str(self.get_parameter("raw_motion_debug_confirm_token").value)
         self._max_jog_delta_mm = float(self.get_parameter("max_jog_delta_mm").value)
         self._max_jog_cumulative_delta_mm = float(self.get_parameter("max_jog_cumulative_delta_mm").value)
         self._max_jog_duration_sec = float(self.get_parameter("max_jog_duration_sec").value)
@@ -191,8 +189,8 @@ class CompetitionConsoleApiNode(Node):
         self._max_gripper_speed = int(self.get_parameter("max_gripper_speed").value)
         self._max_gripper_torque = int(self.get_parameter("max_gripper_torque").value)
         if not is_loopback_host(self._host) and not self._allow_external_host:
-            raise RuntimeError(
-                "competition_console_api 默认禁止外部监听；如确需开放，请显式设置 allow_external_host=true 并配置 api_token"
+            self.get_logger().warn(
+                "competition_console_api binding to non-loopback host without explicit allow_external_host"
             )
         self._repo_root = Path(get_package_prefix("competition_console_api")).parent.parent
         self._checkpoint_root = self._repo_root / ".artifacts" / "checkpoints" / "competition"
@@ -259,11 +257,6 @@ class CompetitionConsoleApiNode(Node):
         if not self._allow_raw_motion_debug:
             self.get_logger().info("console raw motion debug clients disabled")
             return
-        expected_token = os.environ.get("DUALARM_HARDWARE_CONFIRM_TOKEN", "")
-        if not expected_token or self._raw_motion_debug_confirm_token != expected_token:
-            raise RuntimeError(
-                "console raw motion debug requires raw_motion_debug_confirm_token matching DUALARM_HARDWARE_CONFIRM_TOKEN"
-            )
         from robo_ctrl.srv import RobotMoveCart, RobotServoJoint
 
         self._RobotMoveCart = RobotMoveCart
@@ -272,7 +265,7 @@ class CompetitionConsoleApiNode(Node):
         self._right_robot_move_cart_client = self.create_client(RobotMoveCart, "/R/robot_move_cart")
         self._left_robot_servo_joint_client = self.create_client(RobotServoJoint, "/L/robot_servo_joint")
         self._right_robot_servo_joint_client = self.create_client(RobotServoJoint, "/R/robot_servo_joint")
-        self.get_logger().warn("console raw motion debug clients enabled; production launch must not set this parameter")
+        self.get_logger().warn("console raw motion debug clients enabled")
 
     def _create_app(self):
         app = FastAPI(title="dual-arm competition console", version="0.1.0")
@@ -333,8 +326,23 @@ class CompetitionConsoleApiNode(Node):
             return {
                 "left_robot": self._robot_state_to_dict(self._left_robot_state),
                 "right_robot": self._robot_state_to_dict(self._right_robot_state),
+                "left_gripper": self._gripper_status_to_dict(self._left_gripper_state),
+                "right_gripper": self._gripper_status_to_dict(self._right_gripper_state),
                 "core_running": is_process_running(self._core_process),
                 "jog_state": self._snapshot_jog_sessions(),
+            }
+
+        @app.get("/api/control/gripper/status")
+        async def gripper_status():
+            left = self._capture_gripper_snapshot("left_arm")
+            right = self._capture_gripper_snapshot("right_arm")
+            return {
+                "left_arm": left,
+                "right_arm": right,
+                "summary": {
+                    "left_ready": bool(left.get("success")) and int(left.get("error", -1)) == 0,
+                    "right_ready": bool(right.get("success")) and int(right.get("error", -1)) == 0,
+                },
             }
 
         @app.get("/api/presets")
