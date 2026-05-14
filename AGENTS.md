@@ -11,6 +11,8 @@
 - After finishing each implementation wave, update `STATE.md` in the repo root.
 - For this `dual-arm` project, new generated project documents, explanations, notes, runbooks, and long-term records must default to `/home/gwh/文档/Obsidian Vault/03_项目记录/FairinoDualArm/` unless the user explicitly chooses a different destination.
 - Do not place newly generated `dual-arm` project files under unrelated project folders such as `DashGo`.
+- When a debugging, validation, integration, or hardware issue is closed, record the reusable problem/solution in the FairinoDualArm Obsidian project record and update `STATE.md`, `.codex/tmp/error-trace/ERROR_TRACE.md`, and `.codex/tmp/continuous-learning/RETRO.md` when those files are in scope.
+- A problem/solution record must include the date, symptom, reproduction path, root cause, corrective action, verification evidence, remaining risk, and the relevant `coord_rev` / `last_shared_sync_rev` when shared-state coordination was involved.
 - `STATE.md` must record:
   - current wave and date
   - completed work
