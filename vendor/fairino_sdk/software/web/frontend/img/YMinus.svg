@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 46.23 32.14">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #9fca4d;
+      }
+
+      .cls-2 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <title>9</title>
+  <g id="图层_13" data-name="图层 13">
+    <g>
+      <polyline class="cls-1" points="28.8 7.21 31.18 0 0 16.55 20.55 32.13 23.4 23.54 44.28 23.54 46.23 7.21 28.77 7.21"/>
+      <g>
+        <path class="cls-2" d="M82.61,287.35l-2.2-4.45h.88l1,2.12c.25.54.47,1.05.74,1.6h0c.26-.55.51-1.06.74-1.6l1-2.12h.85l-2.2,4.45v2.87h-.82Z" transform="translate(-59.93 -271.23)"/>
+        <path class="cls-2" d="M85.38,287.11h2.53v.64H85.38Z" transform="translate(-59.93 -271.23)"/>
+      </g>
+    </g>
+  </g>
+</svg>

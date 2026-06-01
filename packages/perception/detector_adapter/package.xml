@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>detector_adapter</name>
+  <version>0.1.0</version>
+  <description>冻结 detector 之外的 2D 检测适配层。</description>
+
+  <maintainer email="gwh@example.com">gwh</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>detector</depend>
+  <depend>dualarm_interfaces</depend>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>python3-yaml</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

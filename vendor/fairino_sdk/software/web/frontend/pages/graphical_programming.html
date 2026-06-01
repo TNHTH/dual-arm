@@ -1,0 +1,192 @@
+<div class="row no-margin">
+    <!-- 图形化编程 -->
+    <div id="graphical-programming" class="ctrl-btns-area-gp">
+        <div>
+            <!-- 加载工作区 -->
+            <a id="btnImportFile" class="btn-operation" ng-click="judegeBlocklyChange(1)" style="width: 8%;">
+                <i ng-attr-title="{{'_load' | translate}}" class="frfont frdakai font-size-20"
+                    aria-hidden="true"></i>
+            </a>
+            <!-- 导出工作区 -->
+            <a id="graphImportFile" class="btn-operation" ng-click="judegeBlocklyChange(2)"  style="width: 8%;">
+                <i ng-attr-title="{{'_import' | translate}}" class="frfont frdaoru" aria-hidden="true"></i>
+            </a>
+            <!-- 导出工作区 -->
+            <a id="graphExportFile" class="btn-operation" ng-click="judegeBlocklyChange(3)"  style="width: 8%;">
+                <i ng-attr-title="{{'_export' | translate}}" class="frfont frdaochu" aria-hidden="true"></i>
+            </a>
+            <!-- 保存工作区 -->
+            <a id="btnSaveCommands" class="btn-operation" ng-click="saveLuaFile()" style="width: 8%;">
+                <i ng-attr-title="{{'_save' | translate}}" class="frfont frbaocun" aria-hidden="true"></i>
+            </a>
+            <!-- 清空 -->
+            <a class="btn-operation" ng-click="clearWorkspace()" style="width: 8%;">
+                <i ng-attr-title="{{'_clear_workspace' | translate}}" class="fa fa-eraser font-size-20" aria-hidden="true"></i>
+            </a>
+            <!-- 代码 -->
+            <a class="btn-operation" ng-click="livaCodeArrow()" style="width: 8%;">
+                <i ng-attr-title="{{'_code' | translate}}" class="fa fa-code fa-lg icon-color font-size-20" aria-hidden="true"></i>
+            </a>
+            <!-- <p></p> -->
+            <!-- 工作区名称 -->
+            <div class="page-ctrl-container margin-left-10 d-flex align-items-center" style="background: #fff;">
+                <a class="btn-operation" style="padding: 3px">
+                    <i ng-attr-title="{{'_wsname_gp' | translate}}" class="fa fa-file-o font-size-24" aria-hidden="true" style="color: #333"></i>
+                </a>
+                <input type="text" ng-model="workspaceNameForGP" oninput="limitInput_special(this)" style="border: none;outline: none;">
+            </div>
+        </div>
+        <!-- resize -->
+        <a class="btn-operation" ng-click="changeView()">
+            <i ng-attr-title="{{'_clear_workspace' | translate}}" class="fa fa-expand font-size-20" aria-hidden="true"></i>
+        </a>
+    </div>
+    <div id="graphicalProgramming" class="col-md-12 no-padding">
+        <div class="teaching-management-box boxbody-auto-height no-padding">
+            <!-- <div class="page-title-container">
+                <label class="page-title" ng-bind="'_graphical_programming' | translate"></label>
+            </div> -->
+            <!-- <div class="page-ctrl-container">
+                <a class="btn btn-frblue" ng-click="saveLuaFile()" ng-bind="'_save' | translate"></a>
+                <a class="btn btn-frblue" ng-click="openLoadBlocklyWorkspaceModal()" ng-bind="'_load' | translate"></a>
+                <a class="btn btn-frgrey" ng-click="clearWorkspace()" ng-bind="'_clear_workspace' | translate"></a>
+            </div>
+            <hr class="box-divider"> -->
+
+            <div id="blocklyDiv" style="width: 100%;height: 100%;" ng-click="clickBlockDiv()" ng-mouseover="mouseOverDisable()"></div>
+            <div id="block-code-container" class="block-code-container live-code-closed">
+                <div class="icons-live-code">
+                    <div id="live-code-arrow" ng-click="livaCodeArrow()"><i class="fa fa-arrow-left"></i></div>
+                    <div id="live-code-refresh" ng-click="liveCodeRefresh()"><i class="fa fa-refresh"></i></div>
+                    <h4 style="margin-left: 2rem; color: #ededed; transform: translateY(2px);" ng-bind="'_code_translation' | translate"></h4>
+                </div>
+                <div id="live-code"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" aria-hidden="true" id="loadBlocklyWorkspaceModal" tabindex="-1" role="dialog"
+    aria-labelledby="loadBlocklyWorkspaceLabel" data-backdrop="static">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content file-operation-content">
+            <div class="modal-header file-operation-header">
+                <span id="loadBlocklyWorkspaceLabel"
+                    ng-bind="'_load_blockly_workspace' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close" ng-click="closeWorkspace()"><span
+                        aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body">
+                <span ng-bind="'_select_blockly_workspace' | translate"></span>：
+                <select ng-model="selectedBlocklyWorkspaceName"
+                    ng-options="a for a in blocklyWorkspaceNamesArr"></select>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <a id="btn_delete" class="btn btn-frgrey" ng-click="deleteWorkspace()">
+                    <span aria-hidden="true" ng-bind="'_delete' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="loadWorkspace()">
+                    <span aria-hidden="true" ng-bind="'_load' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" aria-hidden="true" id="confirmGPNameModal" tabindex="-1" role="dialog" 
+    aria-labelledby="loadBlocklyWorkspaceLabel" data-backdrop="static">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content file-operation-content">
+            <div class="modal-header file-operation-header">
+                <span id="deleteModalLabel" ng-bind="'_workspace_already_exists_tips' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span
+                        aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body">
+                <span ng-bind="'_confirm_blockly_workspace_name' | translate"></span>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey float-left" data-dismiss="modal" ng-click="cancelGPName()">
+                    <span aria-hidden="true" ng-bind="'_cancel' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="confirmGPName()">
+                    <span aria-hidden="true" ng-bind="'_confirm' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" aria-hidden="true" id="confirmChangeModal" tabindex="-1" role="dialog" 
+    aria-labelledby="loadBlocklyWorkspaceLabel" data-backdrop="static">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content file-operation-content">
+            <div class="modal-header file-operation-header">
+                <span id="deleteModalLabel" ng-bind="'_whether_confirm_program' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close" ng-click="closeGraphicalProgramModal()"><span
+                        aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body">
+                <span ng-bind="'_confirm_change_workspace_name' | translate"></span>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey float-left" data-dismiss="modal" ng-click="judegeBlocklyChange()">
+                    <span aria-hidden="true" ng-bind="'_not_save' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="saveLuaFile()">
+                    <span aria-hidden="true" ng-bind="'_save' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" aria-hidden="true" id="importGraphModal" tabindex="-1" role="dialog" 
+    aria-labelledby="loadBlocklyWorkspaceLabel" data-backdrop="static">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content file-operation-content">
+            <div class="modal-header file-operation-header">
+                <span id="importGraphLabel" ng-bind="'_import' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span
+                        aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body">
+                <input type="file" name="importFile" id="graphFileImported" value="" multiple="multiple" accept=".json">
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey float-left" data-dismiss="modal">
+                    <span aria-hidden="true" ng-bind="'_cancel' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="importGraphFile()">
+                    <span aria-hidden="true" ng-bind="'_import' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" aria-hidden="true" id="exportGraphModal" tabindex="-1" role="dialog" 
+    aria-labelledby="loadBlocklyWorkspaceLabel" data-backdrop="static">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content file-operation-content">
+            <div class="modal-header file-operation-header">
+                <span id="exportGraphLabel" ng-bind="'_export' | translate"></span>
+                <a class="file-operation-close" data-dismiss="modal" aria-label="Close"><span
+                        aria-hidden="true">&times;</span></a>
+            </div>
+            <div class="modal-body">
+                <span ng-bind="'_select_blockly_workspace' | translate"></span>：
+                <select ng-model="selectedBlocklyWorkspaceName"
+                    ng-options="a for a in blocklyWorkspaceNamesArr"></select>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-frgrey float-left" data-dismiss="modal">
+                    <span aria-hidden="true" ng-bind="'_cancel' | translate"></span>
+                </a>
+                <a id="btn_submit" class="btn btn-frblue" ng-click="exportGraphFile()">
+                    <span aria-hidden="true" ng-bind="'_export' | translate"></span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

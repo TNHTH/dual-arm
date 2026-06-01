@@ -1,0 +1,25 @@
+string primitive_id
+string arm_group
+string secondary_arm_group
+string object_id
+string reference_object_id
+geometry_msgs/PoseStamped[] primary_cartesian_waypoints
+geometry_msgs/PoseStamped[] secondary_cartesian_waypoints
+string execution_profile
+string stop_condition_id
+float32 hold_duration_s
+bool synchronized
+---
+bool success
+string message
+string result_code
+float32 actual_duration_s
+float32 sync_skew_ms
+bool contact_verified
+bool detach_verified
+bool spill_detected
+sensor_msgs/JointState final_primary_joint_state
+sensor_msgs/JointState final_secondary_joint_state
+---
+float32 progress
+string state
