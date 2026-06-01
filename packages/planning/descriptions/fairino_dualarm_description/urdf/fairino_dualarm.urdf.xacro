@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fairino_dualarm">
+  <xacro:include filename="$(find fairino_dualarm_description)/urdf/fairino3_v6_macro.xacro"/>
+
+  <link name="world"/>
+  <link name="table"/>
+  <joint name="world_to_table" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="table"/>
+  </joint>
+
+  <link name="left_base"/>
+  <joint name="world_to_left_base" type="fixed">
+    <origin xyz="0 0.35 0" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="left_base"/>
+  </joint>
+
+  <link name="right_base"/>
+  <joint name="world_to_right_base" type="fixed">
+    <origin xyz="0 -0.35 0" rpy="0 0 3.141592653589793"/>
+    <parent link="world"/>
+    <child link="right_base"/>
+  </joint>
+
+  <xacro:fairino3_v6_arm prefix="left_" parent="left_base" xyz="0 0 0" rpy="0 0 0"/>
+  <xacro:fairino3_v6_arm prefix="right_" parent="right_base" xyz="0 0 0" rpy="0 0 0"/>
+</robot>

@@ -1,0 +1,1378 @@
+<div class="row no-margin" id="auxiliaryApplication">
+    <div class="boxbody-nohead-auto-height box-body-left no-border newScrollbar">
+        <ul class="nav sidebar-menu setting-menu">
+            <li class="col-xs-12 col-sm-12 col-md-12 no-padding treeview" ng-repeat="auxiliaryItem in auxiliaryNavList">
+                <a class="navItem navItem{{auxiliaryItem.id}}" ng-click="switchApplicationPage(auxiliaryItem.id)"
+                    ng-show="navAuthShow('auxiliary_application', auxiliaryItem)">
+                    <i ng-class="auxiliaryItem.icon" aria-hidden="true"></i>
+                    <span class="navItem-span" ng-bind="auxiliaryItem.name"></span>
+                    <div class="pull-right-container pull-right-custom" ng-show="auxiliaryItem.children.length>0">
+                        <i class="fa fa-angle-left pull-right"></i>
+                    </div>
+                </a>
+                <ul class="weld-menu navChildItem treeview-menu" ng-show="auxiliaryItem.children.length>0" style="display: none;">
+                    <li ng-repeat="childrenItem in auxiliaryItem.children">
+                      <a class="childrenItem childrenItem{{childrenItem.id}}" ng-click="switchApplicationPage(childrenItem.id)"
+                        ng-show="childrenItem.id && userAuthData.funcs.auxiliary_application[childrenItem.id] == '1'">
+                        <div ng-bind="childrenItem.name" class="childrenItem-span"></div>
+                      </a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+
+    <div class="boxbody-nohead-auto-height box-body-right no-border newScrollbar">
+        <!-- 机器人一键打包界面 -->
+        <div class="setting-item-container" ng-show="show_robot_pack">
+            <div class="container-body">
+                <label ng-bind="'_robot_immediate_pack' | translate"></label>
+                <hr class="box-divider">
+                <span class="warning-info" ng-bind="'_special_point_tips' | translate"></span> <br>
+                <span class="warning-info" ng-bind="'_robot_pack_warning' | translate"></span>
+                <div class="d-flex-column align-items-center">
+                    <div class="d-flex align-items-center margin-top-12">
+                        <div class="step-border-none d-flex justify-content-center align-items-center">1</div>
+                        <label class="margin-left-12 w-240"ng-bind="'_robot_pack_step1' | translate"></label>
+                    </div>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="moveToZero()" ng-bind="'_move_to_zero' | translate"></a>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="step-border d-flex justify-content-center align-items-center">2</div>
+                        <label class="margin-left-12 w-240"ng-bind="'_robot_pack_step2' | translate"></label>
+                    </div>
+                    <img id="interface3" style="height: 168px;" class="margin-left-36" alt="">
+                    <div class="d-flex align-items-center">
+                        <div class="step-border-none d-flex justify-content-center align-items-center">3</div>
+                        <label class="margin-left-12 w-240"ng-bind="'_robot_pack_step3' | translate"></label>
+                    </div>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="moveToPack()" ng-bind="'_move_to_pack' | translate"></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 编码器配置界面 -->
+        <div class="setting-item-container" ng-show="show_encoder">
+            <div class="container-header">
+                <label ng-bind="'_encoder_mode_cfg' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body" ng-show="show_password">
+                <div class="general-item" style="margin-top: 30px;">
+                    <span class="header-span" ng-bind="'_input_password' | translate"></span>
+                    <input type="text" oninput="limitInput_special(this)" autocomplete="off">
+                </div>
+                <div class="right-btn" style="margin-top: 20px;">
+                    <a class="btn btn-frblue" ng-click="ComfirmSetUserPassword()" ng-bind="'_confirm' | translate"></a>
+                </div>
+            </div>
+            <div class="container-body" ng-show="!show_password">
+                <span class="warning-info" ng-bind="'_encoder_tips' | translate"></span>
+                <div class="btns-box robot-correct">
+                    <a class="btn btn-frgreen" ng-click="enableRobot()" ng-bind="'_robot_enable' | translate"></a>
+                    <a class="btn btn-frblue" ng-click="setEncoderConfig()" ng-bind="'_click_to_switch' | translate"></a>
+                </div>
+                <div>
+                    <span ng-bind="encoderMode" style="white-space: pre-line;"></span>
+                </div>
+                <div ng-show="show_switch_encode_state">
+                    <span ng-bind="encodeState" style="word-wrap: break-word;" ></span>
+                </div>
+            </div>
+        </div>
+        <!-- 系统升级界面 -->
+        <div class="setting-item-container" ng-show="show_upgrade">
+            <div class="container-header">
+                <label ng-bind="'_system_update' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_soft_update' | translate"></span>
+                <input type="file" name="importFile" id="webpkgImported" value="" accept=".tar.gz">
+                <div class="right-btn">
+                    <span ng-bind="webProgressText"></span>
+                    <a class="btn btn-frblue" ng-click="updateWebPkg()" ng-bind="'_update_upgrade_package' | translate"></a>
+                </div>
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_driver_update' | translate"></span>
+                <div class="right-btn">
+                    <a class="btn btn-frgreen" ng-click="setEndFileType()" ng-bind="'_enter_boot' | translate"></a>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(0)" type="radio" checked="checked" >
+                    <span class="header-span" ng-bind="'_drv_update_ctrlbox' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(1)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot1' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(2)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot2' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(3)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot3' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(4)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot4' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(5)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot5' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(6)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot6' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectDrvSlave(7)" type="radio">
+                    <span class="header-span" ng-bind="'_drv_update_end' | translate"></span>
+                </div>
+                <input type="file" name="importFile" id="drvpkgImported" value="" accept=".bin">
+                <div class="right-btn">
+                    <span ng-bind="drvProgressText"></span>
+                    <a class="btn btn-frblue" ng-click="updateDrvPkg()" ng-bind="'_update_upgrade_package' | translate"></a>
+                </div>
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_slave_update' | translate"></span>
+                <div class="right-btn">
+                    <a class="btn btn-frgreen" ng-click="enableRobot()" ng-bind="'_robot_enable' | translate"></a>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(0)" type="radio" checked="checked" >
+                    <span class="header-span" ng-bind="'_drv_update_ctrlbox' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(1)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot1' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(2)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot2' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(3)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot3' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(4)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot4' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(5)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot5' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(6)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot6' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="drvRadio" ng-click="selectSlaveConfig(7)" type="radio">
+                    <span class="header-span" ng-bind="'_drv_update_end' | translate"></span>
+                </div>
+                <input type="file" name="importFile" id="slaveConfigImported" value="" accept=".bin">
+                <div class="right-btn">
+                    <span ng-bind="slaveConfigProgressText"></span>
+                    <a class="btn btn-frblue" ng-click="updateSlaveConfig()" ng-bind="'_update_upgrade_package' | translate"></a>
+                </div>
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_encoder_update' | translate"></span>
+                <div class="right-btn">
+                    <a class="btn btn-frgreen" ng-click="setEncoderMode()" ng-bind="'_encoder_mode' | translate"></a>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="encoderRadio" ng-click="selectEncoderSlave(0)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot1' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="encoderRadio" ng-click="selectEncoderSlave(1)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot2' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="encoderRadio" ng-click="selectEncoderSlave(2)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot3' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="encoderRadio" ng-click="selectEncoderSlave(3)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot4' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="encoderRadio" ng-click="selectEncoderSlave(4)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot5' | translate"></span>
+                </div>
+                <div class="general-item">
+                    <input style="width: 20px;margin-right: 8px;" name="encoderRadio" ng-click="selectEncoderSlave(5)" type="radio" >
+                    <span class="header-span" ng-bind="'_drv_update_robot6' | translate"></span>
+                </div>
+                <input type="file" name="importFile" id="encoderpkgImported" value="" accept=".bin">
+                <div class="right-btn">
+                    <span ng-bind="encoderProgressText"></span>
+                    <a class="btn btn-frblue" ng-click="updateEncoderPkg()" ng-bind="'_update_upgrade_package' | translate"></a>
+                </div>
+                <div ng-show="gSystemFlag">
+                    <hr class="box-divider">
+                    <span class="child-title" ng-bind="'_security_board_firmware_upgrade' | translate"></span>
+                    <input type="file" name="importSafeBoardFile" id="safeBoardImported" value="" accept=".bin">
+                    <div class="right-btn">
+                        <span ng-bind="safeBoardProgressText"></span>
+                        <a class="btn btn-frblue" ng-click="updateSafeBoard()" ng-bind="'_update_upgrade_package' | translate"></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 数据备份界面 -->
+        <div class="setting-item-container" ng-show="show_backup">
+            <div class="container-header">
+                <label ng-bind="'_userdata_backup' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_backup_upload' | translate"></span>
+                <span class="warning-info" ng-bind="'_backup_tips' | translate"></span>
+                <input type="file" name="importFile" id="userDataImported" value="" accept=".tar.gz">
+                <div class="right-btn">
+                    <span ng-bind="buProgressText"></span>
+                    <span class="warning-info" ng-bind="aux_restart_tips"></span>
+                    <span class="warning-info" ng-bind="index_cfg_check_tips"></span>
+                    <a class="btn btn-frblue" ng-click="uploadUserData()" ng-bind="'_upload_bupkg' | translate"></a>
+                </div>
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_backup_download' | translate"></span>
+                <div class="right-btn">
+                    <span ng-bind="downloadProgressText"></span>
+                    <a class="btn btn-frblue" ng-click="createVersion()" ng-bind="'_download_bupkg' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 10s查询界面 -->
+        <div class="setting-item-container" ng-show="show_query">
+            <div class="container-header">
+                <label ng-bind="'_10s_query' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="query-type-box">
+                <select name="queryTypeSelection" id="QTS" 
+                        ng-model="queryTypeSelected" 
+                        ng-options="a as a.name for a in queryTypeDict"
+                        ng-change="changeQueryType(queryTypeSelected)">
+                        <option id="placeholder" value="" disabled selected ng-bind="'_10s_record_type' | translate">
+                        </option>
+                </select>
+            </div>
+            <div id="setting-box" class="row no-margin">
+                <!-- 参数选择区 -->
+                <div class="var-data-box newScrollbar">
+                    <ul class="vartype-list no-padding">
+                        <li ng-repeat="item in currentVarList.varlist" >
+                            <a class="vartype" ng-click="clickVarList($index)">
+                                <span ng-bind="item.typename"></span>
+                            </a>
+                            <ul id="vars{{$index}}" class="varitem-list no-padding" style="display: none;">
+                                <li ng-repeat="element in item.vardata">
+                                    <a class="{{element.varindex}} varitem" ng-click="selectVar(element)">
+                                        <span ng-bind="element.varname"></span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                <!-- 中间操作区 -->
+                <div class="var-operation-box">
+                    <a class="btn-ChartsSetting" ng-click="setVar2Chart()">
+                        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                    </a>
+                    <a class="btn-ChartsSetting" ng-click="delectVarInChart()">
+                        <i class="fa fa-trash" aria-hidden="true"></i>
+                    </a>
+                    <a class="btn-ChartsSetting" ng-click="clearAll()">
+                        <i class="fa fa-close" aria-hidden="true"></i>
+                    </a>
+                </div>
+                <!-- 图表选择区 -->
+                <div class="var-data-box newScrollbar">
+                    <ul class="vartype-list no-padding">
+                        <li ng-repeat="containerItem in varsContainer">
+                            <a class="vartype {{containerItem.name}} containeritem" ng-click="selectChart(containerItem)">
+                                <span ng-bind="containerItem.name"></span>
+                            </a>
+                            <ul class="chart-varitem-list no-padding">
+                                <li ng-repeat="varItem in containerItem.vars">
+                                    <a class="chartVar{{$index}} chart-varitem"  ng-click="selectChartVar($index)">
+                                        <span ng-bind="varItem.varname"></span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="container-body" style="margin-top: 24px;">
+                <div class="btns-box">
+                    <a class="btn btn-frgreen" ng-click="downloadQueryData()" ng-bind="'_10s_download_query' | translate"></a>
+                    <a class="btn btn-frblue" ng-click="stopQuery()" ng-bind="'_10s_stop_query' | translate"></a>
+                    <a class="btn btn-frblue" ng-click="startQuery()" ng-bind="'_10s_start_query' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 外设示教点记录 -->
+        <div class="setting-item-container" ng-show="show_ptnbox">
+            <div class="container-header">
+                <label ng-bind="'_point_config' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_point_config' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_name_prefix' | translate"></span>
+                    <select class="ip-select" ng-model="selectedPtnboxNameMthod" ng-options="a as a.name for a in ptnboxNameData" ng-change="changePtnboxNmae()"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_ptn_custom">
+                    <span class="ip-span" ng-bind="'_name_prefix_custom' | translate"></span>
+                    <input class="ip-input" id="ptnboxname" type="text" oninput="limitInput_special(this)" autocomplete="off" ng-model="prefixName">
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_limit_number' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_int(this);" min="{{robotParamsRangeData.teaching_point_index[0]}}" max="{{robotParamsRangeData.teaching_point_index[1]}}" ng-model="limitNumber">
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_record_way' | translate"></span>
+                    <select class="ip-select" ng-model="selectedLTRecord" ng-options="a as a.name for a in LTRecordData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setptnboxcfg()" ng-bind="'_set' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 作业原点配置 -->
+        <div class="setting-item-container" ng-show="show_workpoint">
+            <div class="container-header">
+                <label ng-bind="'_work_home_point_config' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_work_home_point' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_point_name' | translate"></span>
+                    <span>pHome</span>
+                </div>
+                <ul>
+                    <li>
+                        <span class="item-name">J1</span>
+                        <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="workHomePoint.j1" disabled>
+                    </li>
+                    <li>
+                        <span class="item-name">J2</span>
+                        <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="workHomePoint.j2" disabled>
+                    </li>
+                    <li>
+                        <span class="item-name">J3</span>
+                        <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="workHomePoint.j3" disabled>
+                    </li>
+                    <li>
+                        <span class="item-name">J4</span>
+                        <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="workHomePoint.j4" disabled>
+                    </li>
+                    <li>
+                        <span class="item-name">J5</span>
+                        <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="workHomePoint.j5" disabled>
+                    </li>
+                    <li>
+                        <span class="item-name">J6</span>
+                        <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="workHomePoint.j6" disabled>
+                    </li>
+                </ul>
+                <div class="btns-box robot-correct">
+                    <a class="btn btn-frgreen" ng-click="moveWorkHomePoint()" ng-bind="'_move_to_this_point' | translate"></a>
+                    <a class="btn btn-frblue" ng-click="setRobotWorkHomePoint()" ng-bind="'_set' | translate"></a>
+                </div>
+                <div>
+                    <div class="setting-item oneline" style="margin-top: 0px;">
+                        <span class="ip-span" ng-bind="'_work_home_point_singal' | translate"></span>
+                        <select class="ip-select" ng-model="selectedStartPointIO">
+                            <option ng-repeat="item in startPointIOData track by item.num" value={{item.num}} ng-disabled="item.disable">{{item.name}}</option>
+                        </select>
+                    </div>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="setDICfg()" ng-bind="'_set' | translate"></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 干涉区配置 -->
+        <div class="setting-item-container" ng-show="show_interfere">
+            <div class="container-header">
+                <label ng-bind="'_interference_config' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_interference_method_cfg' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_interference_method' | translate"></span>
+                    <select class="ip-select" ng-model="selectedInterfereMethod" ng-change="displayInterfereMthod()" ng-options="a as a.name for a in InterfereMethodData"></select>
+                    <span class="warning-info" ng-bind="interfere_setflag"></span>
+                </div>
+                <div class="btns-box">
+                    <a class="btn btn-frgreen" ng-click="setInterfereClose()" ng-bind="'_interference_close' | translate"></a>
+                    <a class="btn btn-frblue" ng-click="setInterfereOpen()" ng-bind="'_interference_open' | translate"></a>
+                </div>
+                <span class="child-title" ng-bind="'_in_interference_motion_strategy' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_in_interference' | translate"></span>
+                    <select class="ip-select" ng-model="selectedInterfereMotion" ng-options="a as a.name for a in interfereMotionData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="interfereStopSet()" ng-bind="'_set' | translate"></a>
+                </div>
+                <span class="child-title" ng-bind="'_in_interference_drag_strategy' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_interference_drag_strategy' | translate"></span>
+                    <select class="ip-select" ng-model="selectedInterfereDragStrategy" ng-change="changeInterfereDragStrategy()" ng-options="a as a.name for a in interfereDragStrategyData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="interfereDragStrategy()" ng-bind="'_set' | translate"></a>
+                </div>
+                <div ng-show="show_Interfere_Impedance">
+                    <span class="child-title" ng-bind="'_interference_impedance_param' | translate"></span>
+                    <div ng-show="show_Interfere_Impedance_Der">
+                        <ul>
+                            <li>
+                                <span class="item-name">X</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="20" ng-model="dragParamX" >
+                            </li>
+                            <li>
+                                <span class="item-name">Y</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="20" ng-model="dragParamY" >
+                            </li>
+                            <li>
+                                <span class="item-name">Z</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="20" ng-model="dragParamZ" >
+                            </li>
+                            <li>
+                                <span class="item-name">RX</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="10" ng-model="dragParamRX" >
+                            </li>
+                            <li>
+                                <span class="item-name">RY</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="10" ng-model="dragParamRY" >
+                            </li>
+                            <li>
+                                <span class="item-name">RZ</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="10" ng-model="dragParamRZ" >
+                            </li>
+                        </ul>
+                    </div>
+                    <div ng-show="show_Interfere_Impedance_Joint">
+                        <ul>
+                            <li>
+                                <span class="item-name">J1</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="20" ng-model="dragParamX" >
+                            </li>
+                            <li>
+                                <span class="item-name">J2</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="20" ng-model="dragParamY" >
+                            </li>
+                            <li>
+                                <span class="item-name">J3</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="20" ng-model="dragParamZ" >
+                            </li>
+                            <li>
+                                <span class="item-name">J4</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="10" ng-model="dragParamRX" >
+                            </li>
+                            <li>
+                                <span class="item-name">J5</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="10" ng-model="dragParamRY" >
+                            </li>
+                            <li>
+                                <span class="item-name">J6</span>
+                                <input class="item-value" type="text" oninput="limitInput_float(this);" min="0" max="10" ng-model="dragParamRZ" >
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="applyDragLockParam()" ng-bind="'_apply' | translate"></a>
+                    </div>
+                </div>
+                <hr class="box-divider">
+                <div ng-show="_Interfere_Joint_Calib">
+                    <span class="child-title" ng-bind="'_interference_calib_cfg' | translate"></span>
+                    <div class="setting-item oneline">
+                        <span class="ip-span" ng-bind="'_interference_check_method' | translate"></span>
+                        <select class="ip-select" ng-model="selectedInterfereJointCheckMethod" ng-options="a as a.name for a in interfereCheckMethodData"></select>
+                    </div>
+                    <div class="setting-item oneline">
+                        <span class="ip-span" ng-bind="'_interference_check_mode' | translate"></span>
+                        <select class="ip-select" ng-model="selectedInterfereJointCheckMode" ng-options="a as a.name for a in interfereCheckModeData"></select>
+                    </div>
+                    <div class="limit-child-title" style="margin-left: 50px;">
+                        <span class="min-limit" ng-bind="'_min_limit' | translate"></span>
+                        <span class="max-limit" ng-bind="'_max_limit' | translate"></span>
+                        <span class="max-limit" style="margin-left: 35px;">enable</span>
+                    </div>
+                    <div class="general-item">
+                        <span class="limit-span" ng-bind="'_J1' | translate"></span>
+                        <input style="margin-left: 40px;" class="limit-input limit-input1" type="text" oninput="limitInput_int(this);" min="-175" max="175" ng-model="interfereJointMin.j1">
+                        <input class="limit-input limit-input2" type="text" oninput="limitInput_int(this);" min="-175" max="175" ng-model="interfereJointMax.j1">
+                        <select style="width: 68px;" ng-model="selectedInterfereJoint1Enable" ng-options="a as a.name for a in interfereCheckJointEnableData"></select>
+                    </div>
+                    <div class="general-item">
+                        <span class="limit-span" ng-bind="'_J2' | translate"></span>
+                        <input style="margin-left: 40px;" class="limit-input limit-input1" type="text" oninput="limitInput_int(this);" min="-265" max="85" ng-model="interfereJointMin.j2">
+                        <input class="limit-input limit-input2" type="text" oninput="limitInput_int(this);" min="-265" max="85" ng-model="interfereJointMax.j2">
+                        <select style="width: 68px;" ng-model="selectedInterfereJoint2Enable" ng-options="a as a.name for a in interfereCheckJointEnableData"></select>
+                    </div>
+                    <div class="general-item">
+                        <span class="limit-span" ng-bind="'_J3' | translate"></span>
+                        <input style="margin-left: 40px;" class="limit-input limit-input1" type="text" oninput="limitInput_int(this);" min="-160" max="160" ng-model="interfereJointMin.j3">
+                        <input class="limit-input limit-input2" type="text" oninput="limitInput_int(this);" min="-160" max="160" ng-model="interfereJointMax.j3">
+                        <select style="width: 68px;" ng-model="selectedInterfereJoint3Enable" ng-options="a as a.name for a in interfereCheckJointEnableData"></select>
+                    </div>
+                    <div class="general-item">
+                        <span class="limit-span" ng-bind="'_J4' | translate"></span>
+                        <input style="margin-left: 40px;" class="limit-input limit-input1" type="text" oninput="limitInput_int(this);" min="-265" max="85" ng-model="interfereJointMin.j4">
+                        <input class="limit-input limit-input2" type="text" oninput="limitInput_int(this);" min="-265" max="85" ng-model="interfereJointMax.j4">
+                        <select style="width: 68px;" ng-model="selectedInterfereJoint4Enable" ng-options="a as a.name for a in interfereCheckJointEnableData"></select>
+                    </div>
+                    <div class="general-item">
+                        <span class="limit-span" ng-bind="'_J5' | translate"></span>
+                        <input style="margin-left: 40px;" class="limit-input limit-input1" type="text" oninput="limitInput_int(this);" min="-175" max="175" ng-model="interfereJointMin.j5">
+                        <input class="limit-input limit-input2" type="text" oninput="limitInput_int(this);" min="-175" max="175" ng-model="interfereJointMax.j5">
+                        <select style="width: 68px;" ng-model="selectedInterfereJoint5Enable" ng-options="a as a.name for a in interfereCheckJointEnableData"></select>
+                    </div>
+                    <div class="general-item">
+                        <span class="limit-span" ng-bind="'_J6' | translate"></span>
+                        <input style="margin-left: 40px;" class="limit-input limit-input1" type="text" oninput="limitInput_int(this);" min="-175" max="175" ng-model="interfereJointMin.j6">
+                        <input class="limit-input limit-input2" type="text" oninput="limitInput_int(this);" min="-175" max="175" ng-model="interfereJointMax.j6">
+                        <select style="width: 68px;" ng-model="selectedInterfereJoint6Enable" ng-options="a as a.name for a in interfereCheckJointEnableData"></select>
+                    </div>
+                    <div style="margin-left: 53px;">
+                        <a class="btn btn-frblue" ng-click="setInterfereJointMin()" ng-bind="'_interference_robot_teach' | translate"></a>
+                        <a class="btn btn-frblue" ng-click="setInterfereJointMax()" ng-bind="'_interference_robot_teach' | translate"></a>
+                    </div>
+                    <!-- <span class="child-title" ng-bind="'_interference_joint_max' | translate"></span>
+                    <ul>
+                        <li>
+                            <span class="item-name">J1</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMax.j1" >
+                        </li>
+                        <li>
+                            <span class="item-name">J2</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMax.j2" >
+                        </li>
+                        <li>
+                            <span class="item-name">J3</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMax.j3" >
+                        </li>
+                        <li>
+                            <span class="item-name">J4</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMax.j4" >
+                        </li>
+                        <li>
+                            <span class="item-name">J5</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMax.j5" >
+                        </li>
+                        <li>
+                            <span class="item-name">J6</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMax.j6" >
+                        </li>
+                    </ul>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="setInterfereJointMax()" ng-bind="'_interference_robot_teach' | translate"></a>
+                    </div>
+                    <span class="child-title" ng-bind="'_interference_joint_min' | translate"></span>
+                    <ul>
+                        <li>
+                            <span class="item-name">J1</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMin.j1" >
+                        </li>
+                        <li>
+                            <span class="item-name">J2</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMin.j2" >
+                        </li>
+                        <li>
+                            <span class="item-name">J3</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMin.j3" >
+                        </li>
+                        <li>
+                            <span class="item-name">J4</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMin.j4" >
+                        </li>
+                        <li>
+                            <span class="item-name">J5</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMin.j5" >
+                        </li>
+                        <li>
+                            <span class="item-name">J6</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="interfereJointMin.j6" >
+                        </li>
+                    </ul>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="setInterfereJointMin()" ng-bind="'_interference_robot_teach' | translate"></a>
+                    </div> -->
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="jointInterfereParamSet()" ng-bind="'_apply' | translate"></a>
+                    </div>
+                </div>
+                <div ng-show="_Interfere_Cube_Calib">
+                    <span class="child-title" ng-bind="'_interference_param_cfg' | translate"></span>
+                    <div class="setting-item oneline" style="margin-top: 0px;">
+                        <span class="ip-span" ng-bind="'_interference_check_method' | translate"></span>
+                        <select class="ip-select" ng-model="selectedInterfereCubeCheckMethod" ng-options="a as a.name for a in interfereCheckMethodData"></select>
+                    </div>
+                    <div class="setting-item oneline">
+                        <span class="ip-span" ng-bind="'_interference_check_mode' | translate"></span>
+                        <select class="ip-select" ng-model="selectedInterfereCubeCheckMode" ng-options="a as a.name for a in interfereCheckModeData"></select>
+                    </div>
+                    <div class="setting-item oneline" style="margin-top: 0px;">
+                        <span class="ip-span" ng-bind="'_interference_reference_coord' | translate"></span>
+                        <select class="ip-select" ng-model="selectedInterfereReferenceCoord" ng-change="displayWobjCoord()" ng-options="a as a.name for a in interfereReferenceCoordData"></select>
+                    </div>
+                    <div ng-show="show_interfere_wobj">
+                        <div class="general-item no-margin-top">
+                            <span ng-bind="'_coord_name' | translate"></span>
+                            <select ng-model="selectedWObjCoorde" ng-options="x for (x,y) in WObjCoordeData"></select>
+                        </div>
+                        <ul class="no-margin-top">
+                            <li>
+                                <span class="item-name">X</span>
+                                <input class="item-value" type="text" ng-model="selectedWObjCoorde.x" readonly="readonly">
+                            </li>
+                            <li>
+                                <span class="item-name">Y</span>
+                                <input class="item-value" type="text" ng-model="selectedWObjCoorde.y" readonly="readonly">
+                            </li>
+                            <li>
+                                <span class="item-name">Z</span>
+                                <input class="item-value" type="text" ng-model="selectedWObjCoorde.z" readonly="readonly">
+                            </li>
+                            <li>
+                                <span class="item-name">RX</span>
+                                <input class="item-value" type="text" ng-model="selectedWObjCoorde.rx" readonly="readonly">
+                            </li>
+                            <li>
+                                <span class="item-name">RY</span>
+                                <input class="item-value" type="text" ng-model="selectedWObjCoorde.ry" readonly="readonly">
+                            </li>
+                            <li>
+                                <span class="item-name">RZ</span>
+                                <input class="item-value" type="text" ng-model="selectedWObjCoorde.rz" readonly="readonly">
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="cubeInterfereParamSet()" ng-bind="'_apply' | translate"></a>
+                    </div>
+                    <hr class="box-divider">
+                    <span class="child-title" ng-bind="'_interference_calib_cfg' | translate"></span>
+                    <div class="setting-item oneline" style="margin-top: 0px;">
+                        <span class="ip-span" ng-bind="'_interference_teach_method' | translate"></span>
+                        <select class="ip-select" ng-model="selectedInterfereCubeTeachMethod" ng-change="displayCubeTeachMethod()" ng-options="a as a.name for a in cubeMethodData"></select>
+                    </div>
+                    <div ng-show="show_cube_two_point">
+                        <span class="child-title" ng-bind="'_interference_cube_min' | translate"></span>
+                        <div class="btns-box">
+                            <img id="interface1" style="width: 290px;height: 180px;float: left;">
+                        </div>
+                        <ul>
+                            <li>
+                                <span class="item-name">X</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_center_x[0]}}" max="{{robotParamsRangeData.cube_interference_center_x[1]}}" ng-model="interfereCubeMin.x" >
+                            </li>
+                            <li>
+                                <span class="item-name">Y</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_center_y[0]}}" max="{{robotParamsRangeData.cube_interference_center_y[1]}}" ng-model="interfereCubeMin.y" >
+                            </li>
+                            <li>
+                                <span class="item-name">Z</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_center_z[0]}}" max="{{robotParamsRangeData.cube_interference_center_z[1]}}" ng-model="interfereCubeMin.z" >
+                            </li>
+                        </ul>
+                        <div class="right-btn">
+                            <a class="btn btn-frblue" ng-click="setInterfereCubeMin()" ng-bind="'_interference_robot_teach' | translate"></a>
+                        </div>
+                        <span class="child-title" ng-bind="'_interference_cube_max' | translate"></span>
+                        <ul>
+                            <li>
+                                <span class="item-name">X</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_axis_x[0]}}" max="{{robotParamsRangeData.cube_interference_axis_x[1]}}" ng-model="interfereCubeMax.x" >
+                            </li>
+                            <li>
+                                <span class="item-name">Y</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_axis_y[0]}}" max="{{robotParamsRangeData.cube_interference_axis_y[1]}}" ng-model="interfereCubeMax.y" >
+                            </li>
+                            <li>
+                                <span class="item-name">Z</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_axis_z[0]}}" max="{{robotParamsRangeData.cube_interference_axis_z[1]}}" ng-model="interfereCubeMax.z" >
+                            </li>
+                        </ul>
+                        <div class="right-btn">
+                            <a class="btn btn-frblue" ng-click="setInterfereCubeMax()" ng-bind="'_interference_robot_teach' | translate"></a>
+                        </div>
+                        <div class="right-btn">
+                            <a class="btn btn-frblue" ng-click="setCubeInterfereCalib_twoPoint()" ng-bind="'_apply' | translate"></a>
+                        </div>
+                    </div>
+                    <div ng-show="show_cube_center_point">
+                        <span class="child-title" ng-bind="'_interference_cube_center_point' | translate"></span>
+                        <div class="btns-box">
+                            <img id="interface2" style="width: 290px;height: 180px;float: left;">
+                        </div>
+                        <ul>
+                            <li>
+                                <span class="item-name">X</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_min_x[0]}}" max="{{robotParamsRangeData.cube_interference_min_x[1]}}" ng-model="interfereCubeCenterPoint.x" >
+                            </li>
+                            <li>
+                                <span class="item-name">Y</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_min_y[0]}}" max="{{robotParamsRangeData.cube_interference_min_y[1]}}" ng-model="interfereCubeCenterPoint.y" >
+                            </li>
+                            <li>
+                                <span class="item-name">Z</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_min_z[0]}}" max="{{robotParamsRangeData.cube_interference_min_z[1]}}" ng-model="interfereCubeCenterPoint.z" >
+                            </li>
+                        </ul>
+                        <div class="right-btn">
+                            <a class="btn btn-frblue" ng-click="setInterfereCubeCenterPoint()" ng-bind="'_interference_robot_teach' | translate"></a>
+                        </div>
+                        <span class="child-title" ng-bind="'_interference_cube_length' | translate"></span>
+                        <ul>
+                            <li>
+                                <span class="item-name">X</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_max_x[0]}}" max="{{robotParamsRangeData.cube_interference_max_x[1]}}" ng-model="interfereCubeLength_x" >
+                            </li>
+                            <li>
+                                <span class="item-name">Y</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_max_y[0]}}" max="{{robotParamsRangeData.cube_interference_max_y[1]}}" ng-model="interfereCubeLength_y" >
+                            </li>
+                            <li>
+                                <span class="item-name">Z</span>
+                                <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.cube_interference_max_z[0]}}" max="{{robotParamsRangeData.cube_interference_max_z[1]}}" ng-model="interfereCubeLength_z" >
+                            </li>
+                        </ul>
+                        <div class="right-btn">
+                            <a class="btn btn-frblue" ng-click="setCubeInterfereCalib_onePoint()" ng-bind="'_apply' | translate"></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 末端LED配置 -->
+        <div class="setting-item-container" ng-show="show_led">
+            <div class="container-header">
+                <label ng-bind="'_end_led_config' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_mode_led_config' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_auto_mode' | translate"></span>
+                    <select class="ip-select" ng-model="selectedAutoColour" ng-options="a as a.name for a in ledColourdData"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_manual_mode' | translate"></span>
+                    <select class="ip-select" ng-model="selectedManualColour" ng-options="a as a.name for a in ledColourdData"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_drag_mode' | translate"></span>
+                    <select class="ip-select" ng-model="selectedDragColour" ng-options="a as a.name for a in ledColourdData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setModeAxleLEDColour()" ng-bind="'_config' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 自定义协议界面 -->
+        <div class="setting-item-container" ng-show="show_custom_agree">
+            <div class="container-header">
+                <label ng-bind="'_custom_agree' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_custom_upload_agree' | translate"></span>
+                <input type="file" name="importFile" id="customAgreeFile" value="" accept=".lua">
+                <div class="right-btn">
+                    <span ng-bind="webProgressText"></span>
+                    <a class="btn btn-frblue" ng-click="uploadCustomAgreeData()" ng-bind="'_import' | translate"></a>
+                </div>
+                <div class="btns-box">
+                    <a class="btn btn-frgreen" ng-click="setCustomAgreeLoad(1)" ng-bind="'_unload' | translate"></a>
+                    <a class="btn btn-frblue" ng-click="setCustomAgreeLoad(0)" ng-bind="'_load' | translate"></a>
+                </div>
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_custom_download_agree' | translate"></span>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="downloadCustomAgreeData()" ng-bind="'_download_agree' | translate"></a>
+                </div>
+
+                <!-- IP设置 -->
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_ctrl_server_cfg' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_port' | translate"></span>
+                    <input class="ip-input" type="text" ng-model="port">
+                </div>
+                <div class="right-btn">
+                    <span class="warning-info" ng-bind="setIPTips"></span>
+                    <a class="btn btn-frblue" ng-click="setSystemIP(port)" ng-bind="'_set' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 外设协议界面 -->
+        <div class="setting-item-container" ng-show="show_external_agree">
+            <div class="container-header">
+                <label ng-bind="'_external_agree' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_external_agree_cfg' | translate"></span>
+                <span class="warning-info" ng-bind="displayExternalAgreeInfo"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_selsect_external_agree' | translate"></span>
+                    <select class="ip-select" ng-model="selectedExternalAgree" ng-options="a as a.name for a in externalAgreeData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setExDevProtocol()" ng-bind="'_set' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 启动程序配置 -->
+        <div class="setting-item-container" ng-show="show_start_robot">
+            <div class="container-header">
+                <label ng-bind="'_main_porgram_config' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_main_program' | translate"></span>
+                <span class="warning-info" ng-bind="displayProgramInfo"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_whether_start' | translate"></span>
+                    <select class="ip-select" ng-model="whetherStartProgram" ng-change="displayStartPorgram()" ng-options="a as a.name for a in whetherData"></select>
+                </div>
+                <div ng-show="show_set_program">
+                    <div class="setting-item oneline" style="margin-top: 0px;">
+                        <span class="ip-span" ng-bind="'_select_main_paogram' | translate"></span>
+                        <select class="ip-select" ng-model="selectedStartProgram" ng-options="a.name for a in userData"></select>
+                    </div>
+                    <div class="oneline">
+                        <textarea style="width: 100%;" cols="20" rows="5" ng-model="selectedStartProgram.pgvalue" readonly="readonly"></textarea>
+                    </div>
+                    <span class="warning-info" ng-bind="'_select_main_paogram_tips' | translate"></span>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setStartProgram()" ng-bind="'_set' | translate"></a>
+                </div>
+                <div ng-show="show_set_program_io">
+                    <div class="setting-item oneline" style="margin-top: 0px;">
+                        <span class="ip-span" ng-bind="'_main_program_singal' | translate"></span>
+                        <select class="ip-select" ng-model="selectedMainProgramIO">
+                            <option ng-repeat="item in mainProgramIOData track by item.num" value={{item.num}} ng-disabled="item.disable">{{item.name}}</option>
+                        </select>
+                    </div>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" ng-click="setDICfg()" ng-bind="'_set' | translate"></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 拖动锁定设置界面 -->
+        <div class="setting-item-container" ng-show="show_drag_lock">
+            <div class="container-header">
+                <label ng-bind="'_drag_lock_function' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_normal_drag_lock' | translate"></span>
+                <span class="child-title" ng-bind="'_drag_lock_param' | translate"></span>
+                <div>
+                    <ul>
+                        <li>
+                            <span class="item-name">X</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_free_x[0]}}" max="{{robotParamsRangeData.drag_lock_free_x[1]}}" ng-model="dragParamX" >
+                        </li>
+                        <li>
+                            <span class="item-name">Y</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_free_y[0]}}" max="{{robotParamsRangeData.drag_lock_free_y[1]}}" ng-model="dragParamY" >
+                        </li>
+                        <li>
+                            <span class="item-name">Z</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_free_z[0]}}" max="{{robotParamsRangeData.drag_lock_free_z[1]}}" ng-model="dragParamZ" >
+                        </li>
+                        <li>
+                            <span class="item-name">RX</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);"min="{{robotParamsRangeData.drag_lock_free_rx[0]}}" max="{{robotParamsRangeData.drag_lock_free_rx[1]}}" ng-model="dragParamRX" >
+                        </li>
+                        <li>
+                            <span class="item-name">RY</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);"min="{{robotParamsRangeData.drag_lock_free_ry[0]}}" max="{{robotParamsRangeData.drag_lock_free_ry[1]}}" ng-model="dragParamRY" >
+                        </li>
+                        <li>
+                            <span class="item-name">RZ</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);"min="{{robotParamsRangeData.drag_lock_free_rz[0]}}" max="{{robotParamsRangeData.drag_lock_free_rz[1]}}" ng-model="dragParamRZ" >
+                        </li>
+                    </ul>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="applyDragLockParam()" ng-bind="'_apply' | translate"></a>
+                </div>
+                
+                <div class="general-item">
+                    <span ng-bind="'_drag_lock_enable' | translate"></span>
+                    <select ng-model="selectedDragLockEnable" ng-options="a as a.name for a in dragLockEnableData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="applyDragLockEnable()" ng-bind="'_apply' | translate"></a>
+                </div>
+                
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_force_drag_lock' | translate"></span>
+                <div class="warning-info-container">
+                    <span class="warning-info" ng-bind="'_external_force_tips' | translate"></span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_force_drag_status' | translate"></span>
+                    <select class="ip-select" ng-model="selectedForceDragLockStatus" ng-options="a as a.name for a in forceDragLockstatusData"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_adjust' | translate"></span>
+                    <select class="ip-select" ng-model="selectedAdjustStatus" ng-options="a as a.name for a in forceDragLockstatusData"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_force_interfere' | translate"></span>
+                    <select class="ip-select" ng-model="selectedInterferenceStatus" ng-options="a as a.name for a in forceDragLockstatusData"></select>
+                </div>
+                <span class="child-title" ng-bind="'_inertia_coefficient' | translate"></span>
+                <div class="warning-info-container">
+                    <span class="warning-info" ng-bind="'_inertia_sensor_tips' | translate"></span>
+                </div>
+                <div>
+                    <ul>
+                        <li>
+                            <span class="item-name">X</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="5" max="30" ng-model="inertiaCoefficientX" >
+                        </li>
+                        <li>
+                            <span class="item-name">Y</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="5" max="30" ng-model="inertiaCoefficientY" >
+                        </li>
+                        <li>
+                            <span class="item-name">Z</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="5" max="30" ng-model="inertiaCoefficientZ" >
+                        </li>
+                        <li>
+                            <span class="item-name">RX</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0.1" max="10" ng-model="inertiaCoefficientRX" >
+                        </li>
+                        <li>
+                            <span class="item-name">RY</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0.1" max="10" ng-model="inertiaCoefficientRY" >
+                        </li>
+                        <li>
+                            <span class="item-name">RZ</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0.1" max="10" ng-model="inertiaCoefficientRZ" >
+                        </li>
+                    </ul>
+                </div>
+                <span class="child-title" ng-bind="'_damping_coefficient' | translate"></span>
+                <div>
+                    <ul>
+                        <li>
+                            <span class="item-name">X</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="10000" ng-model="dampCoefficientX" >
+                        </li>
+                        <li>
+                            <span class="item-name">Y</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="10000" ng-model="dampCoefficientY" >
+                        </li>
+                        <li>
+                            <span class="item-name">Z</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="10000" ng-model="dampCoefficientZ" >
+                        </li>
+                        <li>
+                            <span class="item-name">RX</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="150" ng-model="dampCoefficientRX" >
+                        </li>
+                        <li>
+                            <span class="item-name">RY</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="150" ng-model="dampCoefficientRY" >
+                        </li>
+                        <li>
+                            <span class="item-name">RZ</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="150" ng-model="dampCoefficientRZ" >
+                        </li>
+                    </ul>
+                </div>
+                <span class="child-title" ng-bind="'_stiffness_coefficient' | translate"></span>
+                <div>
+                    <ul>
+                        <li>
+                            <span class="item-name">X</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="100" ng-model="stiffnessCoefficientX" >
+                        </li>
+                        <li>
+                            <span class="item-name">Y</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="100" ng-model="stiffnessCoefficientY" >
+                        </li>
+                        <li>
+                            <span class="item-name">Z</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="100" ng-model="stiffnessCoefficientZ" >
+                        </li>
+                        <li>
+                            <span class="item-name">RX</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="10" ng-model="stiffnessCoefficientRX" >
+                        </li>
+                        <li>
+                            <span class="item-name">RY</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="10" ng-model="stiffnessCoefficientRY" >
+                        </li>
+                        <li>
+                            <span class="item-name">RZ</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="10" ng-model="stiffnessCoefficientRZ" >
+                        </li>
+                    </ul>
+                </div>
+                <span class="child-title" ng-bind="'_drag_lock_threshold' | translate"></span>
+                <div>
+                    <ul>
+                        <li>
+                            <span class="item-name">X</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_x[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_x[1]}}" ng-model="dragThresholdX" >
+                        </li>
+                        <li>
+                            <span class="item-name">Y</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_y[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_y[1]}}" ng-model="dragThresholdY" >
+                        </li>
+                        <li>
+                            <span class="item-name">Z</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_z[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_z[1]}}" ng-model="dragThresholdZ" >
+                        </li>
+                        <li>
+                            <span class="item-name">RX</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_rx[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_rx[1]}}" ng-model="dragThresholdRX" >
+                        </li>
+                        <li>
+                            <span class="item-name">RY</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_ry[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_ry[1]}}" ng-model="dragThresholdRY" >
+                        </li>
+                        <li>
+                            <span class="item-name">RZ</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_rz[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_rz[1]}}" ng-model="dragThresholdRZ" >
+                        </li>
+                    </ul>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_force_drag_max' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_max_force[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_max_force[1]}}" ng-model="forceDragMax">
+                    <span style="margin-left: 5px;">Nm</span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_joint_speed_max' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_float(this);" min="{{robotParamsRangeData.drag_lock_threshold_max_speed[0]}}" max="{{robotParamsRangeData.drag_lock_threshold_max_speed[1]}}" ng-model="jointSpeedMax">
+                    <span style="margin-left: 5px;">⁰/s</span>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="applyEndForceDragControl()" ng-bind="'_apply' | translate"></a>
+                </div>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_force_sensor_auto' | translate"></span>
+                <div class="setting-item oneline d-flex justify-content-between mt-0">
+                    <span class="ip-span" ng-bind="'_feature_enabled' | translate"></span>
+                    <div class="custom-control custom-switch d-inline-block">
+                        <input id="forceSensor" name="forceSensor" type="checkbox" ng-model="forceSensorEnable" ng-true-value="1" ng-false-value="0" class="custom-control-input" ng-click="enableForceSensor()">
+                        <label class="custom-control-label" for="forceSensor"></label>
+                    </div>
+                </div>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_six_dimensional_force' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_control_state' | translate"></span>
+                    <select class="ip-select" ng-model="selectedControlStatus" ng-options="a as a.name for a in forceDragLockstatusData"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_impedance_on' | translate"></span>
+                    <select class="ip-select" ng-model="selectedImpedanceStatus" ng-options="a as a.name for a in forceDragLockstatusData"></select>
+                </div>
+                <span class="child-title" ng-bind="'_drag_gain' | translate"></span>
+                <div>
+                    <ul>
+                        <li>
+                            <span class="item-name">J1</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="5" ng-model="lamdaGainJoint1" >
+                        </li>
+                        <li>
+                            <span class="item-name">J2</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="5" ng-model="lamdaGainJoint2" >
+                        </li>
+                        <li>
+                            <span class="item-name">J3</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="5" ng-model="lamdaGainJoint3" >
+                        </li>
+                        <li>
+                            <span class="item-name">J4</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="5" ng-model="lamdaGainJoint4" >
+                        </li>
+                        <li>
+                            <span class="item-name">J5</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="5" ng-model="lamdaGainJoint5" >
+                        </li>
+                        <li>
+                            <span class="item-name">J6</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="5" ng-model="lamdaGainJoint6" >
+                        </li>
+                    </ul>
+                </div>
+                <span class="child-title" ng-bind="'_stiffness_gain' | translate" ng-show="selectedImpedanceStatus.id == 1"></span>
+                <div ng-show="selectedImpedanceStatus.id == 1">
+                    <ul>
+                        <li>
+                            <span class="item-name">J1</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" ng-model="kGainJoint1" >
+                        </li>
+                        <li>
+                            <span class="item-name">J2</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" ng-model="kGainJoint2" >
+                        </li>
+                        <li>
+                            <span class="item-name">J3</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" ng-model="kGainJoint3" >
+                        </li>
+                        <li>
+                            <span class="item-name">J4</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" ng-model="kGainJoint4" >
+                        </li>
+                        <li>
+                            <span class="item-name">J5</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" ng-model="kGainJoint5" >
+                        </li>
+                        <li>
+                            <span class="item-name">J6</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" ng-model="kGainJoint6" >
+                        </li>
+                    </ul>
+                </div>
+                <span class="child-title" ng-bind="'_damping_gain' | translate" ng-show="selectedImpedanceStatus.id == 1"></span>
+                <div ng-show="selectedImpedanceStatus.id == 1">
+                    <ul>
+                        <li>
+                            <span class="item-name">J1</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="1" ng-model="bGainJoint1" >
+                        </li>
+                        <li>
+                            <span class="item-name">J2</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="1" ng-model="bGainJoint2" >
+                        </li>
+                        <li>
+                            <span class="item-name">J3</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="1" ng-model="bGainJoint3" >
+                        </li>
+                        <li>
+                            <span class="item-name">J4</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="1" ng-model="bGainJoint4" >
+                        </li>
+                        <li>
+                            <span class="item-name">J5</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="1" ng-model="bGainJoint5" >
+                        </li>
+                        <li>
+                            <span class="item-name">J6</span>
+                            <input class="item-value" type="text" onchange="limitInput_float(this);" min="0" max="1" ng-model="bGainJoint6" >
+                        </li>
+                    </ul>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_terminal_linear_speed' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_float(this);" min="0" max="1000" ng-model="terminalLinearSpeed">
+                    <span class="margin-left-4">mm/s</span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_angular_speed_limit' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_float(this);" min="0" max="300" ng-model="angularSpeedLimit">
+                    <span class="margin-left-4">°/s</span>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setForceAndJointImpedance(selectedControlStatus.id,selectedImpedanceStatus.id,terminalLinearSpeed,angularSpeedLimit)" ng-bind="'_apply' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- FR Smart Tool -->
+        <div class="setting-item-container" ng-show="show_smart_tool">
+            <div class="container-header">
+                <label ng-bind="'_smart_tool_config' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_smart_tool_function_config' | translate"></span>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_smart_tool_a' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSmartToolA" ng-options="a as a.name for a in smarttoolData" ng-change="changeSmartToolFunction(1)"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_smart_tool_a_speed">
+                    <span class="ip-span" ng-bind="'_smart_tool_point_speed' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_int(this);" min="{{robotParamsRangeData.smart_tool_point_speed[0]}}" max="{{robotParamsRangeData.smart_tool_point_speed[1]}}" ng-model="smart_tool_a_speed">
+                    <span>%</span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="selectedSmartToolA.id == 14">
+                    <span class="ip-span" ng-bind="'_output_DO' | translate"></span>
+                    <select class="ip-select" ng-model="selectedDoA" ng-options="a as a.name for a in doOutputgData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setSmartToolcfg()" ng-bind="'_config' | translate"></a>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_smart_tool_b' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSmartToolB" ng-options="a as a.name for a in smarttoolData" ng-change="changeSmartToolFunction(2)"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_smart_tool_b_speed">
+                    <span class="ip-span" ng-bind="'_smart_tool_point_speed' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_int(this);" min="{{robotParamsRangeData.smart_tool_point_speed[0]}}" max="{{robotParamsRangeData.smart_tool_point_speed[1]}}" ng-model="smart_tool_b_speed">
+                    <span>%</span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="selectedSmartToolB.id == 14">
+                    <span class="ip-span" ng-bind="'_output_DO' | translate"></span>
+                    <select class="ip-select" ng-model="selectedDoB" ng-options="a as a.name for a in doOutputgData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setSmartToolcfg()" ng-bind="'_config' | translate"></a>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_smart_tool_c' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSmartToolC" ng-options="a as a.name for a in smarttoolData" ng-change="changeSmartToolFunction(3)"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_smart_tool_c_speed">
+                    <span class="ip-span" ng-bind="'_smart_tool_point_speed' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_int(this);" min="{{robotParamsRangeData.smart_tool_point_speed[0]}}" max="{{robotParamsRangeData.smart_tool_point_speed[1]}}" ng-model="smart_tool_c_speed">
+                    <span>%</span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="selectedSmartToolC.id == 14">
+                    <span class="ip-span" ng-bind="'_output_DO' | translate"></span>
+                    <select class="ip-select" ng-model="selectedDoC" ng-options="a as a.name for a in doOutputgData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setSmartToolcfg()" ng-bind="'_config' | translate"></a>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_smart_tool_d' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSmartToolD" ng-options="a as a.name for a in smarttoolData" ng-change="changeSmartToolFunction(4)"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_smart_tool_d_speed">
+                    <span class="ip-span" ng-bind="'_smart_tool_point_speed' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_int(this);" min="{{robotParamsRangeData.smart_tool_point_speed[0]}}" max="{{robotParamsRangeData.smart_tool_point_speed[1]}}" ng-model="smart_tool_d_speed">
+                    <span>%</span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="selectedSmartToolD.id == 14">
+                    <span class="ip-span" ng-bind="'_output_DO' | translate"></span>
+                    <select class="ip-select" ng-model="selectedDoD" ng-options="a as a.name for a in doOutputgData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setSmartToolcfg()" ng-bind="'_config' | translate"></a>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_smart_tool_e' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSmartToolE" ng-options="a as a.name for a in smarttoolData" ng-change="changeSmartToolFunction(5)"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_smart_tool_e_speed">
+                    <span class="ip-span" ng-bind="'_smart_tool_point_speed' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_int(this);" min="{{robotParamsRangeData.smart_tool_point_speed[0]}}" max="{{robotParamsRangeData.smart_tool_point_speed[1]}}" ng-model="smart_tool_e_speed">
+                    <span>%</span>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="selectedSmartToolE.id == 14">
+                    <span class="ip-span" ng-bind="'_output_DO' | translate"></span>
+                    <select class="ip-select" ng-model="selectedDoE" ng-options="a as a.name for a in doOutputgData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setSmartToolcfg()" ng-bind="'_config' | translate"></a>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;">
+                    <span class="ip-span" ng-bind="'_smart_tool_io' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSmartToolio" ng-options="a as (a.name + a.aliasName) for a in smarttoolDOData" ng-change="changeSmartToolFunction(6)"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_smart_tool_io_type">
+                    <span class="ip-span" ng-bind="'_welding_options' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSmartToolIoType" ng-options="a as a.name for a in weldingOptions" ng-change="changeSmartToolFunction(6)"></select>
+                </div>
+                <div class="setting-item oneline" style="margin-top: 0px;" ng-show="show_smart_tool_io_speed">
+                    <span class="ip-span" ng-bind="'_smart_tool_point_speed' | translate"></span>
+                    <input class="ip-input" type="text" onchange="limitInput_int(this);" min="{{robotParamsRangeData.smart_tool_point_speed[0]}}" max="{{robotParamsRangeData.smart_tool_point_speed[1]}}" ng-model="smartToolIoSpeed">
+                    <span>%</span>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setSmartToolcfg()" ng-bind="'_config' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 多干涉区设置界面 -->
+        <div class="setting-item-container" ng-show="show_gengku_ganshe">
+            <div class="container-header">
+                <label ng-bind="'_multiple_interference_setting' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_current_interference' | translate"></span>
+                <div class="general-item no-margin-top">
+                    <span ng-bind="'_interference_id' | translate"></span>
+                    <select ng-model="selectedGenkuCubeSpace" ng-options="a as a.id for a in genkuCubeSpaceData"></select>
+                </div>
+                <ul>
+                    <li>
+                        <span class="item-name">X1</span>
+                        <input class="item-value" type="text" onchange="limitInput_float(this);" min="-2000" max="2000" ng-model="selectedGenkuCubeSpace.x1" >
+                    </li>
+                    <li>
+                        <span class="item-name">Y1</span>
+                        <input class="item-value" type="text" onchange="limitInput_float(this);" min="-2000" max="2000" ng-model="selectedGenkuCubeSpace.y1" >
+                    </li>
+                    <li>
+                        <span class="item-name">Z1</span>
+                        <input class="item-value" type="text" onchange="limitInput_float(this);" min="-2000" max="2000" ng-model="selectedGenkuCubeSpace.z1" >
+                    </li>
+                </ul>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setInterfereCubegengku(1)" ng-bind="'_interference_robot_teach' | translate"></a>
+                </div>
+                <ul>
+                    <li>
+                        <span class="item-name">X2</span>
+                        <input class="item-value" type="text" onchange="limitInput_float(this);" min="-2000" max="2000" ng-model="selectedGenkuCubeSpace.x2" >
+                    </li>
+                    <li>
+                        <span class="item-name">Y2</span>
+                        <input class="item-value" type="text" onchange="limitInput_float(this);" min="-2000" max="2000" ng-model="selectedGenkuCubeSpace.y2" >
+                    </li>
+                    <li>
+                        <span class="item-name">Z2</span>
+                        <input class="item-value" type="text" onchange="limitInput_float(this);" min="-2000" max="2000" ng-model="selectedGenkuCubeSpace.z2" >
+                    </li>
+                </ul>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setInterfereCubegengku(2)" ng-bind="'_interference_robot_teach' | translate"></a>
+                </div>
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_interference_set' | translate"></span>
+                <div class="btns-box">
+                    <a class="btn btn-frgrey" ng-click="clearGenkuCubeSpaceData()" ng-bind="'_clear' | translate"></a>
+                    <a class="btn btn-frblue" ng-click="modifyGenkuCubeSpaceData()" ng-bind="'_apply' | translate"></a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    $("#interface1").attr("src","./img/interface1.jpg?v=" + new Date().getTime());
+    $("#interface2").attr("src","./img/interface2.jpg?v=" + new Date().getTime());
+    if (g_lang_code == 'zh' || g_lang_code == 'en' || g_lang_code == 'ja' || g_lang_code == 'fr') {
+        $("#interface3").attr("src","./img/move_Zero_" + g_lang_code + ".png?v=" + new Date().getTime());
+    } else {
+        $("#interface3").attr("src","./img/move_Zero_en.png?v=" + new Date().getTime());
+    }
+</script>

@@ -1,0 +1,85 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif;
+  background: #f4f1ea;
+  color: #1f2528;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(172, 125, 61, 0.18), transparent 28%),
+    linear-gradient(135deg, #f4f1ea, #ebe4d7);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 28px 22px;
+  background: rgba(30, 41, 45, 0.92);
+  color: #f8f3ea;
+}
+
+.sidebar h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.nav-item {
+  width: 100%;
+  margin-top: 10px;
+  border: 0;
+  padding: 12px 14px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border-radius: 10px;
+}
+
+.content {
+  padding: 28px;
+}
+
+.hero {
+  padding: 20px 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 18px 50px rgba(54, 42, 20, 0.08);
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.panel {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 18px 50px rgba(54, 42, 20, 0.08);
+}
+
+.button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.button-grid button {
+  border: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #203338;
+  color: #f7efe0;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

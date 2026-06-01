@@ -1,0 +1,25 @@
+<div class="configItemsGroup">
+    <div class="d-flex justify-content-between align-items-center">
+        <label>{{ $ctrl.groupName }}</label>
+        <div class="max-w40">
+            <div class="custom-control custom-switch" ng-if="$ctrl.openType == 'switch'">
+                <input id="{{swtichID}}" type="checkbox" class="custom-control-input" ng-model="$ctrl.switchVal" ng-false-value="0" ng-true-value="1" ng-click="$ctrl.switchToggle($ctrl.switchVal)">
+                <label class="custom-control-label" for="{{swtichID}}"></label>
+            </div>
+            <div ng-if="$ctrl.openType == 'up-down'">
+                <a class="d-flex" ng-click="$ctrl.toggleUpDown()">
+                    <svg class="upDownSvg" ng-hide="upDownFlag" aria-hidden="true">
+                      <use href="#frxiala"></use>
+                    </svg>
+                    <svg class="upDownSvg" ng-show="upDownFlag" aria-hidden="true">
+                      <use href="#frshouqi"></use>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </div>
+    <div ng-show="$ctrl.switchVal || upDownFlag">
+        <hr class="box-divider">
+        <div ng-transclude></div>
+    </div>
+</div>

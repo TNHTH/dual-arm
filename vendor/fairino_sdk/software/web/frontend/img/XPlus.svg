@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 63.35 36.82">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #ec6a64;
+      }
+
+      .cls-2 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <title>7</title>
+  <g id="图层_13" data-name="图层 13">
+    <g>
+      <polygon class="cls-1" points="46.49 0 48.02 12.8 63.34 12.8 31.67 36.82 0 12.8 15.32 12.8 16.86 0 46.49 0"/>
+      <g>
+        <path class="cls-2" d="M118,315.92l-2-3.54h.92l1,1.94c.19.33.35.63.58,1.05h0c.2-.42.34-.72.52-1.05l1-1.94H121L119,316l2.15,3.74h-.91l-1.12-2-.64-1.18h0c-.22.45-.41.82-.6,1.18l-1.11,2h-.87Z" transform="translate(-88.72 -296.82)"/>
+        <path class="cls-2" d="M123.74,316.33h-2v-.61h2v-2.2h.67v2.2h2v.61h-2v2.2h-.67Z" transform="translate(-88.72 -296.82)"/>
+      </g>
+    </g>
+  </g>
+</svg>

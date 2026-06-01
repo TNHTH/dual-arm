@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 55.46 43.5">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #4dc1eb;
+      }
+
+      .cls-2 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <title>5</title>
+  <g id="图层_13" data-name="图层 13">
+    <g>
+      <path class="cls-1" d="M80.63,388.17a53.2,53.2,0,0,1,35.07-18.71V350.37A72.21,72.21,0,0,0,66.06,376l-5.82-4.89q2.07,11.4,4.13,22.81l22.08-.81Z" transform="translate(-60.24 -350.37)"/>
+      <g>
+        <path class="cls-2" d="M73.94,383.63l-1.64-2.85H71.06v2.85h-.75V377h2c1.34,0,2.28.47,2.28,1.82a1.78,1.78,0,0,1-1.53,1.85l1.7,2.92Zm-2.88-3.46h1.15c1.07,0,1.65-.42,1.65-1.31s-.58-1.22-1.65-1.22H71.06Z" transform="translate(-60.24 -350.37)"/>
+        <path class="cls-2" d="M75.4,383.18,79,377.67H75.72V377h4.15v.44L76.33,383h3.58v.63H75.4Z" transform="translate(-60.24 -350.37)"/>
+        <path class="cls-2" d="M82.52,380.59H80.69V380h1.83v-2h.6v2H85v.55H83.12v2h-.6Z" transform="translate(-60.24 -350.37)"/>
+      </g>
+    </g>
+  </g>
+</svg>
