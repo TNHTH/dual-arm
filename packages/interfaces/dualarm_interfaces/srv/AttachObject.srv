@@ -1,0 +1,5 @@
+string object_id
+string link_name
+---
+bool success
+string message

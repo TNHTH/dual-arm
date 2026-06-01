@@ -1,0 +1,42 @@
+# Software safety limits for mock and operator-console paths.
+# Created: 2026-04-26
+#
+# Units:
+# - linear distances are millimetres.
+# - angular pose values are degrees unless noted.
+# - velocity/acceleration/ovl are controller percentages.
+
+console_api:
+  host_default: "127.0.0.1"
+  require_token_for_dangerous_api: true
+  allow_external_host_default: false
+  allow_hardware_bringup_default: false
+
+jog:
+  max_single_delta_mm: 10.0
+  max_cumulative_delta_mm: 50.0
+  max_duration_sec: 5.0
+  min_interval_ms: 120
+  max_velocity_percent: 20.0
+  max_acceleration_percent: 20.0
+
+gripper:
+  max_speed: 160
+  max_torque: 160
+  command_timeout_sec: 12.0
+
+motion:
+  max_velocity_percent: 100.0
+  max_acceleration_percent: 100.0
+  max_ovl_percent: 100.0
+  max_blend_time_ms: 500.0
+  motion_done_timeout_sec: 30.0
+
+workspace:
+  cartesian_mm:
+    x: [-1000.0, 1000.0]
+    y: [-1000.0, 1000.0]
+    z: [0.0, 2000.0]
+
+joint_degrees:
+  default: [-360.0, 360.0]

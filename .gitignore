@@ -1,0 +1,80 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+# *.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+.vscode/
+
+*.pyc
+*.log
+.pytest_cache/
+
+build/
+install/
+log/
+
+.cache/
+.artifacts/firefox-test-profile/
+.workspace/
+
+node_modules/
+dist/
+test-results/
+playwright-report/
+
+*.pt.tmp
+*.onnx.tmp
+*.engine
+*.plan
+wandb/
+runs/
+**/runs/
+**/yolo_runs/
+**/weights/last.pt
+**/software.backup_*/
+*.bak
+*.backup
+*.swp
+*.tmp
+
+**/*.enging
+**/asserts/
+vendor/fairino_sdk/software.backup_*/
+
+# Local workspace files
+.local-workspace/
+STATE.md
+
+# Local process notes
+docs/process/
+docs/operations/reports/2026-04-28-branch-audit.md
+docs/operations/runbooks/engineering-process-standards.md
+docs/operations/runbooks/software-only-refactor-guard.md

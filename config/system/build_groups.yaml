@@ -1,0 +1,61 @@
+groups:
+  interfaces:
+    description: 核心消息、服务和 action 接口包。
+    packages:
+      - dualarm_interfaces
+  perception:
+    description: 相机、检测、深度处理与场景融合。
+    packages:
+      - ball_basket_pose_estimator
+      - camera_info_interceptor
+      - depth_handler
+      - detector
+      - detector_adapter
+      - orbbec_gemini_bridge
+      - scene_fusion
+  planning:
+    description: 规划、MoveIt 配置、描述与场景同步。
+    packages:
+      - fairino_description
+      - fairino_dualarm_description
+      - fairino3_v6_moveit2_config
+      - fairino_dualarm_moveit_config
+      - grasp_pose_generator
+      - planning_scene_sync
+      - fairino_dualarm_planner
+  control:
+    description: 机械臂、夹爪与执行适配层。
+    packages:
+      - epg50_gripper_ros
+      - execution_adapter
+      - robo_ctrl
+  tasks:
+    description: 比赛任务状态机与流程编排。
+    packages:
+      - dualarm_task_manager
+  bringup:
+    description: 双臂核心 bringup 与聚合节点。
+    packages:
+      - competition_start_gate
+      - dualarm_bringup
+      - joint_state_aggregator
+  ops:
+    description: 控制台 API 与运维入口。
+    packages:
+      - competition_console_api
+  transforms:
+    description: TF 相关辅助节点。
+    packages:
+      - tf_node
+  compat:
+    description: 兼容与遗留接口包。
+    packages:
+      - dualarm
+  tools:
+    description: 烟雾测试、标定与辅助工具。
+    packages:
+      - tools
+  full:
+    description: 全工作区构建。
+    packages:
+      - "*"

@@ -1,0 +1,122 @@
+<div id="{{eiID}}" ng-show="$ctrl.toggle" data-drag="true" class="expression-inputter">
+    <div class="drag">
+        <svg class="icon" aria-hidden="true">
+            <use href="#frtuodong"></use>
+        </svg>
+        <svg class="icon repeat" aria-hidden="true" ng-repeat="i in repeats track by $index">
+            <use href="#frtuodong"></use>
+        </svg>
+    </div>
+    <input id="{{inputID}}" class="d-block" type="text" ng-click="getSelection($event)" ng-model="expression">
+    <div class="func-edit-zone">
+        <div class="d-flex justify-content-between" ng-hide="showFuncContent">
+            <div class="functions">
+                <div class="mb-5">
+                    <span class="d-block">Input</span>
+                    <div>
+                        <a ng-click="editFunc('GetDI')">GetDI</a>
+                        <a ng-click="editFunc('GetAI')">GetAI</a>
+                    </div>
+                </div>
+            </div>
+            <div class="symbols">
+                <a ng-click="input('symbol','and')">AND</a>
+                <a ng-click="input('symbol','or')">OR</a>
+                <a ng-click="input('symbol','==')">==</a>
+                <a ng-click="input('symbol','!=')">!=</a>
+                <a ng-click="input('symbol','<')"><</a>
+                <a ng-click="input('symbol','>')">></a>
+                <a ng-click="input('symbol','<=')"><=</a>
+                <a ng-click="input('symbol','>=')">>=</a>
+            </div>
+            <div class="keyboard">
+                <a ng-click="input('number','7')">7</a>
+                <a ng-click="input('number','8')">8</a>
+                <a ng-click="input('number','9')">9</a>
+                <a ng-click="input('number','4')">4</a>
+                <a ng-click="input('number','5')">5</a>
+                <a ng-click="input('number','6')">6</a>
+                <a ng-click="input('number','1')">1</a>
+                <a ng-click="input('number','2')">2</a>
+                <a ng-click="input('number','3')">3</a>
+                <div>
+                    <a ng-click="input('number','0')">0</a>
+                    <a ng-click="input('number','.')">.</a>
+                </div>
+            </div>
+        </div>
+        <div class="p-10" ng-show="showFuncContent">
+            <label ng-bind="funcContentType"></label>
+            <div class="func-content" ng-show="showGetDI">
+                <div>
+                    <span class="d-block" ng-bind="'_port' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetDIPort" ng-options="a as (a.name + a.aliasName) for a in DinData"></select>
+                </div>
+                <div>
+                    <span class="d-block" ng-bind="'_whether_block' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetDIBlock" ng-options="a as a.name for a in IOBlockData"></select>
+                </div>
+                <div ng-show="selectedGetDIBlock.num == 0">
+                    <span class="d-block" ng-bind="'_whether_aux_thread' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetDIThread" ng-options="a as a.name for a in auxIOThreadData"></select>
+                </div>
+                <div ng-show="selectedGetDIBlock.num == 1">
+                    <span class="d-block" ng-bind="'_state' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetDIState" ng-options="a as a.name for a in IOState"></select>
+                </div>
+                <div ng-show="selectedGetDIBlock.num == 1">
+                    <span class="d-block">{{'_waittime' | translate}} (ms)</span>
+                    <input class="d-block" type="text" oninput="limitInput_int(this);" placeholder="0-10000" min="0" max="10000" ng-model="getDIWaittime">
+                </div> 
+            </div>
+            <div class="func-content" ng-show="showGetAI">
+                <div>
+                    <span class="d-block" ng-bind="'_port' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetAIPort" ng-options="a as (a.name + a.aliasName) for a in AIport"></select>
+                </div>
+                <div>
+                    <span class="d-block" ng-bind="'_whether_block' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetAIBlock" ng-options="a as a.name for a in IOBlockData"></select>
+                </div>
+                <div ng-show="selectedGetAIBlock.num == 0">
+                    <span class="d-block" ng-bind="'_whether_aux_thread' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetAIThread" ng-options="a as a.name for a in auxIOThreadData"></select>
+                </div>
+                <div ng-show="selectedGetAIBlock.num == 1">
+                    <span class="d-block" ng-bind="'_condition' | translate"></span>
+                    <select class="d-block" ng-model="selectedGetAIState" ng-options="a as a.name for a in AIcompare"></select>
+                </div>
+                <div ng-show="selectedGetAIBlock.num == 1">
+                    <span class="d-block">{{'_ao_value' | translate}} (%)</span>
+                    <input class="d-block" type="text" oninput="limitInput_int(this);" placeholder="0-100" min="0" max="100" ng-model="getAIValue">
+                </div>
+                <div ng-show="selectedGetAIBlock.num == 1">
+                    <span class="d-block">{{'_maxtime' | translate}} (ms)</span>
+                    <input class="d-block" type="text" oninput="limitInput_int(this);" placeholder="0-10000" min="0" max="10000" ng-model="getAIWaittime">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="operation-zone font-bold mt-10">
+        <div class="d-flex justify-content-between" ng-show="showFuncContent">
+            <div>
+                <a class="a-btn a-btn-grey" ng-click="$ctrl.return()" ng-bind="'_return' | translate"></a>
+            </div>
+            <div>
+                <a class="a-btn a-btn-grey" ng-click="$ctrl.clear()" ng-bind="'_clear' | translate"></a>
+                <a class="a-btn a-btn-grey" ng-click="$ctrl.delete()" ng-bind="'_delete' | translate"></a>
+                <a class="a-btn a-btn-default" ng-click="$ctrl.addFunc(funcContentType)" ng-bind="'_add' | translate"></a>
+            </div>
+        </div>
+        <div class=" d-flex justify-content-between" ng-hide="showFuncContent">
+            <div>
+                <a class="a-btn a-btn-grey" ng-click="$ctrl.close()" ng-bind="'_close' | translate"></a>
+            </div>
+            <div>
+                <a class="a-btn a-btn-grey" ng-click="$ctrl.clear()" ng-bind="'_clear' | translate"></a>
+                <a class="a-btn a-btn-grey" ng-click="$ctrl.delete()" ng-bind="'_delete' | translate"></a>
+                <a class="a-btn a-btn-success" ng-click="$ctrl.confirm()" ng-bind="'_confirm' | translate"></a>
+            </div>
+        </div>
+    </div>
+</div>
