@@ -1,0 +1,651 @@
+<div class="row no-margin" id="safeSet">
+    <div class="boxbody-nohead-auto-height box-body-left no-border newScrollbar">
+        <ul class="nav sidebar-menu setting-menu">
+            <li class="col-xs-12 col-sm-12 col-md-12 no-padding treeview" ng-repeat="safesetItem in safesetNavList">
+                <a class="navItem navItem_{{safesetItem.id}}" ng-click="switchSafeSetPage(safesetItem.id)"
+                    ng-show="navAuthShow('security_setting', safesetItem)">
+                    <i ng-class="safesetItem.icon" aria-hidden="true"></i>
+                    <span class="navItem-span" ng-bind="safesetItem.name"></span>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="boxbody-nohead-auto-height box-body-right no-border newScrollbar">
+        <!-- 安全模式 -->
+        <div class="setting-item-container" ng-show="show_safeStopCfg">
+            <div class="container-header">
+                <label ng-bind="'_safe_stop_mode' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_enter_cfg' | translate"></span>
+                <div class="setting-item oneline mt-0">
+                    <span class="ip-span" ng-bind="'_pattern' | translate"></span>
+                    <select class="ip-select" ng-model="selectedSafetyStopMode" ng-options="a as a.name for a in safetyStopModeDict"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setSafetyStopMode(selectedSafetyStopMode)" ng-bind="'_config' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 安全速度 -->
+        <div class="setting-item-container" ng-show="show_safeSpeedCfg">
+            <div class="container-header">
+                <label ng-bind="'_safe_speed_mode' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_enter_cfg' | translate"></span>
+                <div class="setting-item oneline mt-0">
+                    <span class="ip-span" ng-bind="'_whether_enable_safe_stop' | translate"></span>
+                    <select class="ip-select" ng-model="whetherSafeSpeedMode" ng-options="a as a.name for a in safeSpeedEnableData"></select>
+                </div>
+                <div class="setting-item oneline">
+                    <span class="ip-span" ng-bind="'_tool_center' | translate"></span>
+                    <input class="ip-input" type="text" ng-model="enableSafeSpeed" oninput="limitInput_int(this);" min="0" max="1000" autocomplete="off">
+                    <span>mm/s</span>
+                </div>
+                <div class="setting-item oneline mt-0" ng-show="gSystemFlag">
+                    <span class="ip-span" ng-bind="'_post_overspeed_mode' | translate"></span>
+                    <select class="ip-select" ng-model="postOverSpeedMode" ng-options="a as a.name for a in postOverSpeedData"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setVelReducePara()" ng-bind="'_config' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- DIO安全 -->
+        <div class="setting-item-container" ng-show="show_safeDIOCfg">
+            <div class="container-header">
+                <label ng-bind="'_dio_safety' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_di_safety_cfg' | translate"></span>
+                <div class="io-item first">
+                    <span class="do">DI0</span>
+                    <select ng-model="selectedSafetyValidDI0" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DI1</span>
+                    <select ng-model="selectedSafetyValidDI1" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">DI2</span>
+                    <select ng-model="selectedSafetyValidDI2" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DI3</span>
+                    <select ng-model="selectedSafetyValidDI3" ng-options="a as a.name for a in digitalIOSafetyDict" ></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">DI4</span>
+                    <select ng-model="selectedSafetyValidDI4" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DI5</span>
+                    <select ng-model="selectedSafetyValidDI5" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">DI6</span>
+                    <select ng-model="selectedSafetyValidDI6" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DI7</span>
+                    <select ng-model="selectedSafetyValidDI7" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">CI0</span>
+                    <select ng-model="selectedSafetyValidDI8" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CI1</span>
+                    <select ng-model="selectedSafetyValidDI9" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">CI2</span>
+                    <select ng-model="selectedSafetyValidDI10" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CI3</span>
+                    <select ng-model="selectedSafetyValidDI11" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">CI4</span>
+                    <select ng-model="selectedSafetyValidDI12" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CI5</span>
+                    <select ng-model="selectedSafetyValidDI13" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item end">
+                    <span class="do">CI6</span>
+                    <select ng-model="selectedSafetyValidDI14" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CI7</span>
+                    <select ng-model="selectedSafetyValidDI15" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" 
+                        ng-click="setSafetyDIValid([selectedSafetyValidDI0.id,
+                                                    selectedSafetyValidDI1.id,
+                                                    selectedSafetyValidDI2.id,
+                                                    selectedSafetyValidDI3.id,
+                                                    selectedSafetyValidDI4.id,
+                                                    selectedSafetyValidDI5.id,
+                                                    selectedSafetyValidDI6.id,
+                                                    selectedSafetyValidDI7.id,
+                                                    selectedSafetyValidDI8.id,
+                                                    selectedSafetyValidDI9.id,
+                                                    selectedSafetyValidDI10.id,
+                                                    selectedSafetyValidDI11.id,
+                                                    selectedSafetyValidDI12.id,
+                                                    selectedSafetyValidDI13.id,
+                                                    selectedSafetyValidDI14.id,
+                                                    selectedSafetyValidDI15.id])" 
+                        ng-bind="'_config' | translate"></a>
+                </div>
+                <hr class="box-divider">
+                <span class="child-title" ng-bind="'_do_safety_cfg' | translate"></span>
+                <div class="io-item first">
+                    <span class="do">DO0</span>
+                    <select ng-model="selectedSafetyValidDO0" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DO1</span>
+                    <select ng-model="selectedSafetyValidDO1" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">DO2</span>
+                    <select ng-model="selectedSafetyValidDO2" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DO3</span>
+                    <select ng-model="selectedSafetyValidDO3" ng-options="a as a.name for a in digitalIOSafetyDict" ></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">DO4</span>
+                    <select ng-model="selectedSafetyValidDO4" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DO5</span>
+                    <select ng-model="selectedSafetyValidDO5" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">DO6</span>
+                    <select ng-model="selectedSafetyValidDO6" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">DO7</span>
+                    <select ng-model="selectedSafetyValidDO7" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">CO0</span>
+                    <select ng-model="selectedSafetyValidDO8" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CO1</span>
+                    <select ng-model="selectedSafetyValidDO9" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">CO2</span>
+                    <select ng-model="selectedSafetyValidDO10" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CO3</span>
+                    <select ng-model="selectedSafetyValidDO11" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item">
+                    <span class="do">CO4</span>
+                    <select ng-model="selectedSafetyValidDO12" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CO5</span>
+                    <select ng-model="selectedSafetyValidDO13" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="io-item end">
+                    <span class="do">CO6</span>
+                    <select ng-model="selectedSafetyValidDO14" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                    <span class="do">CO7</span>
+                    <select ng-model="selectedSafetyValidDO15" ng-options="a as a.name for a in digitalIOSafetyDict"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" 
+                        ng-click="setSafetyDOValid([selectedSafetyValidDO0.id,
+                                                    selectedSafetyValidDO1.id,
+                                                    selectedSafetyValidDO2.id,
+                                                    selectedSafetyValidDO3.id,
+                                                    selectedSafetyValidDO4.id,
+                                                    selectedSafetyValidDO5.id,
+                                                    selectedSafetyValidDO6.id,
+                                                    selectedSafetyValidDO7.id,
+                                                    selectedSafetyValidDO8.id,
+                                                    selectedSafetyValidDO9.id,
+                                                    selectedSafetyValidDO10.id,
+                                                    selectedSafetyValidDO11.id,
+                                                    selectedSafetyValidDO12.id,
+                                                    selectedSafetyValidDO13.id,
+                                                    selectedSafetyValidDO14.id,
+                                                    selectedSafetyValidDO15.id])" 
+                        ng-bind="'_config' | translate"></a>
+                </div>
+                <!-- DIO安全功能配置 -->
+                <div ng-show="gSystemFlag">
+                    <hr class="box-divider">
+                    <span class="child-title" ng-bind="'_dio_func_cfg' | translate"></span>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CI0-CI1</span>
+                        <select class="select-164" ng-model="selectedCI0CI1Func">
+                            <option ng-repeat="item in DICfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '22' 
+                                        && item.value != '23' 
+                                        && item.value != '24'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CI2-CI3</span>
+                        <select class="select-164" ng-model="selectedCI2CI3Func">
+                            <option ng-repeat="item in DICfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '22' 
+                                        && item.value != '23' 
+                                        && item.value != '24'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CI4-CI5</span>
+                        <select class="select-164" ng-model="selectedCI4CI5Func">
+                            <option ng-repeat="item in DICfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '22' 
+                                        && item.value != '23' 
+                                        && item.value != '24'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CI6-CI7</span>
+                        <select class="select-164" ng-model="selectedCI6CI7Func">
+                            <option ng-repeat="item in DICfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '22' 
+                                        && item.value != '23' 
+                                        && item.value != '24'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CO0-CO1</span>
+                        <select class="select-164" ng-model="selectedCO0CO1Func">
+                            <option ng-repeat="item in DOCfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '23' 
+                                        && item.value != '24' 
+                                        && item.value != '25' 
+                                        && item.value != '26' 
+                                        && item.value != '27'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CO2-CO3</span>
+                        <select class="select-164" ng-model="selectedCO2CO3Func">
+                            <option ng-repeat="item in DOCfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '23' 
+                                        && item.value != '24' 
+                                        && item.value != '25' 
+                                        && item.value != '26' 
+                                        && item.value != '27'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CO4-CO5</span>
+                        <select class="select-164" ng-model="selectedCO4CO5Func">
+                            <option ng-repeat="item in DOCfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '23' 
+                                        && item.value != '24' 
+                                        && item.value != '25' 
+                                        && item.value != '26' 
+                                        && item.value != '27'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="setting-item oneline mt-0">
+                        <span class="ip-span">CO6-CO7</span>
+                        <select class="select-164" ng-model="selectedCO6CO7Func">
+                            <option ng-repeat="item in DOCfgData" 
+                                value="{{item.value}}" 
+                                label="{{item.name}}" 
+                                ng-hide="{{item.value != '0'
+                                        && item.value != '20' 
+                                        && item.value != '21' 
+                                        && item.value != '23' 
+                                        && item.value != '24' 
+                                        && item.value != '25' 
+                                        && item.value != '26' 
+                                        && item.value != '27'}}">
+                            </option>
+                        </select>
+                    </div>
+                    <div class="right-btn">
+                        <a class="btn btn-frblue" 
+                            ng-click="setSafetyDIOFunc([selectedCI0CI1Func,
+                                                        selectedCI0CI1Func,
+                                                        selectedCI2CI3Func,
+                                                        selectedCI2CI3Func,
+                                                        selectedCI4CI5Func,
+                                                        selectedCI4CI5Func,
+                                                        selectedCI6CI7Func,
+                                                        selectedCI6CI7Func],
+                                                       [selectedCO0CO1Func,
+                                                        selectedCO0CO1Func,
+                                                        selectedCO2CO3Func,
+                                                        selectedCO2CO3Func,
+                                                        selectedCO4CO5Func,
+                                                        selectedCO4CO5Func,
+                                                        selectedCO6CO7Func, 
+                                                        selectedCO6CO7Func])" 
+                            ng-bind="'_config' | translate"></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 急停停机 -->
+        <div class="setting-item-container" ng-show="show_safeEmergencyStopCfg">
+            <div class="container-header">
+                <label ng-bind="'_emergency_stop' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_enter_cfg' | translate"></span>
+                <div class="setting-item oneline mt-0">
+                    <span class="ip-span" ng-bind="'_emergency_stop_type' | translate"></span>
+                    <select class="ip-select" ng-model="selectedEStopMode" ng-options="a as a.name for a in eStopModeDict"></select>
+                </div>
+                <div class="setting-item oneline">
+                    <span class="ip-span" ng-bind="'_emergency_stop_time_limit' | translate"></span>
+                    <input class="ip-input" type="text" ng-model="eStopTimeLimit" oninput="limitInput_float(this);" min="0" max="1000" autocomplete="off">
+                    <span>ms</span>
+                </div>
+                <div class="setting-item oneline">
+                    <span class="ip-span" ng-bind="'_emergency_stop_distance_limit' | translate"></span>
+                    <input class="ip-input" type="text" ng-model="eStopDisLimit" oninput="limitInput_float(this);" min="0" max="1000" autocomplete="off">
+                    <span>mm</span>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setEmergencyStopParam(selectedEStopMode.id,eStopTimeLimit,eStopDisLimit)" ng-bind="'_config' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 保护性停机 -->
+        <div class="setting-item-container" ng-show="show_safeProtectiveStopCfg">
+            <div class="container-header">
+                <label ng-bind="'_protective_stop' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_enter_cfg' | translate"></span>
+                <div class="setting-item oneline mt-0">
+                    <span class="ip-span" ng-bind="'_emergency_stop_type' | translate"></span>
+                    <select class="ip-select" ng-model="selectedPStopMode" ng-options="a as a.name for a in pStopModeDict"></select>
+                </div>
+                <div class="right-btn">
+                    <a class="btn btn-frblue" ng-click="setProtectiveStopParam(selectedPStopMode.id)" ng-bind="'_config' | translate"></a>
+                </div>
+            </div>
+        </div>
+        <!-- 安全墙 -->
+        <div class="setting-item-container" ng-show="show_safePlaneCfg">
+            <div class="container-header">
+                <label ng-bind="'_security_wall_config' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <!-- 安全墙启用 -->
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_security_wall_enabled' | translate"></span>
+            </div>
+            <div class="container-body d-flex align-items-center justify-content-between" ng-repeat="item in choosesafetyPlaneArray">
+                <div class="general-item">
+                    <span class="header-span">{{item.name}}</span>
+                </div>
+                <div class="general-item">
+                    <div class="custom-control custom-switch d-inline-block" style="text-align: right;">
+                        <input id="name{{item.planeNum}}" type="checkbox" class="custom-control-input" ng-model="item.status" ng-false-value="0" ng-true-value="1" ng-click="enableSafetyPlane(item)">
+                        <label class="custom-control-label" for="name{{item.planeNum}}"></label>
+                    </div>
+                </div>
+            </div>
+            <hr class="box-divider" class="margin-top-24">
+            <!-- 安全墙配置 -->
+            <div class="container-body">
+                <span class="child-title" ng-bind="'_security_wall_config' | translate"></span>
+            </div>
+            <div class="container-body">
+                <div class="setting-item oneline">
+                    <span class="ip-span" ng-bind="'_security_wall_choose' | translate"></span>
+                    <select class="ip-select w-94" ng-model="chooseSafetyPlane" ng-change="selectSafetyPlane(chooseSafetyPlane.planeNum)" ng-options="a as a.name for a in choosesafetyPlaneArray"></select>
+                </div>
+                <div class="setting-item oneline d-flex justify-content-between">
+                    <div class="setting-item oneline">
+                        <span class="ip-span" ng-bind="'_security_distance' | translate"></span>
+                        <input class="ip-input w-94" type="text"  ng-model="safetyLength" oninput="limitInput_int(this);" min="0" autocomplete="off">
+                        <span class="margin-left-8">mm</span>
+                    </div>
+                    <span class="margin-left-26">
+                        <a class="btn btn-frblue" ng-bind="'_set' | translate" ng-click="setSafetyPlanePara(chooseSafetyPlane, safetyLength)"></a>
+                    </span>
+                </div>
+            </div>
+            <div class="general-item" ng-bind="'_plane_reference_point' | translate"></div>
+            <div class="container-body d-flex align-items-center justify-content-between">
+                <div class="general-item">
+                    <span id="param1" class="circle-prompt"></span>
+                    <span ng-bind="'_reference_point' | translate"></span>1
+                </div>
+                <div class="general-item">
+                    <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setSafetyPlaneRefPoint(1)"></a>
+                </div>
+            </div>
+            <div class="container-body d-flex align-items-center justify-content-between">
+                <div class="general-item">
+                    <span id="param2" class="circle-prompt"></span>
+                    <span ng-bind="'_reference_point' | translate"></span>2
+                </div>
+                <div class="general-item">
+                    <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setSafetyPlaneRefPoint(2)"></a>
+                </div>
+            </div>
+            <div class="container-body d-flex align-items-center justify-content-between">
+                <div class="general-item">
+                    <span id="param3" class="circle-prompt"></span>
+                    <span ng-bind="'_reference_point' | translate"></span>3
+                </div>
+                <div class="general-item">
+                    <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setSafetyPlaneRefPoint(3)"></a>
+                </div>
+            </div>
+            <div class="general-item" ng-bind="'_security_range_reference_point' | translate"></div>
+            <div class="container-body d-flex align-items-center justify-content-between">
+                <div class="general-item">
+                    <span id="param4" class="circle-prompt"></span>
+                    <span ng-bind="'_reference_point' | translate"></span>4
+                </div>
+                <div class="general-item">
+                    <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setSafetyPlaneRefPoint(4)"></a>
+                </div>
+            </div>
+            <!-- 安全墙计算 -->
+            <span class="d-flex justify-content-flex-end margin-top-24">
+                <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_compute' | translate" ng-click="solveSafetyPlane(chooseSafetyPlane.planeNum)"></a>
+            </span>
+        </div>
+        <!-- 安全后台程序界面 -->
+        <div class="setting-item-container" ng-show="show_safeDaemonCfg">
+            <div class="container-header">
+                <label ng-bind="'_security_daemon' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <!-- 功能开启 -->
+            <div class="container-body daemon-enabled">
+                <span ng-bind="'_feature_enabled' | translate"></span>
+                <div class="custom-control custom-switch d-inline-block">
+                    <input id="enabled" name="daemonEnabled" type="checkbox" ng-model="daemonEnabled" ng-true-value="1" ng-false-value="0" class="custom-control-input" ng-click="enableSafetyDaemon()">
+                    <label class="custom-control-label" for="enabled"></label>
+                </div>
+            </div>
+            <hr class="box-divider" class="margin-top-24">
+            <!-- 意外状况 -->
+            <div class="container-body daemon-content">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_accidents' | translate"></span>
+                </div>
+                <span class="child-daemon-title">:</span>
+                <div>
+                    <select ng-model="selectAccidents" ng-options="x.name for x in daemonAccidentsData"></select>
+                </div>
+            </div>
+            <!-- 后台程序 -->
+            <div class="container-body daemon-content">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_background_program' | translate"></span>
+                </div>
+                <span class="child-daemon-title">:</span>
+                <div>
+                    <select ng-model="selectProgram" ng-options="x for x in daemonProgramData"></select>
+                </div>
+            </div>
+            <!-- 设置 -->
+            <div class="d-flex justify-content-flex-end margin-top-24">
+                <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setAccidentsData()"></a>
+            </div>
+        </div>
+        <!-- 工具方向限制界面 -->
+        <div class="setting-item-container" ng-show="show_safeToolDirectionCfg == 1">
+            <div class="container-header">
+                <label ng-bind="'_tool_orient_restrict' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <!-- 功能开启 -->
+            <div class="container-body d-flex align-items-center">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_whether_enable_safe_stop' | translate"></span>
+                </div>
+                <div class="custom-control custom-switch d-inline-block margin-left-8">
+                    <input id="toolDirectenabled" type="checkbox" ng-model="toolEnableFlag" ng-true-value="1" ng-false-value="0" class="custom-control-input">
+                    <label class="custom-control-label" for="toolDirectenabled"></label>
+                </div>
+            </div>
+            <div class="container-body daemon-content">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_max_offset_angle' | translate"></span>
+                </div>
+                <div class="margin-left-8">
+                    <input class="ip-input speed-text" type="text" ng-model="intersectionAngle" placeholder="5 ~ 181" oninput="limitInput_int(this);" min="5" max="181" autocomplete="off">
+                    <span>°</span>
+                </div>
+            </div>
+            <!-- 基准工具方向 -->
+            <div class="container-body d-flex align-items-center margin-top-4">
+                <div style="border: 1px solid #ededed; width: 100%; padding: 4px;">
+                    <span class="scroll-display margin-left-4" ng-bind="'_datum_tool_direction' | translate"></span>
+                    <ul>
+                        <li>
+                            <span class="item-name">Rx</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="toolDirectRx">
+                        </li>
+                        <li>
+                            <span class="item-name">Ry</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="toolDirectRy">
+                        </li>
+                        <li>
+                            <span class="item-name">Rz</span>
+                            <input class="item-value" type="text" oninput="limitInput_float(this);" min="-2000" max="2000" ng-model="toolDirectRz">
+                        </li>
+                    </ul>
+                    <div class="d-flex justify-content-flex-start">
+                        <a class="btn btn-frgreen" class="margin-left-30" ng-bind="'_sync' | translate" ng-click="syncToolDataParam()"></a>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-flex-end margin-top-12">
+                <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setToolDirection(toolEnableFlag,toolDirectRx,toolDirectRy,toolDirectRz,intersectionAngle)"></a>
+            </div>
+        </div>
+        <span class="warning-info" ng-show="show_safeToolDirectionCfg == 2" ng-bind="'_current_version_not_support' | translate"></span>
+        <!-- 机器人限值界面 -->
+        <div class="setting-item-container" ng-show="show_safeRobotLimitCfg == 1">
+            <div class="container-header">
+                <label ng-bind="'_robot_func_safety_limit' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <!-- 功能开启 -->
+            <div class="container-body d-flex align-items-center">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_whether_enable_safe_stop' | translate"></span>
+                </div>
+                <div class="custom-control custom-switch d-inline-block margin-left-8">
+                    <input id="robotLimitenabled" type="checkbox" ng-model="robotLimitEnabledFlag" ng-true-value="1" ng-false-value="0" class="custom-control-input">
+                    <label class="custom-control-label" for="robotLimitenabled"></label>
+                </div>
+            </div>
+            <div class="container-body daemon-content">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_momentum_limit' | translate"></span>
+                </div>
+                <div class="margin-left-8">
+                    <input class="ip-input speed-text" type="text" ng-model="robotMomentumLimit" oninput="limitInput_int(this);" min="0" max="{{maxMomentumValue}}" placeholder="{{momentumValueTip}}" autocomplete="off">
+                    <span>kg*m/s</span>
+                </div>
+            </div>
+            <div class="container-body daemon-content">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_power_limit' | translate"></span>
+                </div>
+                <div class="margin-left-8">
+                    <input class="ip-input speed-text" type="text" ng-model="robotPowerLimit" oninput="limitInput_int(this);" min="0" max="{{maxPowerValue}}" placeholder="{{powerValueTip}}" autocomplete="off">
+                    <span>w</span>
+                </div>
+            </div>
+            <div class="d-flex justify-content-flex-end margin-top-24">
+                <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setMomentumParam(robotLimitEnabledFlag,robotMomentumLimit,robotPowerLimit)"></a>
+            </div>
+        </div>
+        <span class="warning-info" ng-show="show_safeRobotLimitCfg == 2" ng-bind="'_current_version_not_support' | translate"></span>
+        <!-- 关节力矩检测 -->
+        <div class="setting-item-container" ng-show="show_jointtorquedetectionCfg == 2">
+            <div class="container-header">
+                <label ng-bind="'_power_detection_cfg' | translate"></label>
+            </div>
+            <hr class="box-divider">
+            <!-- 功能开启 -->
+            <div class="container-body d-flex align-items-center">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_control_state' | translate"></span>
+                </div>
+                <div class="custom-control custom-switch d-inline-block margin-left-8">
+                    <input id="controlStatusEnabled" type="checkbox" ng-model="controlStatusEnabledFlag" ng-true-value="1" ng-false-value="0" class="custom-control-input">
+                    <label class="custom-control-label" for="controlStatusEnabled"></label>
+                </div>
+            </div>
+            <div class="container-body daemon-content">
+                <div class="child-daemon">
+                    <span class="scroll-display" ng-bind="'_set_power' | translate"></span>
+                </div>
+                <div class="margin-left-8">
+                    <input class="ip-input speed-text" type="text" ng-model="powerDetectionLimit" oninput="limitInput_int(this);" min="0" autocomplete="off">
+                    <span>W</span>
+                </div>
+            </div>
+            <div class="d-flex justify-content-flex-end margin-top-24">
+                <a class="btn btn-frblue" class="margin-left-30" ng-bind="'_set' | translate" ng-click="setPowerLimit(controlStatusEnabledFlag,powerDetectionLimit)"></a>
+            </div>
+        </div>
+        <span class="warning-info" ng-show="show_jointtorquedetectionCfg == 1" ng-bind="'_current_version_not_support' | translate"></span>
+    </div>
+</div>

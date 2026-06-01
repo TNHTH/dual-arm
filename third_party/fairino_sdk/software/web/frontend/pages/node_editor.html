@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+</head>
+
+<body>
+    <div class="main" id="nodeEditor">
+        <div id="left-panel">
+            <div class="ne-slider-icon" id="slide-left-panel">
+                <div style="margin-top: 1rem;">
+                    <i class="fa fa-arrow-left"></i>
+                </div>
+            </div>
+            <div class="left-panel-content">
+                <div class="left-panel-tab" ng-bind="'_filename' | translate"></div>
+                <div class="left-panel-file" style="width: 90%;padding: 10px;">
+                    <input id="nodeEditorFileName" style="background-color: white !important;" ng-model="nodeEditorFileName" type="text" oninput="limitInput_special(this)" autocomplete="off">
+                </div>
+                <div id="add-variables" class="left-panel-tab" ng-bind="'_create_variables' | translate"><div id="add-variables-plus-icon"
+                        style="position: absolute; right: 0.7rem; transition: 0.1s;"><i class="fa fa-chevron-down"></i></div>
+                </div>
+                <div id="add-variables-content" class="left-panel-tab-content">
+                    <div id="create-variables">
+                        <div class="ne-input-group">
+                            <div class="icon2" ng-bind="'_type' | translate"></div>
+                            <select class="form-control" id="variable-data-type">
+                                <option value="Number" selected ng-bind="'_number' | translate"></option>
+                                <option value="Boolean" ng-bind="'_boolean' | translate"></option>
+                                <option value="String" ng-bind="'_string' | translate"></option>
+                                <option value="Array" ng-bind="'_array' | translate"></option>
+                            </select>
+                        </div>
+                        <div class="ne-input-group">
+                            <div class="icon2" ng-bind="'_name' | translate"></div>
+                            <input type="text" class="form-control" placeholder="Name" id="variable-name">
+                        </div>
+                        <div class="ne-input-group" id="number-default-form">
+                            <div class="icon2" ng-bind="'_var_initial' | translate"></div>
+                            <input type="number" class="form-control" placeholder="Default" title="enter number"
+                                id="number-default-value" value=0>
+                        </div>
+                        <div class="ne-input-group hidden" id="string-default-form">
+                            <div class="icon2" ng-bind="'_var_initial' | translate"></div>
+                            <input type="text" class="form-control" placeholder="Default" title="enter string"
+                                id="string-default-value" value=hello>
+                        </div>
+                        <div class="ne-input-group hidden" id="array-default-form">
+                            <div class="icon2" ng-bind="'_var_initial' | translate"></div>
+                            <input type="text" class="form-control" placeholder="Default"
+                                title="enter array values in [1, 2, 3, 4] or ['Love', 'Shove', 'Dove'] or [true, false, true] etc format"
+                                id="array-default-value" value=[]>
+                        </div>
+                        <div class="ne-input-group hidden" id="bool-default-form">
+                            <div class="icon2" ng-bind="'_var_initial' | translate"></div>
+                            <select class="form-control" id="bool-default-value">
+                                <option value=true selected>True</option>
+                                <option value=false>False</option>
+                            </select>
+                        </div>
+                        <div class="text-center">
+                            <a id="create-btn" class="btn btn-frblue">
+                                <span aria-hidden="true" ng-bind="'_create' | translate"></span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div id="list-of-variables" class="left-panel-tab">
+                    <span ng-bind="'_variable_list' | translate"></span>
+                    <div id="list-of-variables-down-icon" style="position: absolute; right: 0.7rem; transition: 0.1s;">
+                        <i class="fa fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div id="list-of-variables-content" class="left-panel-tab-content" style="width: 90%;">
+                    <div class="variableList" style="width: 100%;">
+                        <ul class="list-group list-group-flush" id="variable-list">
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="container">
+
+        </div>
+        <div id="live-code-container" class="live-code-container live-code-closed">
+            <div class="icons-live-code">
+                <div id="live-code-arrow" ng-click="livaCodeArrow()"><i class="fa fa-arrow-left"></i></div>
+                <div id="live-code-refresh" title="Ctrl+Q" ng-click="liveCodeRefresh()"><i class="fa fa-refresh"></i></div>
+                <h4 style="margin-left: 2rem; color: yellowgreen; transform: translateY(2px);" ng-bind="'_code_translation' | translate"></h4>
+            </div>
+            <div id="live-code">
+
+            </div>
+        </div>
+
+    </div>
+    <div class="ne-leftbar">
+        <button class="fr-node-editor-icon" id="Code" ng-click="openCode()">
+            <i ng-attr-title="{{'_code' | translate}}" class="fa fa-code fa-lg icon-color"></i>
+        </button>
+        <button class="fr-node-editor-icon" id="import" ng-click="openImportMenu()">
+            <i ng-attr-title="{{'_import' | translate}}" class="frfont frdaoru" aria-hidden="true"></i>
+        </button>
+        <button class="fr-node-editor-icon" id="export" ng-click="getNodeGraphNameList('export')">
+            <i ng-attr-title="{{'_export' | translate}}" class="frfont frdaochu" aria-hidden="true"></i>
+            <a id="exportAnchorElem"></a>
+        </button>
+        <button class="fr-node-editor-icon" id="starter" ng-click="starterNodeGraphContent()">
+            <i ng-attr-title="{{'_initial' | translate}}" class="fa fa-refresh fa-lg icon-color"></i>
+        </button>
+        <button class="fr-node-editor-icon" id="refresh" ng-click="refreshNodeGraphContent()">
+            <i ng-attr-title="{{'_new' | translate}}" class="frfont frxinjian" aria-hidden="true"></i>
+        </button>
+        <button class="fr-node-editor-icon" id="reload" ng-click="reloadNodeGraphContent()">
+            <i ng-attr-title="{{'_overload' | translate}}" class="fa fa-reply fa-lg icon-color"></i>
+        </button>
+        <button class="fr-node-editor-icon" id="save" ng-click="saveNodeGraphContent()">
+            <i ng-attr-title="{{'_save' | translate}}" class="frfont frbaocun" aria-hidden="true"></i>
+        </button>
+        <button class="fr-node-editor-icon" id="open" ng-click="getNodeGraphNameList('save')">
+            <i ng-attr-title="{{'_open' | translate}}" class="frfont frdakai" aria-hidden="true"></i>
+        </button>
+
+    </div>
+    <div id="saving" class="sidebox hidden">
+        <div class="sidebox-flex">
+            <div class="sidebox-flex-content" ng-bind="'_saving' | translate"></div>
+        </div>
+    </div>
+    <div id="alert-box" class="sidebox hidden">
+        <div class="sidebox-flex">
+            <div class="sidebox-flex-content" ng-bind="'_export_current' | translate"></div>
+            <button id="alert-ok-btn" class="node-editor-icon" ng-bind="'_confirm' | translate"></button>
+        </div>
+    </div>
+    <div id="refresh-box" class="sidebox hidden">
+        <div class="sidebox-flex">
+            <div class="sidebox-flex-content" ng-bind="'_current_will_be_lost' | translate"></div>
+            <button id="refresh-btn" class="node-editor-icon" ng-bind="'_refresh' | translate" ng-click="refreshNodeFileName()"></button>
+            <button id="refresh-cancel-btn" class="node-editor-icon" ng-bind="'_cancel' | translate"></button>
+        </div>
+    </div>
+    <div id="delete-ctx-container" class="context-menu-items hidden">
+        <div ng-bind="'_delete' | translate"></div>
+        <div style="font-size: xx-small;">Ctrl+LMB</div>
+    </div>
+    <div id="get-set-ctx-menu-container" class="hidden">
+        <div id="get-set-ctx-menu">
+            <div class="context-menu-items" data-isGetOrSet="Get">Get</div>
+            <div class="context-menu-items" data-isGetOrSet="Set">Set</div>
+        </div>
+    </div>
+    <div id="ctx-menu-container" class="hidden">
+        <input type="text" id="ctx-search-bar" placeholder="Search...">
+        <div id="context-menu">
+            <div class="context-menu-items">Begin</div>
+            <div class="context-menu-title">Math</div>
+            <div class="context-menu-items">+</div>
+            <div class="context-menu-items">-</div>
+            <div class="context-menu-items">*</div>
+            <div class="context-menu-items">/</div>
+            <div class="context-menu-items">!=</div>
+            <div class="context-menu-items">==</div>
+            <div class="context-menu-items">＜</div>
+            <div class="context-menu-items">＜=</div>
+            <div class="context-menu-items">＞</div>
+            <div class="context-menu-items">＞=</div>
+            <div class="context-menu-items">＆</div>
+            <div class="context-menu-items">||</div>
+			<div class="context-menu-title" ng-bind="programCategoryArray[1].name"></div>
+            <div class="context-menu-items">If/Else</div>
+            <div class="context-menu-items">While</div>
+            <div class="context-menu-items">Continue</div>
+            <div class="context-menu-items">Break</div>
+            <div class="context-menu-items text-expand " ng-bind="programCommandArray[2].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="programCommandArray[2].name+'-goto'"></div>
+            <div class="context-menu-items text-expand " ng-bind="programCommandArray[3].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="nodeTitleList[12].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="nodeTitleList[13].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="nodeTitleList[11].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="programCommandArray[4].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="nodeTitleList[36].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="nodeTitleList[40].name"></div>
+            <div class="context-menu-items text-expand " ng-bind="nodeTitleList[39].name"></div>
+            <div class="context-menu-title" ng-bind="programCategoryArray[2].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[7].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[8].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[8].name + '(' + nodeInputTitles.motion._trans_point_angle_adjustable + ')'"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[135].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[9].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[10].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[11].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[12].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[55].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[13].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[13].name + '-SPTP'"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[14].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[14].name + '-SPL'"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[15].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[16].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[17].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[18].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[19].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[20].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[21].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[22].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[52].name"></div>
+            <div class="context-menu-title" ng-bind="programCategoryArray[3].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[14].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[15].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[17].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[18].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[41].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[42].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[43].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[44].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[45].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[46].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[27].name + nodeTitleList[130].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[27].name + nodeTitleList[131].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[57].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[8].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[10].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[29].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[30].name + '-' + collideModeData[0].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[30].name + '-' + collideModeData[1].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[31].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[32].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[47].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[48].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[49].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[33].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[50].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[51].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[52].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[53].name"></div>
+            <div class="context-menu-title">
+                <span class="text-expand" ng-bind="programCommandArray[34].name + '--' + eaxisCommandTypeData[0].name"></span>
+            </div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[67].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[68].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[69].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[70].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[71].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[72].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[73].name"></div>
+            <div class="context-menu-title">
+                <span class="text-expand" ng-bind="programCommandArray[34].name + '--' + eaxisCommandTypeData[1].name"></span>
+            </div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[74].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[75].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[76].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[77].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[78].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[79].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[35].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[54].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[55].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[56].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[57].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[53].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[58].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[59].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[60].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[61].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[62].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[63].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[64].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[151].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[152].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[153].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[65].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[66].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[36].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[84].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[85].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[86].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[87].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[88].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[89].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[90].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[91].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[92].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[93].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[37].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[34].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[38].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[128].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[129].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[136].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[96].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[97].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[98].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[99].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[100].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[101].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[102].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[103].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[104].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[105].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[39].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[94].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[106].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[107].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[40].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[112].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[113].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[114].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[115].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[116].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[117].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[118].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[119].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[120].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[121].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[122].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[123].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[124].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[125].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[41].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[108].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[109].name"></div>
+            <div class="context-menu-title" ng-bind="programCommandArray[42].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[110].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[111].name"></div>
+            <div class="context-menu-title" ng-bind="programCategoryArray[6].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._torque_record_start"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._torque_record_end"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._torque_record_reset"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[80].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[81].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[82].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeTitleList[83].name"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ftcom_start"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ftcom_end"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ft_spiral_search_start"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ft_rot_insertion_start"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ft_lin_insertion_start"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ft_find_surface"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ftcal_start"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.motion._ftcal_end"></div>
+			<div class="context-menu-title">Modbus</div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._read_coils"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._write_coils"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._read_inbits"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._modbus_read_ao"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._modbus_write_ao"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._modbus_read_ai"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._modbus_wait_di"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_master + nodeInputTitles.modbus._modbus_wait_ai"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._read_coils"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._write_coils"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._read_inbits"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._modbus_read_ao"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._modbus_write_ao"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._modbus_read_ai"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._modbus_wait_di"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_slave + nodeInputTitles.modbus._modbus_wait_ai"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_rtu_read_register_command"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_rtu_read_register_data"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.modbus._modbus_rtu_write_register_data"></div>
+			<div class="context-menu-title">Auxiliary</div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.auxiliary._point_table_mode"></div>
+            <div class="context-menu-items text-expand" ng-bind="nodeInputTitles.auxiliary._system_mode"></div>
+            <div class="context-menu-items text-expand" ng-bind="programCommandArray[56].name"></div>
+        </div>
+    </div>
+    <input type="number" name="number-ip" id="number-ip" class="ipn" title="Enter Number">
+    <input type="text" name="string-ip" id="string-ip" class="ips"
+        title="if(string) then enter with single 'quotes' only with no special character inbetween">
+    <input type="text" name="array-ip" id="array-ip" class="ips" title="enter array in [1, 2, 3, 4] format">
+    <select class="ipb" id="bool-ip" title="select value">
+        <option value=true selected>true</option>
+        <option value=false>false</option>
+    </select>
+    <select class="ipo" id="select-point-ip" title="select value">
+        <option ng-repeat="item in pointsData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-point-seam-ip" title="select value">
+        <option ng-repeat="item in pointsSeamData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-segment-ip" title="select value">
+        <option ng-repeat="item in segmentModeData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-tplate-ip" title="select value">
+        <option ng-repeat="item in TplateType track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-weld-ip" title="select value">
+        <option ng-repeat="item in weldRecordData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-wire-ip" title="select value">
+        <option ng-repeat="item in wireSearchRef_ResPointData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-work-ip" title="select value">
+        <option ng-repeat="item in WObjCoordeData track by $index" value={{item.id}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-tool-ip" title="select value">
+        <option ng-repeat="item in toolTrsfCoordeData track by $index" value={{item.id}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-offset-ip" title="select value">
+        <option ng-repeat="item in offsetFlagData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-treatstrategy-ip" title="select value">
+        <option ng-repeat="item in treatStrategyData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-offsettype-ip" title="select value">
+        <option ng-repeat="item in offsetTypeData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-offset-laser-ip" title="select value">
+        <option ng-repeat="item in offsetFlagLaserData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-move-ip" title="select value">
+        <option ng-repeat="item in servoCModeData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-splinemode-ip" title="select value">
+        <option ng-repeat="item in newSplineModeData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-direction-ip" title="select value">
+        <option ng-repeat="item in spiralDirectionData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-nspiral-ip" title="select value">
+        <option ng-repeat="item in nSpiralOffsetFlagData track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-weave-ip" title="select value">
+        <option  value="0" selected>0</option>
+        <option  value="1">1</option>
+        <option  value="2">2</option>
+        <option  value="3">3</option>
+        <option  value="4">4</option>
+        <option  value="5">5</option>
+        <option  value="6">6</option>
+        <option  value="7">7</option>
+    </select>
+    <select class="ipo" id="select-tpd-ip" title="select value">
+        <option ng-repeat="item in tpdList track by $index" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-traj-ip" title="select value">
+        <option ng-repeat="item in trajFileNameList track by $index" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-trajmode-ip" title="select value">
+        <option ng-repeat="item in trajectoryJMode track by $index" value={{item.name}}>{{item.name}}</option>
+    </select>
+	<select class="ipo" id="select-whether-ip" title="select value">
+        <option ng-repeat="item in whetherData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-smooth-ip" title="select value">
+        <option ng-repeat="item in setIOModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-block-ip" title="select value">
+        <option ng-repeat="item in blockData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-doport-ip" title="select value">
+        <option ng-repeat="item in doData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-diport-ip" title="select value">
+        <option ng-repeat="item in diData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-aoport-ip" title="select value">
+        <option ng-repeat="item in aoPort" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-aiport-ip" title="select value">
+        <option ng-repeat="item in aiPort" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-aicompare-ip" title="select value">
+        <option ng-repeat="item in aiCompare" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-virdindata-ip" title="select value">
+        <option ng-repeat="item in virDinData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-viraindata-ip" title="select value">
+        <option ng-repeat="item in virAinData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-toolcoord-ip" title="select value">
+        <option ng-repeat="item in toolCoordData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-wobjtoolcoord-ip" title="select value">
+        <option ng-repeat="item in wobjToolCoordData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-whethermotion-ip" title="select value">
+        <option ng-repeat="item in whetherMotionData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-connection-ip" title="select value">
+        <option ng-repeat="item in connectionData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-layerid-ip" title="select value">
+        <option ng-repeat="item in layerIdData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-pause-ip" title="select value">
+        <option ng-repeat="item in pauseFunctionData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-collidemode-ip" title="select value">
+        <option ng-repeat="item in collideModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-dofile-ip" title="select value">
+        <option ng-repeat="item in dofileData" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-gripper-ip" title="select value">
+        <option ng-repeat="item in gripperData" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-trackmode-ip" title="select value">
+        <option ng-repeat="item in ConTrackModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-enable-ip" title="select value">
+        <option ng-repeat="item in enableData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-polish-ip" title="select value">
+        <option ng-repeat="item in polishCommandModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-axismove-ip" title="select value">
+        <option ng-repeat="item in axisMoveData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-axisnumber-ip" title="select value">
+        <option ng-repeat="item in axisNumberData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-zero-ip" title="select value">
+        <option ng-repeat="item in ZeroModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-servo-ip" title="select value">
+        <option ng-repeat="item in auxServoCommandIdData" value={{item.id}}>{{item.id}}</option>
+    </select>
+    <select class="ipo" id="select-servomode-ip" title="select value">
+        <option ng-repeat="item in auxServoCommandModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-servoenable-ip" title="select value">
+        <option ng-repeat="item in servoEnableData" value={{item.name}}>{{item.name}}</option>
+    </select>
+	<select class="ipo" id="select-smoothtype-ip" title="select value">
+        <option ng-repeat="item in torqueSmoothType" value={{item.name}}>{{item.name}}</option>
+    </select>
+	<select class="ipo" id="select-collisionlevel-ip" title="select value">
+        <option ng-repeat="item in collisionLevelData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-ftreference-ip" title="select value">
+        <option ng-repeat="item in FTReferenceCoordData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-ftsurfacedirection-ip" title="select value">
+        <option ng-repeat="item in FTFindSurfaceDirectionData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-ftfindsurfaceaxis-ip" title="select value">
+        <option ng-repeat="item in FTFindSurfaceAxisData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-ftrotor-ip" title="select value">
+        <option ng-repeat="item in FTRotOrnData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-sensortool-ip" title="select value">
+        <option ng-repeat="item in SensorToolCoord" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-ftcontroladj-ip" title="select value">
+        <option ng-repeat="item in FTControlAdjSignData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-ftcontrolilc-ip" title="select value">
+        <option ng-repeat="item in FTControlILCSignData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-IO-ip" title="select value">
+        <option ng-repeat="item in IOTypeDict" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-weld-id-ip" title="select value">
+        <option ng-repeat="item in WeldIdData" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-func-mode-ip" title="select value">
+        <option ng-repeat="item in functionModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-weave-mode-ip" title="select value">
+        <option ng-repeat="item in weaveModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-rounding-ip" title="select value">
+        <option ng-repeat="item in roundingRuleData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-protocol-ip" title="select value">
+        <option ng-repeat="item in protocolData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-func-type-ip" title="select value">
+        <option ng-repeat="item in functionTypeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-search-ip" title="select value">
+        <option ng-repeat="item in SerachDistData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-trace-is-ip" title="select value">
+        <option ng-repeat="item in weldTraceIsuplowData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-trace-axis-ip" title="select value">
+        <option ng-repeat="item in weldTraceAxisselectData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-trace-reference-ip" title="select value">
+        <option ng-repeat="item in weldTraceReferenceTypeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-tech-plate-ip" title="select value">
+        <option ng-repeat="item in techPlateType" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-tech-motion-ip" title="select value">
+        <option ng-repeat="item in techMotionDirection" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-inf-point-ip" title="select value">
+        <option ng-repeat="item in infPointType" value={{item.name}}>{{item.name}}</option>
+    </select>
+	<select class="ipo" id="select-modbus-ip" title="select value">
+        <option ng-repeat="item in modbusMasterIDData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-modbustype-ip" title="select value">
+        <option ng-repeat="item in modbusMasterTypeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-modbusregread-ip" title="select value">
+        <option ng-repeat="item in modbusRegReadFunctionCodeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-modbusregwrite-ip" title="select value">
+        <option ng-repeat="item in modbusRegWriteFunctionCodeData" value={{item.name}}>{{item.name}}</option>
+	</select>
+    <select class="ipo" id="select-wire-pos-ip" title="select value">
+        <option ng-repeat="item in wireRefPosData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-wire-search-back-ip" title="select value">
+        <option ng-repeat="item in wireSearchBackFlagData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-wire-search-mode-ip" title="select value">
+        <option ng-repeat="item in wireSearchModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-wire-search-res-point-ip" title="select value">
+        <option ng-repeat="item in wireSearchResPointData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-wire-search-ref-point-ip" title="select value">
+        <option ng-repeat="item in wireSearchRefPointData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-calc-method-horn-ip" title="select value">
+        <option ng-repeat="item in wireSearchType1MethodData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-calc-method-diameter-ip" title="select value">
+        <option ng-repeat="item in wireSearchType2MethodData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-calc-method-point-ip" title="select value">
+        <option ng-repeat="item in wireSearchType3MethodData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-calc-method-camera-ip" title="select value">
+        <option ng-repeat="item in wireSearchType4MethodData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-calc-method-external-ip" title="select value">
+        <option ng-repeat="item in wireSearchType5MethodData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-robotmode-ip" title="select value">
+        <option ng-repeat="item in robotModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-xmlrpctype-ip" title="select value">
+        <option ng-repeat="item in xmlrpcTableTypeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-slavedialias-ip" title="select value">
+        <option ng-repeat="item in modbusSlaveIOAliasData['DI']" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-slavedoalias-ip" title="select value">
+        <option ng-repeat="item in modbusSlaveIOAliasData['DO']" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-slaveaialias-ip" title="select value">
+        <option ng-repeat="item in modbusSlaveIOAliasData['AI']" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-slaveaoalias-ip" title="select value">
+        <option ng-repeat="item in modbusSlaveIOAliasData['AO']" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-masterdialias-ip" title="select value">
+        <option ng-repeat="item in modbusMasterDIData" value={{item.alias}}>{{item.alias}}</option>
+    </select>
+    <select class="ipo" id="select-masterdoalias-ip" title="select value">
+        <option ng-repeat="item in modbusMasterDOData" value={{item.alias}}>{{item.alias}}</option>
+    </select>
+    <select class="ipo" id="select-masteraialias-ip" title="select value">
+        <option ng-repeat="item in modbusMasterAIData" value={{item.alias}}>{{item.alias}}</option>
+    </select>
+    <select class="ipo" id="select-masteraoalias-ip" title="select value">
+        <option ng-repeat="item in modbusMasterAOData" value={{item.alias}}>{{item.alias}}</option>
+    </select>
+    <select class="ipo" id="select-masteralias-ip" title="select value">
+        <option ng-repeat="item in modbusMasterConfigData" value={{item.alias}}>{{item.alias}}</option>
+    </select>
+    <select class="ipo" id="select-outputmode-ip" title="select value">
+        <option ng-repeat="item in outputMoveDOModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <select class="ipo" id="select-pointtable-ip" title="select value">
+        <option ng-repeat="item in pointTableModeList" value={{item}}>{{item}}</option>
+    </select>
+    <select class="ipo" id="select-lock-direction-ip" title="select value">
+        <option ng-repeat="item in lockXPointModeData" value={{item.name}}>{{item.name}}</option>
+    </select>
+    <div class="hidden" id="console-window">
+        <p style="position: absolute; font-size: 1.4rem; font-family: 'Courier New', Courier, monospace; padding: 0.5rem 1rem;">Console</p>
+        <button id="cross-console" class="cross" ng-click="colseConsole()">
+            <div>+</div>
+        </button>
+        <iframe id="console">
+        </iframe>
+    </div>
+
+    <!-- 保存覆盖弹出框 -->
+    <div class="modal" aria-hidden="true" id="confirmNodeFilenameModal" tabindex="-1" role="dialog" aria-labelledby="confirmNodeFilenameLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="deleteModalLabel" ng-bind="'_node_graph_programming_exists' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <span ng-bind="'_node_graph_programming_overwrite' | translate"></span>
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-frgrey float-left" data-dismiss="modal" ng-click="cancelNodeEditor()">
+                        <span aria-hidden="true" ng-bind="'_cancel' | translate"></span>
+                    </a>
+                    <a id="btn_submit" class="btn btn-frblue" ng-click="saveNodeEditor()">
+                        <span aria-hidden="true" ng-bind="'_confirm' | translate"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 打开节点编程内容弹出框 -->
+    <div class="modal" aria-hidden="true" id="loadNodeGraphModal" tabindex="-1" role="dialog" aria-labelledby="loadNodeGraphLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="loadBlocklyWorkspaceLabel" ng-bind="'_load_node_graph' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close" ng-click="cancelNodeGraphModal()">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <span ng-bind="'_select_blockly_workspace' | translate"></span>：
+                    <select ng-model="selectedNodeGraphName" ng-options="a for a in nodeGraphNameList"></select>
+                </div>
+                <div class="modal-footer">
+                    <a id="btn_submit" class="btn btn-frgrey" ng-click="deleteNodeGraphFile()">
+                        <span aria-hidden="true" ng-bind="'_delete' | translate"></span>
+                    </a>
+                    <a id="btn_submit" class="btn btn-frblue" ng-click="getNodeGraphContent()">
+                        <span aria-hidden="true" ng-bind="'_load' | translate"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 导出节点编程内容弹出框 -->
+    <div class="modal" aria-hidden="true" id="exportNodeGraphModal" tabindex="-1" role="dialog" aria-labelledby="exportNodeGraphLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_export_node_graph' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <span ng-bind="'_select_blockly_workspace' | translate"></span>：
+                    <select ng-model="selectedExportNodeGraphName" ng-options="a for a in nodeGraphNameList"></select>
+                </div>
+                <div class="modal-footer">
+                    <a id="btn_submit" class="btn btn-frblue" ng-click="exportNodeGraph()">
+                        <span aria-hidden="true" ng-bind="'_export' | translate"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 重载节点编程内容弹出框 -->
+    <div class="modal" aria-hidden="true" id="reloadNodeGraphModal" tabindex="-1" role="dialog" aria-labelledby="reloadNodeGraphLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_overload' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <div ng-bind="'_reload_last_save' | translate"></div>
+                </div>
+                <div class="modal-footer">
+                    <button id="load-cancel-btn" class="btn btn-frgrey" ng-bind="'_cancel' | translate"></button>
+                    <button id="load-btn" class="btn btn-frblue" ng-bind="'_load' | translate"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 新建节点编程内容弹出框 -->
+    <div class="modal" aria-hidden="true" id="refreshNodeGraphModal" tabindex="-1" role="dialog" aria-labelledby="refreshNodeGraphLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_new' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <div ng-bind="'_current_will_be_lost' | translate"></div>
+                </div>
+                <div class="modal-footer">
+                    <a id="refresh-cancel-btn" class="btn btn-frgrey" data-dismiss="modal">
+                        <span aria-hidden="true" ng-bind="'_cancel' | translate"></span>
+                    </a>
+                    <button id="refresh-btn" class="btn btn-frblue" ng-bind="'_refresh' | translate" ng-click="refreshOrStart('refresh')"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 初始节点编程内容弹出框 -->
+    <div class="modal" aria-hidden="true" id="initialNodeGraphModal" tabindex="-1" role="dialog" aria-labelledby="initialNodeGraphLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_initial' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <div ng-bind="'_current_will_be_lost' | translate"></div>
+                </div>
+                <div class="modal-footer">
+                    <a id="refresh-cancel-btn" class="btn btn-frgrey" data-dismiss="modal">
+                        <span aria-hidden="true" ng-bind="'_cancel' | translate"></span>
+                    </a>
+                    <button id="refresh-btn" class="btn btn-frblue" ng-bind="'_load' | translate" ng-click="refreshOrStart('initial')"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 导入节点编程弹出框 -->
+    <div class="modal" aria-hidden="true" id="importNodeGraphModal" tabindex="-1" role="dialog" aria-labelledby="importNodeGraphLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_import' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <input type="file" id="upload-json" accept=".json">
+                </div>
+                <div class="modal-footer">
+                    <a id="refresh-cancel-btn" class="btn btn-frgrey" data-dismiss="modal">
+                        <span aria-hidden="true" ng-bind="'_cancel' | translate"></span>
+                    </a>
+                    <a id="import-btn" class="btn btn-frblue" ng-click="uploadNodeGraphFile()">
+                        <span aria-hidden="true" ng-bind="'_import' | translate"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 必须包含开始节点提示语弹出框 -->
+    <div class="modal" aria-hidden="true" id="includeBeginModal" tabindex="-1" role="dialog" aria-labelledby="includeBeginLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_code' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <div ng-bind="'_must_contain_start' | translate"></div>
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-frblue" data-dismiss="modal">
+                        <span aria-hidden="true" ng-bind="'_confirm' | translate"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 存在多个开始节点提示语弹出框 -->
+    <div class="modal" aria-hidden="true" id="multipleBeginModal" tabindex="-1" role="dialog" aria-labelledby="multipleBeginLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_code' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <div ng-bind="'_multiple_begin' | translate"></div>
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-frblue" data-dismiss="modal">
+                        <span aria-hidden="true" ng-bind="'_confirm' | translate"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 找不到上一次保存提示语弹出框 -->
+    <div class="modal" aria-hidden="true" id="lastSaveModal" tabindex="-1" role="dialog" aria-labelledby="lastSaveLabel" data-backdrop="static">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content file-operation-content">
+                <div class="modal-header file-operation-header">
+                    <span id="exportBlocklyWorkspaceLabel" ng-bind="'_overload' | translate"></span>
+                    <a class="file-operation-close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </a>
+                </div>
+                <div class="modal-body">
+                    <div ng-bind="'_no_previous_save' | translate"></div>
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-frblue" data-dismiss="modal">
+                        <span aria-hidden="true" ng-bind="'_confirm' | translate"></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

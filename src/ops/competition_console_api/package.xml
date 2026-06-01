@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>competition_console_api</name>
+  <version>0.1.0</version>
+  <description>统一控制台 API 与证据汇总层。</description>
+
+  <maintainer email="gwh@example.com">gwh</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>ament_index_python</depend>
+  <depend>rclpy</depend>
+  <depend>dualarm_interfaces</depend>
+  <depend>std_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

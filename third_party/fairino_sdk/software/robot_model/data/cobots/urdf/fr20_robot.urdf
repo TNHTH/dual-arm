@@ -1,0 +1,530 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.5.1-0-g916b5db  Build Version: 1.5.7152.31018
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="RD06-FR20">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="1.901E-05 0.00080442 0.049063"
+        rpy="0 0 0" />
+      <mass
+        value="3.2811" />
+      <inertia
+        ixx="0.017105"
+        ixy="1.4171E-06"
+        ixz="4.8617E-06"
+        iyy="0.017351"
+        iyz="7.8934E-05"
+        izz="0.028974" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/visual/base_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/collision/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="shoulder_link">
+    <inertial>
+      <origin
+        xyz="-0.00021386 -0.0076428 0.20907"
+        rpy="0 0 0" />
+      <mass
+        value="18.792" />
+      <inertia
+        ixx="0.12212"
+        ixy="-0.00030617"
+        ixz="3.1029E-05"
+        iyy="0.11671"
+        iyz="0.0010916"
+        izz="0.095491" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/visual/shoulder_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/collision/shoulder_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j1"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="shoulder_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.0543261"
+      upper="3.0543261"
+      effort="150"
+      velocity="3.15" />
+    <calibration
+      rising="0"
+      falling="0" />
+    <dynamics
+      damping="0"
+      friction="0" />
+    <safety_controller
+      soft_upper="0"
+      soft_lower="0"
+      k_position="0"
+      k_velocity="0" />
+  </joint>
+  <link
+    name="upperarm_link">
+    <inertial>
+      <origin
+        xyz="-0.43016 3.9014E-06 0.22655"
+        rpy="0 0 0" />
+      <mass
+        value="67.26" />
+      <inertia
+        ixx="0.27272"
+        ixy="3.7639E-05"
+        ixz="0.068523"
+        iyy="9.1998"
+        iyz="-8.5652E-06"
+        izz="9.1553" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/visual/upperarm_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/collision/upperarm_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j2"
+    type="revolute">
+    <origin
+      xyz="0 0 0.215"
+      rpy="1.5708 0 0" />
+    <parent
+      link="shoulder_link" />
+    <child
+      link="upperarm_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-4.6251225"
+      upper="1.4835298"
+      effort="150"
+      velocity="3.15" />
+    <calibration
+      rising="0"
+      falling="0" />
+    <dynamics
+      damping="0"
+      friction="0" />
+    <safety_controller
+      soft_upper="0"
+      soft_lower="0"
+      k_position="0"
+      k_velocity="0" />
+  </joint>
+  <link
+    name="forearm_link">
+    <inertial>
+      <origin
+        xyz="-0.5156 -1.3225E-07 0.02971"
+        rpy="0 0 0" />
+      <mass
+        value="9.0026" />
+      <inertia
+        ixx="0.028181"
+        ixy="-1.1549E-08"
+        ixz="-0.00098966"
+        iyy="0.12327"
+        iyz="6.6176E-08"
+        izz="0.11851" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/visual/forearm_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/collision/forearm_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j3"
+    type="revolute">
+    <origin
+      xyz="-1 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="upperarm_link" />
+    <child
+      link="forearm_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.8274333"
+      upper="2.8274333"
+      effort="150"
+      velocity="3.15" />
+    <calibration
+      rising="0"
+      falling="0" />
+    <dynamics
+      damping="0"
+      friction="0" />
+    <safety_controller
+      soft_upper="0"
+      soft_lower="0"
+      k_position="0"
+      k_velocity="0" />
+  </joint>
+  <link
+    name="wrist1_link">
+    <inertial>
+      <origin
+        xyz="4.4019E-08 0.0021848 0.15979"
+        rpy="0 0 0" />
+      <mass
+        value="4.7159" />
+      <inertia
+        ixx="0.012935"
+        ixy="7.3905E-08"
+        ixz="5.7154E-08"
+        iyy="0.008486"
+        iyz="3.1112E-06"
+        izz="0.012814" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/visual/wrist1_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/collision/wrist1_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j4"
+    type="revolute">
+    <origin
+      xyz="-0.716 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="forearm_link" />
+    <child
+      link="wrist1_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-4.6251225"
+      upper="1.4835298"
+      effort="28"
+      velocity="3.2" />
+    <calibration
+      rising="0"
+      falling="0" />
+    <dynamics
+      damping="0"
+      friction="0" />
+    <safety_controller
+      soft_upper="0"
+      soft_lower="0"
+      k_position="0"
+      k_velocity="0" />
+  </joint>
+  <link
+    name="wrist2_link">
+    <inertial>
+      <origin
+        xyz="-4.4023E-08 -0.0021848 0.13588"
+        rpy="0 0 0" />
+      <mass
+        value="4.7159" />
+      <inertia
+        ixx="0.012935"
+        ixy="7.3905E-08"
+        ixz="-5.7154E-08"
+        iyy="0.008486"
+        iyz="-3.1112E-06"
+        izz="0.012814" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/visual/wrist2_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/collision/wrist2_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j5"
+    type="revolute">
+    <origin
+      xyz="0 0 0.1619"
+      rpy="1.5708 0 0" />
+    <parent
+      link="wrist1_link" />
+    <child
+      link="wrist2_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.0543261"
+      upper="3.0543261"
+      effort="28"
+      velocity="3.2" />
+    <calibration
+      rising="0"
+      falling="0" />
+    <dynamics
+      damping="0"
+      friction="0" />
+    <safety_controller
+      soft_upper="0"
+      soft_lower="0"
+      k_position="0"
+      k_velocity="0" />
+  </joint>
+  <link
+    name="wrist3_link">
+    <inertial>
+      <origin
+        xyz="-0.0018186 -0.0017904 0.099524"
+        rpy="0 0 0" />
+      <mass
+        value="0.53534" />
+      <inertia
+        ixx="0.00063625"
+        ixy="1.1496E-06"
+        ixz="-5.8975E-06"
+        iyy="0.00063619"
+        iyz="-5.9517E-06"
+        izz="0.001123" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/visual/wrist3_link.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes/fr20/collision/wrist3_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="j6"
+    type="revolute">
+    <origin
+      xyz="0 0 0.138"
+      rpy="-1.5708 0 0" />
+    <parent
+      link="wrist2_link" />
+    <child
+      link="wrist3_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.0543261"
+      upper="3.0543261"
+      effort="28"
+      velocity="3.2" />
+    <calibration
+      rising="0"
+      falling="0" />
+    <dynamics
+      damping="0"
+      friction="0" />
+    <safety_controller
+      soft_upper="0"
+      soft_lower="0"
+      k_position="0"
+      k_velocity="0" />
+  </joint>
+  <joint
+    name="tool"
+    type="fixed">
+    <origin
+      xyz="0 0 0.107"
+      rpy="0 0 1.570796" />
+    <parent
+      link="wrist3_link" />
+    <child
+      link="gripper_Link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.0543"
+      upper="3.0543"
+      effort="28"
+      velocity="3.2" />
+    <calibration
+      rising="0"
+      falling="0" />
+    <dynamics
+      damping="0"
+      friction="0" />
+    <safety_controller
+      soft_upper="0"
+      soft_lower="0"
+      k_position="0"
+      k_velocity="0" />
+  </joint>
+  <!-- <link
+    name="gripper_Link">
+    <inertial>
+      <origin
+        xyz="5.8427E-06 7.5807E-05 0.079126"
+        rpy="0 0 0" />
+      <mass
+        value="0.52527" />
+      <inertia
+        ixx="0.00027801"
+        ixy="-3.5346E-07"
+        ixz="-1.7431E-07"
+        iyy="0.00027736"
+        iyz="-7.5888E-08"
+        izz="0.00041582" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../tool/gripper.dae" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../tool/gripper.STL" />
+      </geometry>
+    </collision>
+  </link> -->
+</robot>

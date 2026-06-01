@@ -1,0 +1,56 @@
+<div class="row no-margin" id="monitor">
+    <div class="boxbody-nohead-auto-height monitor-body no-border newScrollbar">
+        <div class="monitor-setting-box">
+            <div class="container-header">
+                <div class="child-container mr-5">
+                    <div class="item">
+                        <span ng-bind="'_var_setting_title' | translate"></span>
+                        <a class="monitor-ctrlbtn btn-monitor-style-chart" ng-click="setCharts()">
+                            <i class="fa fa-bar-chart"></i>
+                            <span ng-bind="'_chart' | translate"></span>
+                            <!-- <svg class="monitor-ctrlbtn" aria-hidden="true">
+                                <use href="#frtubiaoanniu"></use>
+                                <use href="#frtubiaoanniu" ng-show="show_zh"></use>
+                                <use href="#frtubiaoanniu-EN" ng-show="show_en"></use>
+                                <use href="#frjptubiao" ng-show="show_ja"></use>
+                            </svg> -->
+                        </a>
+                    </div>
+                    <div class="item item-content">
+                        <span class="detail-span newScrollbar" ng-bind="chartsSetting"></span>
+                    </div>
+                </div>
+                <div class="child-container">
+                    <div class="item">
+                        <span ng-bind="'_query_state_title' | translate"></span>
+                        <a class="monitor-ctrlbtn btn-monitor-style" ng-click="queryFunc()" ng-hide="queryState">
+                            <i class="fa fa-search"></i>
+                            <span ng-bind="'_start_query' | translate"></span>
+                            <!-- <svg class="monitor-ctrlbtn" aria-hidden="true">
+                                <use href="#frchaxunanniu"></use>
+                                <use href="#frchaxunanniu" ng-show="show_zh"></use>
+                                <use href="#frchaxunanniu-EN" ng-show="show_en"></use>
+                                <use href="#frjpchaxun" ng-show="show_ja"></use>
+                            </svg> -->
+                        </a>
+                        <a class="monitor-ctrlbtn btn-monitor-style" ng-show="queryState && querystopflag" ng-click="queryFunc()">
+                            <i class="fa fa-stop"></i>
+                            <span ng-bind="'_stop_query' | translate"></span>
+                        </a>
+                    </div>
+                    <a class="monitor-ctrlbtn btn-monitor-style" ng-show="!queryState && queryType" ng-click="downloadVarsDataFile()">
+                        <i class="fa fa-cloud-download"></i>
+                        <span ng-bind="'_download_query' | translate"></span>
+                    </a>
+                    <div class="item item-content">
+                        <span class="detail-span newScrollbar" ng-bind="'_no_query' | translate" ng-show="queryState == '0'"></span>
+                        <span class="detail-span newScrollbar" ng-bind="'_in_query' | translate" ng-show="queryState == '1'"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="container-body">
+                <div id="chart1" style="height: 100%;"></div>
+            </div>
+        </div>
+    </div>
+</div>

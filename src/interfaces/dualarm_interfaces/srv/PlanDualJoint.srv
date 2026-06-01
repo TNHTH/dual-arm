@@ -1,0 +1,16 @@
+sensor_msgs/JointState left_target_joints
+sensor_msgs/JointState right_target_joints
+string planner_id
+string coordination_mode
+string primary_arm
+string sync_policy
+---
+bool success
+string message
+uint32 scene_version
+builtin_interfaces/Time start_state_stamp
+string result_code
+string failure_stage
+trajectory_msgs/JointTrajectory left_joint_trajectory
+trajectory_msgs/JointTrajectory right_joint_trajectory
+float32 planning_time_ms
