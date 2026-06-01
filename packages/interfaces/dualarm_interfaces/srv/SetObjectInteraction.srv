@@ -1,0 +1,9 @@
+string object_id
+string interaction_mode
+string owner
+string primary_link
+string secondary_link
+bool enable
+---
+bool success
+string message

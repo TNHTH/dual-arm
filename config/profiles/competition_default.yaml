@@ -1,0 +1,83 @@
+# Unified default profile for dual-arm competition runtime.
+# Created: 2026-04-26
+
+schema_version: dual_arm_competition_profile_v1
+profile_name: competition_default
+
+paths:
+  packages_root: packages
+  config_root: config
+  object_geometry: config/competition/object_geometry.yaml
+  task_thresholds: config/competition/task_thresholds.yaml
+  workspace_profiles: config/competition/workspace_profiles.yaml
+  safety_limits: config/control/safety_limits.yaml
+
+ops:
+  console_api:
+    host: "127.0.0.1"
+    port: 18080
+    require_token_for_dangerous_api: true
+    allow_external_host: false
+    allow_hardware_bringup: false
+  console_web:
+    host: "127.0.0.1"
+    port: 18081
+
+robot:
+  start_hardware_default: false
+  left:
+    name: L
+    ip: "192.168.58.2"
+    port: 8080
+    base_xyz: [0.0, 0.35, 0.0]
+    base_rpy: [0.0, 0.0, 0.0]
+  right:
+    name: R
+    ip: "192.168.58.3"
+    port: 8080
+    base_xyz: [0.0, -0.35, 0.0]
+    base_rpy: [0.0, 0.0, 180.0]
+  state_query_interval_sec: 0.05
+
+gripper:
+  left:
+    port: auto
+    default_slave_id: 9
+  right:
+    port: auto
+    default_slave_id: 10
+  disable_on_shutdown: false
+
+perception:
+  detector:
+    executable: detector_pt_node.py
+    model_path_env: DUALARM_DETECTOR_MODEL_PATH
+    model_path: packages/perception/detector/models/yolov8/yolo_runs/final_dataset_v1/weights/best.pt
+    image_topic: /left_camera/color/image_raw
+    allowed_class_ids: [0, 1, 2, 3, 4, 5]
+  cameras:
+    start_camera_bridge_default: false
+    use_mock_camera_stream_default: false
+    left:
+      color_device: auto
+      depth_device: auto
+      enable_depth: true
+      fps: 5.0
+      rotate_180: true
+    right:
+      color_device: auto
+      depth_device: auto
+      enable_depth: false
+      fps: 5.0
+      rotate_180: false
+
+planning:
+  left_base_xyz: [0.0, 0.35, 0.0]
+  left_base_rpy: [0.0, 0.0, 0.0]
+  right_base_xyz: [0.0, -0.35, 0.0]
+  right_base_rpy: [0.0, 0.0, 180.0]
+
+tasks:
+  default_order: handover,pouring
+  allowed_tasks: [handover, pouring]
+  start_immediately_allowed_in_mock: true

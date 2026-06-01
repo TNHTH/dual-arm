@@ -1,0 +1,16 @@
+geometry_msgs/PoseStamped left_target_pose
+geometry_msgs/PoseStamped right_target_pose
+string planner_id
+string coordination_mode
+string primary_arm
+string sync_policy
+---
+bool success
+string message
+uint32 scene_version
+builtin_interfaces/Time start_state_stamp
+string result_code
+string failure_stage
+trajectory_msgs/JointTrajectory left_joint_trajectory
+trajectory_msgs/JointTrajectory right_joint_trajectory
+float32 planning_time_ms

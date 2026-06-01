@@ -1,0 +1,50 @@
+html,body {
+    margin: 0;
+    padding: 0;
+    height: -webkit-fill-available;
+    width: -webkit-fill-available;
+}
+
+.wrap {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.recover-item-container {
+    display: block;
+	display: inline-flex;
+    margin-top: 10%;
+    margin-left: 40%;
+}
+.recover-item-container > .container-body .child-header{
+    padding-left: 15px;
+    font-weight: 600;
+    font-size: 26px;
+}
+.recover-item-container > .container-body .child-title {
+    display: block;
+    margin: 8px 0 16px 0;
+	padding-top:20px;
+}
+
+.recoverbtn {
+    border-radius: 0;
+    -webkit-box-shadow: none;
+    box-shadow: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.recoverbtn-frblue {
+    background-color: #005e8c;
+    color: #ffffff;
+    width: 80px;
+    height: 32px;
+    margin-top: 5px; 
+    font-weight: bold;
+}
+.recoverbtn-frblue:hover{
+    background-color: #0076af;
+    color: #ffffff;
+}

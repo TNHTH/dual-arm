@@ -1,0 +1,19 @@
+<div class="row no-margin" id="frcap">
+    <div class="boxbody-nohead-auto-height box-body-left no-border">
+        <ul class="nav">
+            <li class="col-xs-12 col-sm-12 col-md-12 no-padding" ng-repeat="frcapItem in frcapNavList">
+                <a class="navItem navItem{{$index}}" ng-click="switchFRCaps($index, frcapItem.url)">
+                    <i ng-class="frcapItem.icon" aria-hidden="true"></i>
+                    <span class="navItem-span" ng-bind="frcapItem.name"></span>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="boxbody-nohead-auto-height box-body-right no-border newScrollbar no-padding">
+        <!-- 插件界面 -->
+        <div class="setting-item-container" ng-show="show_plugin">
+            <iframe class="plugin-iframe" ng-src="{{trustSrc(pluginUrl)}}" frameborder="0"></iframe>    <!-- 24.02.02修改:加入trustSrc处理 -->
+        </div>
+    </div>
+</div>
