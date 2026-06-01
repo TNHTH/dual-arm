@@ -1,0 +1,63 @@
+table:
+  length_m: 1.20
+  width_m: 0.80
+  height_m: 0.75
+  origin_mode: center
+  touch_pose_requirement:
+    tcp_definition: configured_robot_tcp
+    end_effector_orientation: vertical_down_same_pose
+    point_distribution: near_table_corners
+  rmse_thresholds_m:
+    pass: 0.002
+    warn: 0.005
+  touch_points:
+    left_arm:
+      front_left: null
+      front_right: null
+      back_left: null
+      back_right: null
+    right_arm:
+      front_left: null
+      front_right: null
+      back_left: null
+      back_right: null
+
+transforms:
+  # TF parent-child 固定为 quick_left_motion_base -> table_frame。
+  left_base_to_table:
+    parent_frame: quick_left_motion_base
+    child_frame: table_frame
+    xyz: [0.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 0.0]
+    calibrated: false
+    rmse_m: null
+    quality: uncalibrated
+  # TF parent-child 固定为 quick_right_motion_base -> table_frame。
+  right_base_to_table:
+    parent_frame: quick_right_motion_base
+    child_frame: table_frame
+    xyz: [0.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 0.0]
+    calibrated: false
+    rmse_m: null
+    quality: uncalibrated
+  table_to_corrected:
+    parent_frame: table_frame
+    child_frame: table_frame_corrected
+    xyz: [0.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 0.0]
+
+camera_extrinsics:
+  left_tcp_to_camera:
+    xyz: [0.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 0.0]
+    calibrated: false
+  right_tcp_to_camera:
+    xyz: [0.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 0.0]
+    calibrated: false
+
+manual_corrections:
+  left_arm_xyz_offset_m: [0.0, 0.0, 0.0]
+  right_arm_xyz_offset_m: [0.0, 0.0, 0.0]
+  primary_depth_xyz_offset_m: [0.0, 0.0, 0.0]

@@ -1,0 +1,71 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+ROBOT_NAME = "R"
+SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+
+
+def generate_launch_description():
+    robot_ip = LaunchConfiguration("robot_ip")
+    robot_port = LaunchConfiguration("robot_port")
+    robot_name = LaunchConfiguration("robot_name")
+    state_query_interval = LaunchConfiguration("state_query_interval")
+    motion_done_timeout_sec = LaunchConfiguration("motion_done_timeout_sec")
+    max_velocity_percent = LaunchConfiguration("max_velocity_percent")
+    max_acceleration_percent = LaunchConfiguration("max_acceleration_percent")
+    max_ovl_percent = LaunchConfiguration("max_ovl_percent")
+    start_high_level = LaunchConfiguration("start_high_level")
+
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("robot_ip", default_value="10.2.20.202", description="机器人控制器 IP"),
+            DeclareLaunchArgument("robot_port", default_value="8080", description="机器人控制器端口"),
+            DeclareLaunchArgument("robot_name", default_value=ROBOT_NAME, description="机器人名称"),
+            DeclareLaunchArgument(
+                "state_query_interval", default_value="0.01", description="机器人状态查询周期（秒）"
+            ),
+            DeclareLaunchArgument(
+                "motion_done_timeout_sec", default_value="60.0", description="等待运动完成的超时时间（秒）"
+            ),
+            DeclareLaunchArgument("max_velocity_percent", default_value="100.0", description="最大速度百分比"),
+            DeclareLaunchArgument("max_acceleration_percent", default_value="100.0", description="最大加速度百分比"),
+            DeclareLaunchArgument("max_ovl_percent", default_value="100.0", description="最大速度缩放百分比"),
+            DeclareLaunchArgument(
+                "start_high_level",
+                default_value="false",
+                description="是否启动旧 high_level_node（仅调试，不进入生产链）",
+            ),
+            Node(
+                package="robo_ctrl",
+                executable="robo_ctrl_node",
+                name=f"{ROBOT_NAME}_robo_ctrl",
+                additional_env={"LD_PRELOAD": SYSTEM_LIBSTDCXX},
+                parameters=[
+                    {
+                        "robot_ip": robot_ip,
+                        "robot_port": robot_port,
+                        "robot_name": robot_name,
+                        "state_query_interval": state_query_interval,
+                        "motion_done_timeout_sec": motion_done_timeout_sec,
+                        "max_velocity_percent": max_velocity_percent,
+                        "max_acceleration_percent": max_acceleration_percent,
+                        "max_ovl_percent": max_ovl_percent,
+                    }
+                ],
+                output="screen",
+            ),
+            Node(
+                package="robo_ctrl",
+                executable="high_level_node",
+                name=f"{ROBOT_NAME}_high_level",
+                additional_env={"LD_PRELOAD": SYSTEM_LIBSTDCXX},
+                parameters=[{"robot_name": robot_name}],
+                condition=IfCondition(start_high_level),
+                output="screen",
+            ),
+        ]
+    )

@@ -1,0 +1,68 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+from pathlib import Path
+
+
+SYSTEM_LIBSTDCXX = "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+
+
+def _find_repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in [current.parent, *current.parents]:
+        if (parent / "STATE.md").exists() and (parent / "packages").is_dir():
+            return parent
+    return Path.cwd()
+
+
+def generate_launch_description():
+    default_object_geometry_file = str(_find_repo_root() / "config" / "competition" / "object_geometry.yaml")
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("camera_info_topic", default_value="/camera/depth/camera_info"),
+            DeclareLaunchArgument("depth_topic", default_value="/camera/depth/image_raw"),
+            DeclareLaunchArgument("detection_topic", default_value="/perception/detection_2d"),
+            DeclareLaunchArgument("object_geometry_file", default_value=default_object_geometry_file),
+            DeclareLaunchArgument("bbox3d_topic", default_value="/depth_handler/bbox3d"),
+            DeclareLaunchArgument("pointcloud_topic", default_value="/depth_handler/pointcloud"),
+            DeclareLaunchArgument("visualization_topic", default_value="/depth_handler/visualization"),
+            DeclareLaunchArgument("scene_objects_topic", default_value="/perception/scene_objects"),
+            DeclareLaunchArgument("table_scene_topic", default_value="/perception/table_scene_objects"),
+            DeclareLaunchArgument("target_frame", default_value="world"),
+            DeclareLaunchArgument("source_name", default_value="depth_handler"),
+            DeclareLaunchArgument("node_name", default_value="depth_processor_node"),
+            DeclareLaunchArgument("enable_visualization", default_value="true"),
+            DeclareLaunchArgument("enable_pointcloud", default_value="true"),
+            DeclareLaunchArgument("require_depth_aligned_detections", default_value="true"),
+            DeclareLaunchArgument("require_camera_info_depth_frame", default_value="true"),
+            DeclareLaunchArgument("expected_detection_frame", default_value=""),
+            Node(
+                package="depth_handler",
+                executable="depth_processor_node",
+                name=LaunchConfiguration("node_name"),
+                output="screen",
+                additional_env={"LD_PRELOAD": SYSTEM_LIBSTDCXX},
+                parameters=[
+                    {
+                        "camera_info_topic": LaunchConfiguration("camera_info_topic"),
+                        "depth_topic": LaunchConfiguration("depth_topic"),
+                        "detection_topic": LaunchConfiguration("detection_topic"),
+                        "object_geometry_file": LaunchConfiguration("object_geometry_file"),
+                        "bbox3d_topic": LaunchConfiguration("bbox3d_topic"),
+                        "scene_objects_topic": LaunchConfiguration("scene_objects_topic"),
+                        "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
+                        "visualization_topic": LaunchConfiguration("visualization_topic"),
+                        "table_scene_topic": LaunchConfiguration("table_scene_topic"),
+                        "target_frame": LaunchConfiguration("target_frame"),
+                        "source_name": LaunchConfiguration("source_name"),
+                        "enable_visualization": LaunchConfiguration("enable_visualization"),
+                        "enable_pointcloud": LaunchConfiguration("enable_pointcloud"),
+                        "require_depth_aligned_detections": LaunchConfiguration("require_depth_aligned_detections"),
+                        "require_camera_info_depth_frame": LaunchConfiguration("require_camera_info_depth_frame"),
+                        "expected_detection_frame": LaunchConfiguration("expected_detection_frame"),
+                    }
+                ],
+            ),
+        ]
+    )

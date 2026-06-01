@@ -1,0 +1,48 @@
+schema_version: competition_handover_v1
+updated_at: "2026-05-08"
+
+runtime_authority:
+  planning: /planning/plan_pose
+  execution:
+    - /execution/execute_trajectory
+    - /execution/execute_primitive
+    - /execution/set_gripper
+
+sequence:
+  - detect_ball
+  - verify_human_static_window
+  - move_to_pre_cage
+  - open_grippers
+  - cage_ball
+  - wait_human_release
+  - lift_and_hold_3s
+  - move_to_basket_pre_drop
+  - release_before_contact
+  - retreat
+
+ball_cage:
+  ball_radius_m: 0.06
+  pre_cage_offset_y_m: 0.10
+  cage_spacing_m: 0.13
+  lift_height_m: 0.08
+  hold_sec: 3.2
+  basket_release_height_m: 0.10
+  release_height_above_basket_m: 0.10
+  min_release_height_above_basket_m: 0.08
+  max_release_height_above_basket_m: 0.20
+  retreat_distance_m: 0.08
+
+handover_gate:
+  hold_duration_after_cage_s: 3.2
+  confirm_grasp_by: timer
+  wait_for_human_release_s: 0.5
+  stable_frames: 5
+  max_position_std_m: 0.02
+  wait_for_stable_timeout_s: 8.0
+
+evidence_required:
+  - checkpoint
+  - perception_timestamp
+  - planning_result
+  - execution_result
+  - release_before_contact_result

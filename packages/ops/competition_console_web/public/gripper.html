@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DualArm 夹爪控制</title>
+    <style>
+      :root {
+        font-family: "Noto Sans SC", "IBM Plex Sans", system-ui, sans-serif;
+        color: #172126;
+        background: #eef2f3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #eef2f3, #e4ded2);
+      }
+      main {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-start;
+        padding: 22px 24px;
+        border-radius: 8px;
+        background: #ffffffd9;
+        border: 1px solid rgba(23, 33, 38, 0.08);
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 28px;
+      }
+      header p {
+        margin-top: 8px;
+        color: #52606a;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 92px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #d9e8e2;
+        color: #13583e;
+        font-weight: 700;
+      }
+      .status-pill.warn {
+        background: #f2d8ce;
+        color: #8d321b;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(300px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .panel {
+        padding: 20px;
+        border-radius: 8px;
+        background: #ffffffd9;
+        border: 1px solid rgba(23, 33, 38, 0.08);
+      }
+      .panel-wide {
+        grid-column: 1 / -1;
+      }
+      .panel h2 {
+        font-size: 20px;
+      }
+      .panel p {
+        margin-top: 8px;
+        color: #52606a;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(140px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 14px;
+        color: #35434b;
+      }
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid rgba(23, 33, 38, 0.18);
+        border-radius: 8px;
+        font: inherit;
+        background: #fff;
+      }
+      .button-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 14px;
+        background: #1f343d;
+        color: #fff8ea;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #50636d;
+      }
+      button.danger {
+        background: #9d3b23;
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      pre {
+        margin: 16px 0 0;
+        padding: 14px;
+        min-height: 180px;
+        overflow: auto;
+        border-radius: 8px;
+        background: #162126;
+        color: #edf6f8;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .status-card {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 8px;
+        background: #f6f2e9;
+      }
+      .metric {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .metric strong {
+        color: #172126;
+      }
+      @media (max-width: 860px) {
+        header,
+        .grid,
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+        header {
+          display: grid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>DualArm 左右夹爪控制</h1>
+          <p>按钮通过 competition_console_api 调用 ROS `/execution/set_gripper`，不会发送机械臂运动命令。</p>
+        </div>
+        <span id="api-state" class="status-pill warn">api unknown</span>
+      </header>
+
+      <section class="grid">
+        <article class="panel panel-wide">
+          <h2>连接与参数</h2>
+          <p>默认通过同源 `/api` 请求；如果 API 配置了 token，请填写后再操作。</p>
+          <div class="form-grid">
+            <label>
+              API Base
+              <input id="api-base" value="" placeholder="留空表示当前网页同源" />
+            </label>
+            <label>
+              API Token
+              <input id="api-token" type="password" placeholder="可选" />
+            </label>
+            <label>
+              速度
+              <input id="speed" type="number" min="1" max="160" value="20" />
+            </label>
+            <label>
+              力矩
+              <input id="torque" type="number" min="1" max="160" value="80" />
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>
+              打开位置
+              <input id="open-position" type="number" min="0" max="255" value="0" />
+            </label>
+            <label>
+              闭合位置
+              <input id="close-position" type="number" min="0" max="255" value="220" />
+            </label>
+            <label>
+              自定义位置
+              <input id="custom-position" type="number" min="0" max="255" value="120" />
+            </label>
+            <label>
+              操作确认
+              <input id="confirm-text" value="" placeholder="输入 ARM 确认启用按钮" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button type="button" class="secondary" onclick="refreshAll()">刷新状态</button>
+            <button type="button" class="secondary" onclick="saveSettings()">保存本页设置</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <h2>左夹爪 `/gripper0`</h2>
+          <p>slave id 9；打开位置通常为 0。</p>
+          <div id="left-status" class="status-card"></div>
+          <div class="button-grid">
+            <button type="button" data-action onclick="sendCommand('left_arm', 'enable')">左夹爪使能</button>
+            <button type="button" data-action onclick="sendCommand('left_arm', 'open')">左夹爪打开</button>
+            <button type="button" data-action class="danger" onclick="sendCommand('left_arm', 'close')">左夹爪闭合</button>
+            <button type="button" data-action onclick="sendCommand('left_arm', 'custom')">左夹爪自定义</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <h2>右夹爪 `/gripper1`</h2>
+          <p>slave id 10；打开位置通常为 0。</p>
+          <div id="right-status" class="status-card"></div>
+          <div class="button-grid">
+            <button type="button" data-action onclick="sendCommand('right_arm', 'enable')">右夹爪使能</button>
+            <button type="button" data-action onclick="sendCommand('right_arm', 'open')">右夹爪打开</button>
+            <button type="button" data-action class="danger" onclick="sendCommand('right_arm', 'close')">右夹爪闭合</button>
+            <button type="button" data-action onclick="sendCommand('right_arm', 'custom')">右夹爪自定义</button>
+          </div>
+        </article>
+
+        <article class="panel panel-wide">
+          <h2>双夹爪快捷操作</h2>
+          <p>会顺序调用左、右两侧接口。闭合前确认夹爪内没有手、线缆或非目标物。</p>
+          <div class="button-row">
+            <button type="button" data-action onclick="sendBoth('enable')">左右使能</button>
+            <button type="button" data-action onclick="sendBoth('open')">左右打开</button>
+            <button type="button" data-action class="danger" onclick="sendBoth('close')">左右闭合</button>
+          </div>
+          <pre id="log">等待操作...</pre>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const storageKey = "dualArmGripperPageSettings";
+
+      function value(id) {
+        return document.getElementById(id).value.trim();
+      }
+
+      function numberValue(id, fallback) {
+        const parsed = Number(value(id));
+        return Number.isFinite(parsed) ? parsed : fallback;
+      }
+
+      function apiPath(path) {
+        const base = value("api-base").replace(/\/$/, "");
+        return `${base}${path}`;
+      }
+
+      function headers() {
+        const token = value("api-token");
+        const result = { "Content-Type": "application/json" };
+        if (token) {
+          result["X-Dual-Arm-Token"] = token;
+        }
+        return result;
+      }
+
+      function setLog(payload) {
+        document.getElementById("log").textContent =
+          typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      }
+
+      function commandBody(arm, action) {
+        const positionByAction = {
+          open: numberValue("open-position", 0),
+          close: numberValue("close-position", 220),
+          custom: numberValue("custom-position", 120),
+        };
+        return {
+          arm,
+          action,
+          position: positionByAction[action] ?? numberValue("custom-position", 120),
+          speed: numberValue("speed", 20),
+          torque: numberValue("torque", 80),
+        };
+      }
+
+      function updateButtons() {
+        const enabled = value("confirm-text") === "ARM";
+        for (const button of document.querySelectorAll("[data-action]")) {
+          button.disabled = !enabled;
+        }
+      }
+
+      async function requestJson(path, options = {}) {
+        const response = await fetch(apiPath(path), {
+          ...options,
+          headers: {
+            ...headers(),
+            ...(options.headers ?? {}),
+          },
+        });
+        const payload = await response.json().catch(() => ({ error: "invalid_json_response" }));
+        if (!response.ok) {
+          throw { status: response.status, payload };
+        }
+        return payload;
+      }
+
+      async function refreshHealth() {
+        try {
+          const health = await requestJson("/api/health");
+          const pill = document.getElementById("api-state");
+          pill.textContent = `api ${health.status ?? "ok"}`;
+          pill.classList.remove("warn");
+        } catch (error) {
+          const pill = document.getElementById("api-state");
+          pill.textContent = "api offline";
+          pill.classList.add("warn");
+        }
+      }
+
+      function renderStatus(elementId, status) {
+        const lines = [
+          ["ready", status?.success ? "yes" : "no"],
+          ["position", status?.position ?? "--"],
+          ["gobj", status?.gobj ?? "--"],
+          ["object", status?.object_status ?? "--"],
+          ["error", status?.error ?? "--"],
+          ["state", status?.interpreted_state ?? "--"],
+          ["time", status?.captured_at ?? "--"],
+        ];
+        document.getElementById(elementId).innerHTML = lines
+          .map(([label, content]) => `<div class="metric"><span>${label}</span><strong>${content}</strong></div>`)
+          .join("");
+      }
+
+      async function refreshAll() {
+        await refreshHealth();
+        try {
+          const payload = await requestJson("/api/control/gripper/status");
+          renderStatus("left-status", payload.left_arm);
+          renderStatus("right-status", payload.right_arm);
+          setLog(payload);
+        } catch (error) {
+          setLog(error);
+        }
+      }
+
+      async function sendCommand(arm, action) {
+        const body = commandBody(arm, action);
+        setLog({ sending: body });
+        try {
+          const payload = await requestJson("/api/control/gripper", {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          setLog({ request: body, response: payload });
+          await refreshAll();
+        } catch (error) {
+          setLog({ request: body, error });
+        }
+      }
+
+      async function sendBoth(action) {
+        const results = [];
+        for (const arm of ["left_arm", "right_arm"]) {
+          const body = commandBody(arm, action);
+          try {
+            const response = await requestJson("/api/control/gripper", {
+              method: "POST",
+              body: JSON.stringify(body),
+            });
+            results.push({ request: body, response });
+          } catch (error) {
+            results.push({ request: body, error });
+            break;
+          }
+        }
+        setLog(results);
+        await refreshAll();
+      }
+
+      function saveSettings() {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            apiBase: value("api-base"),
+            token: value("api-token"),
+            speed: value("speed"),
+            torque: value("torque"),
+            openPosition: value("open-position"),
+            closePosition: value("close-position"),
+            customPosition: value("custom-position"),
+          }),
+        );
+        setLog("本页设置已保存到浏览器 localStorage。");
+      }
+
+      function restoreSettings() {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) {
+          return;
+        }
+        try {
+          const settings = JSON.parse(raw);
+          document.getElementById("api-base").value = settings.apiBase ?? "";
+          document.getElementById("api-token").value = settings.token ?? "";
+          document.getElementById("speed").value = settings.speed ?? "20";
+          document.getElementById("torque").value = settings.torque ?? "80";
+          document.getElementById("open-position").value = settings.openPosition ?? "0";
+          document.getElementById("close-position").value = settings.closePosition ?? "220";
+          document.getElementById("custom-position").value = settings.customPosition ?? "120";
+        } catch {
+          localStorage.removeItem(storageKey);
+        }
+      }
+
+      document.getElementById("confirm-text").addEventListener("input", updateButtons);
+      restoreSettings();
+      updateButtons();
+      void refreshAll();
+      window.setInterval(() => void refreshAll(), 3000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+global:
+  vel: 10
+  acc: 10
+  cartesian_vel: 5
+  cartesian_acc: 5
+  blend: 0
+
+timeouts:
+  action_timeout_s: 15.0
+  bimanual_sync_timeout_s: 20.0
+  max_stop_timeout_s: 3.0
+
+move_policy:
+  large_motion: movej
+  final_approach: movel_short
+  final_approach_distance_m: 0.04
+  max_movecart_distance_m: 0.05
+  lift_distance_m: 0.08
+  z_max_safe_limit_m: 0.80
+  z_min_safe_limit_m: 0.00
+  min_tcp_distance_between_arms_m: 0.08
+
+safety_workspace:
+  table_frame:
+    x_min: -0.70
+    x_max: 0.70
+    y_min: -0.50
+    y_max: 0.50
+    z_min: 0.00
+    z_max: 0.80
+
+fallback:
+  cartesian_fail_try_joint: true
+  relax_orientation_on_fail: true
+  raise_pregrasp_z_on_fail_m: 0.05
+  max_retries: 2
+  allow_auto_release_payloads: [EMPTY_GRIPPER, BALL]
+  liquid_payload_strategy: hold_gripper_alarm
