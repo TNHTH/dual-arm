@@ -1,0 +1,21 @@
+<svg id="图层_13" data-name="图层 13" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40.31 35.69">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #4dc1eb;
+      }
+
+      .cls-2 {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <title>00806</title>
+  <g>
+    <polygon class="cls-1" points="0 22.56 20.16 0 40.31 22.56 30.56 22.56 29.19 35.69 11.12 35.69 9.75 22.56 0 22.56"/>
+    <g>
+      <path class="cls-2" d="M152.26,234.45l4.16-5.63h-3.78v-.64h4.85v.45l-4.14,5.63h4.18v.64h-5.27Z" transform="translate(-136.52 -212.32)"/>
+      <path class="cls-2" d="M160.58,231.81h-2.14v-.56h2.14v-2h.7v2h2.14v.56h-2.14v2h-.7Z" transform="translate(-136.52 -212.32)"/>
+    </g>
+  </g>
+</svg>

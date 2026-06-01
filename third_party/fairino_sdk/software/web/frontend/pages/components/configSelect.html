@@ -1,0 +1,27 @@
+<div>
+    <span class="d-block w-full">{{$ctrl.label}} {{$ctrl.unit != undefined ? '(' + $ctrl.unit + ')' : ''}}</span>
+    <select
+        ng-show="optionsKey == 0"
+        class="d-block {{$ctrl.styles}}"
+        ng-change="$ctrl.changeToggle($ctrl.val)"
+        ng-model="$ctrl.val"
+        ng-options="a as a.name for a in $ctrl.options"
+        ng-disabled="$ctrl.disable"
+    ></select>
+    <select
+        ng-show="optionsKey == 1"
+        class="d-block {{$ctrl.styles}}"
+        ng-change="$ctrl.changeToggle($ctrl.val)"
+        ng-model="$ctrl.val"
+        ng-options="a as a.id for a in $ctrl.options"
+        ng-disabled="$ctrl.disable"
+    ></select>
+    <select
+        ng-show="optionsKey == 2"
+        class="d-block {{$ctrl.styles}}"
+        ng-change="$ctrl.changeToggle($ctrl.val)"
+        ng-model="$ctrl.val"
+        ng-options="a as a for a in $ctrl.options"
+        ng-disabled="$ctrl.disable"
+    ></select>
+</div>
