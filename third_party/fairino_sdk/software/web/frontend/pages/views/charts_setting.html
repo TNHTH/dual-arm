@@ -1,0 +1,68 @@
+    <div class="modal-header system-account-header">
+        <span id="importModalLabel" ng-bind="'_chart_title' | translate"></span>
+        <a class="file-operation-close" ng-click="cancel()"><span aria-hidden="true">&times;</span></a>
+    </div>
+    <div id="modal-body" class="modal-body">
+        <div class="query-type-box">
+            <select name="queryTypeSelection" id="QTS" 
+                    ng-model="queryTypeSelected" 
+                    ng-options="a as a.name for a in queryTypeDict"
+                    ng-change="changeQueryType(queryTypeSelected)">
+                    <option id="placeholder" value="" disabled selected ng-bind="'_select_query_type' | translate">
+                    </option>
+            </select>
+        </div>
+        <div id="setting-box" class="row no-margin">
+            <!-- 参数选择区 -->
+            <div class="var-data-box newScrollbar">
+                <ul class="vartype-list no-padding">
+                    <li ng-repeat="item in currentVarList.varlist" >
+                        <a class="vartype" ng-click="clickVarList($index)">
+                            <span ng-bind="item.typename"></span>
+                        </a>
+                        <ul id="vars{{$index}}" class="varitem-list no-padding" style="display: none;">
+                            <li ng-repeat="element in item.vardata">
+                                <a class="{{element.varindex}} varitem" ng-click="selectVar(element)">
+                                    <span ng-bind="element.varname"></span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+            <!-- 中间操作区 -->
+            <div class="var-operation-box">
+                <a class="btn-ChartsSetting" ng-click="setVar2Chart()">
+                    <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                </a>
+                <a class="btn-ChartsSetting" ng-click="delectVarInChart()">
+                    <i class="fa fa-trash" aria-hidden="true"></i>
+                </a>
+                <a class="btn-ChartsSetting" ng-click="clearAll()">
+                    <i class="fa fa-close" aria-hidden="true"></i>
+                </a>
+            </div>
+            <!-- 图表选择区 -->
+            <div class="var-data-box newScrollbar">
+                <ul class="vartype-list no-padding">
+                    <li ng-repeat="containerItem in varsContainer">
+                        <a class="vartype {{containerItem.name}} containeritem" ng-click="selectChart(containerItem)">
+                            <span ng-bind="containerItem.name"></span>
+                        </a>
+                        <ul class="chart-varitem-list no-padding">
+                            <li ng-repeat="varItem in containerItem.vars">
+                                <a class="chartVar{{$index}} chart-varitem"  ng-click="selectChartVar($index)">
+                                    <span ng-bind="varItem.varname"></span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    
+    </div>
+    <div class="modal-footer">
+        <a class="btn btn-frgrey" ng-click="cancel()" ng-bind="'_cancel' | translate"></a>
+        <a class="btn btn-frblue" id="btn_setchart" ng-click="setCharts()" ng-bind="'_set' | translate"></a>
+    </div>

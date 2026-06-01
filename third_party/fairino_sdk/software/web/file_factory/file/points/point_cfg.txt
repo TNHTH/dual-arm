@@ -1,0 +1,6 @@
+{
+	"name":	"test",
+	"number":	10,
+	"laser":	0,
+                "flag": 0
+}

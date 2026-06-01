@@ -1,0 +1,697 @@
+<div class="row no-margin" id="weldguide">
+  <div class="boxbody-nohead-auto-height box-body-left no-border newScrollbar">
+      <ul class="nav sidebar-menu setting-menu">
+          <li class="col-xs-12 col-sm-12 col-md-12 no-padding treeview" ng-repeat="weldItem in weldguideNavList">
+              <a class="navItem navItem{{weldItem.id}}" ng-click="switchWeldPage(weldItem.id)">
+                  <i ng-class="weldItem.icon" aria-hidden="true"></i>
+                  <span class="navItem-span" ng-bind="weldItem.name" ></span>
+                  <div ng-show="weldItem.children.length>0" class="pull-right-container pull-right-custom">
+                      <i class="fa fa-angle-left pull-right"></i>
+                  </div>
+              </a>
+              <ul class="weld-menu navChildItem treeview-menu" ng-show="weldItem.children.length>0" style="display: none;">
+                <li ng-repeat="childrenItem in weldItem.children">
+                  <a class="childrenItem childrenItem{{childrenItem.id}}" ng-click="switchWeldPage(childrenItem.id)">
+                    <div ng-bind="childrenItem.name" class="childrenItem-span"></div>
+                  </a>
+                </li>
+              </ul>
+          </li>
+      </ul>
+  </div>  
+  <div class="boxbody-nohead-auto-height box-body-right no-border newScrollbar">        
+    <!-- 直焊缝 -->
+    <div class="setting-item-container" ng-show="show_line_seam">
+      <div class="container-header">
+        <label ng-bind="'_line_seam' | translate"></label>
+      </div>
+      <hr class="box-divider">
+      <img id="lineseam">
+      <div class="container-body">
+        <div ng-show="show_lineseam_set1">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_exaxis_tips' | translate"></span>           
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="eaxisset(0)" ng-bind="'_no' | translate"></a>
+            <a class="btn btn-frblue" ng-click="eaxisset(1)" ng-bind="'_yes' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_lineseam_set2">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_point_tips' | translate"></span>           
+          </div>
+          <div ng-show="show_eaxis_set">
+            <div class="setting-item oneline" style="margin-top: 0px;">
+              <span class="ip-span" ng-bind="'_externa_axis_id' | translate"></span>
+              <select class="ip-select" ng-model="selectedWEAxisTestID"  ng-options="a as a.id for a in WExternaAxisIdData"></select>    
+            </div>
+            <div class="setting-item oneline" style="margin-top: 0px;">
+                <span class="ip-span" ng-bind="'_externa_axis_speed' | translate"></span>
+                <input class="ip-input" type="text" ng-model="WEAxisSpeed" oninput="limitInput_int(this);" min="0" max="100">
+                <span>%</span>
+            </div>
+            <div class="setting-item oneline" style="margin-top: 0px;">
+                <span class="ip-span" ng-bind="'_externa_axis_acc_speed' | translate"></span>
+                <input class="ip-input" type="text" ng-model="WEAxisacc" oninput="limitInput_int(this);" min="0" max="100">
+                <span>%</span>
+            </div>
+            <div class="setting-item oneline" style="margin-top: 0px;">
+                <span class="ip-span" ng-bind="'_max_distance' | translate"></span>
+                <input class="ip-input" type="text" ng-model="WEAxisDistance" oninput="limitInput_float(this);" min="0" max="1000">
+                <span>mm</span>
+            </div>
+            <div class="btns-box">
+                <a class="btn btn-frgrey" ng-click="wstopEAxisJog()" ng-bind="'_externa_axis_stop' | translate"></a>
+                <a class="btn btn-frgreen" ng-click="wstartEAxisJog(0)" ng-bind="'_externa_axis_start_reverse' | translate"></a>
+                <a class="btn btn-frblue" ng-click="wstartEAxisJog(1)" ng-bind="'_externa_axis_start_foward' | translate"></a>
+            </div>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="linestartpoint()" ng-bind="'_start_set' | translate"></a>
+            <a class="btn btn-frblue" ng-click="linestarttransitpoint()" ng-bind="'_start_transit_set' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="lineendpoint()" ng-bind="'_end_set' | translate"></a>
+            <a class="btn btn-frblue" ng-click="lineendtransitpoint()" ng-bind="'_end_transit_set' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="lineseamset(1)" ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="nextLTEAxis(3)" ng-bind="'_yes' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_lineseam_set3">
+          <div class="setting-item oneline">              
+            <span class="warning-info" ng-bind="'_laser_tips' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">
+            <span class="ip-span" ng-bind="'_coord_name' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedToolCoorde" ng-options="a as a.name for a in proSensorCoordeData"></select>
+          </div>
+          <div class="setting-item oneline">
+            <span class="ip-span" ng-bind="'_search_dist' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSerachDist" ng-options="a as a.name for a in SerachDistData"></select>
+          </div>
+          <div class="setting-item oneline" ng-show="selectedSerachDist.num == '6'">
+            <span class="ip-span" ng-bind="'_laser_search_dist_point' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSearchDistPoint" ng-options="a as a.name for a in pointsData"></select>
+          </div>
+          <div class="setting-item oneline">
+            <span class="ip-span" ng-bind="'_search_speed' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="tserachSpeed" oninput="limitInput_int(this);" min="0" max="100">
+            <span>%</span>
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_search_length' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="tsearchLen" oninput="limitInput_int(this);" min="0" max="1000">
+            <span>mm</span>                      
+          </div>
+          <div class="setting-item oneline">                        
+            <span class="ip-span" ng-bind="'_search_time' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="tsearchTime" oninput="limitInput_int(this);" min="0" max="10000">
+            <span>ms</span>                        
+          </div>
+          <div class="btns-box oneline">
+            <a class="btn btn-frblue" ng-click="lineseamset(1)" ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frgrey" ng-click="lineseamset(4)" ng-bind="'_no' | translate"></a>
+            <a class="btn btn-frblue" ng-click="lineseamLT(4)" ng-bind="'_yes' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_lineseam_set4">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_weave_tips' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">
+            <span class="ip-span" ng-bind="'_weave_id' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetWeave" ng-change="weaveTypeChange()" ng-options="a as a.id for a in WeavecfgData"></select>
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_weave_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetWeaveType" ng-options="a as a.name for a in WeaveTypeData"></select>                
+          </div> 
+          <div class="setting-item oneline">
+            <span class="ip-span" ng-bind="'_weave_frequency' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.freq" oninput="limitInput_float(this);" min="0" max="10">
+            <span>Hz</span>
+          </div>
+          <div class="setting-item oneline">
+            <span class="ip-span" ng-bind="'_weave_stay_time' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedWeaveWaitTime" ng-options="a as a.name for a in weaveWaitTimeData"></select>
+          </div>
+          <div class="setting-item oneline">
+            <span class="ip-span" ng-bind="'_weave_loaction_wait' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedWeaveLocationWait" ng-options="a as a.name for a in weaveLocationWaitData"></select>
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_weave_range' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.range" oninput="limitInput_float(this);" min="0" max="20">
+            <span>mm</span>                      
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_weave_left' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.leftrange" oninput="limitInput_float(this);" min="0" max="20">
+            <span>mm</span>                      
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_weave_right' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.rightrange" oninput="limitInput_float(this);" min="0" max="20">
+            <span>mm</span>                      
+          </div>
+          <div class="setting-item oneline">                        
+            <span class="ip-span" ng-bind="'_weave_dwell_time' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.origintime" oninput="limitInput_int(this);" min="0" max="2000">
+            <span>ms</span>                        
+          </div>
+          <div class="setting-item oneline">                        
+            <span class="ip-span" ng-bind="'_weave_left_dwell_time' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.ltime" oninput="limitInput_int(this);" min="0" max="2000">
+            <span>ms</span>                        
+          </div>
+          <div class="setting-item oneline">                         
+            <span class="ip-span" ng-bind="'_weave_right_dwell_time' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.rtime" oninput="limitInput_int(this);" min="0" max="2000">
+            <span>ms</span>                        
+          </div>
+          <div class="setting-item oneline">                         
+            <span class="ip-span" ng-bind="'_weave_direction_angle' | translate" style="width: 120px;"></span>
+            <input class="ip-input" type="text" ng-model="selectedSetWeave.yawangle" oninput="limitInput_int(this);" min="-180" max="180">
+            <span>°</span>                        
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="lineseamset(1)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frgrey" ng-click="noLTandWeave()" ng-bind="'_no' | translate"></a>
+            <a class="btn btn-frblue" ng-click="weaveSetPara()" ng-bind="'_yes' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_lineseam_set5">
+          <span class="warning-info" style="word-wrap: break-word;display: block;" ng-bind="'_weld_complete_tips' | translate"></span>           
+          <div class="general-item ">
+            <span ng-bind="'_weld_file_name' | translate"></span>
+            <input type="text" id="lineseamName" oninput="limitInput_special(this);">  
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="lineseamset(1)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue"  ng-click="checkWeldLuaSameName('lineseamName')" ng-bind="'_save' | translate"></a>
+          </div>
+        </div>                          
+      </div>
+      <hr class="box-divider ">
+      <div class="container-body">
+        <span class="child-title" ng-bind="'_process_parameters' | translate"></span>
+        <div class="setting-item oneline">
+          <span class="ip-span" ng-bind="'_weld_voltage' | translate"></span>
+          <input class="ip-input" type="text" ng-model="weldVoltage" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_welder_voltage[0]}}" max="{{robotParamsRangeData.welding_library_welder_voltage[1]}}">
+          <span>V</span>  
+        </div>
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_weld_electric' | translate"></span>
+          <input class="ip-input" type="text" ng-model="weldElectric" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_welder_current[0]}}" max="{{robotParamsRangeData.welding_library_welder_current[1]}}">    
+          <span>A</span>            
+        </div> 
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_overall_speed' | translate"></span>
+          <input class="ip-input" type="text" ng-model="modeSpeed" ng-change="calculatWeldLineSpeed()" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_global_speed[0]}}" max="{{robotParamsRangeData.welding_library_global_speed[1]}}">   
+          <span>%</span>             
+        </div>
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_point_speed' | translate"></span>
+          <input class="ip-input" type="text" ng-model="linepointSpeed" ng-change="calculatWeldLineSpeed()" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_point_speed[0]}}" max="{{robotParamsRangeData.welding_library_point_speed[1]}}">   
+          <span>%</span>             
+        </div>
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_debug_speed' | translate" ></span>
+          <input class="ip-input" type="text" ng-model="debugSpeed" ng-change="calculatWeldLineSpeed()" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_debug_speed[0]}}" max="{{robotParamsRangeData.welding_library_debug_speed[1]}}">              
+          <span>%</span>  
+        </div>
+        <div class="general-item">              
+          <span ng-bind="'_weld_speed' | translate"></span>
+          <span ng-bind="weldguideSpeed"></span>   
+          <span>cm/min</span>          
+        </div> 
+        <div class="right-btn">
+          <a class="btn btn-frblue" ng-click="applyLineSeamSpeed()" ng-bind="'_apply' | translate"></a>
+        </div>
+      </div> 
+    </div> 
+    <!-- 圆弧焊缝 -->
+    <div class="setting-item-container" ng-show="show_arc_seam">
+      <div class="container-header">
+        <label ng-bind="'_arc_seam' | translate"></label>
+      </div>
+      <hr class="box-divider">
+      <img id="arcseam">
+      <div class="container-body" >
+        <div ng-show="show_arcseam_set1">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_point_tips' | translate"></span>           
+          </div>           
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="arcstartpoint()" ng-bind="'_start_set' | translate"></a>
+            <a class="btn btn-frblue" ng-click="arcstarttransitpoint()" ng-bind="'_start_transit_set' | translate"></a>
+            <a class="btn btn-frblue" ng-click="arcbetweenpoint()" ng-bind="'_arc_set' | translate"></a>
+          </div>                
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="arcendpoint()" ng-bind="'_end_set' | translate"></a>
+            <a class="btn btn-frblue" ng-click="arcendtransitpoint()" ng-bind="'_end_transit_set' | translate"></a>
+          </div>           
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="nextsavefile()" ng-bind="'_yes' | translate"></a>
+          </div>     
+        </div>  
+        <div ng-show="show_arcseam_set2">
+          <span class="warning-info" style="word-wrap: break-word;display: block;" ng-bind="'_weld_complete_tips' | translate"></span>           
+          <div class="general-item ">
+            <span ng-bind="'_weld_file_name' | translate"></span>
+            <input type="text" id="arcseamName" oninput="limitInput_special(this);">  
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frblue" ng-click="arcseamset(1)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue"  ng-click="checkWeldLuaSameName('arcseamName')" ng-bind="'_save' | translate"></a>
+          </div>
+        </div>                         
+      </div>
+      <hr class="box-divider">
+      <div class="container-body">
+        <span class="child-title" ng-bind="'_process_parameters' | translate"></span>
+        <div class="setting-item oneline">
+          <span class="ip-span" ng-bind="'_weld_voltage' | translate"></span>
+          <input class="ip-input" type="text" ng-model="weldVoltage" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_welder_voltage[0]}}" max="{{robotParamsRangeData.welding_library_welder_voltage[1]}}">
+          <span>V</span>  
+        </div>
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_weld_electric' | translate"></span>
+          <input class="ip-input" type="text" ng-model="weldElectric" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_welder_current[0]}}" max="{{robotParamsRangeData.welding_library_welder_current[1]}}">
+          <span>A</span>                
+        </div> 
+        <span class="warning-info" ng-bind="'_change_auto_mode' | translate"></span>
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_overall_speed' | translate"></span>
+          <input class="ip-input" type="text" ng-model="modeSpeed" ng-change="calculatWeldArcSpeed()" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_global_speed[0]}}" max="{{robotParamsRangeData.welding_library_global_speed[1]}}">   
+          <span>%</span>             
+        </div>
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_point_speed' | translate"></span>
+          <input class="ip-input" type="text" ng-model="arcpointSpeed" ng-change="calculatWeldArcSpeed()" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_point_speed[0]}}" max="{{robotParamsRangeData.welding_library_point_speed[1]}}">   
+          <span>%</span>             
+        </div>
+        <div class="setting-item oneline">              
+          <span class="ip-span" ng-bind="'_debug_speed' | translate"></span>
+          <input class="ip-input" type="text" ng-model="debugSpeed" ng-change="calculatWeldArcSpeed()" onchange="limitInput_int(this);" min="{{robotParamsRangeData.welding_library_debug_speed[0]}}" max="{{robotParamsRangeData.welding_library_debug_speed[1]}}">              
+          <span>%</span>  
+        </div>
+        <div class="general-item">              
+          <span ng-bind="'_weld_speed' | translate"></span>
+          <span ng-bind="weldguideSpeed"></span>   
+          <span>cm/min</span>          
+        </div> 
+        <div class="right-btn">
+          <a class="btn btn-frblue" ng-click="applyArcSeamSpeed()" ng-bind="'_apply' | translate"></a>
+        </div>
+      </div>
+    </div>
+    <!-- 多层多道焊缝 -->
+    <div class="setting-item-container" ng-show="show_multi_line_seam">
+      <div class="container-header">
+        <label ng-bind="'_multi_line_seam' | translate"></label>
+      </div>
+      <hr class="box-divider">
+      <div class="container-body">
+        <div class="btns-box">
+          <img id="multilineseam1">
+        </div>
+        <div ng-show="show_multi_lineseam_basic_set">
+          <div class="multi-weave pad br-grey mb-10">
+            <div class="d-flex align-items-center justify-content-between">
+              <span ng-bind="'_welding_swing' | translate"></span>
+              <div class="custom-control custom-switch d-inline-block">
+                <input id="weaveMulti" name="weaveEnabled" type="checkbox" ng-model="weaveEnabled" ng-true-value="1" ng-false-value="0" class="custom-control-input">
+                <label class="custom-control-label" for="weaveMulti"></label>
+              </div>
+            </div>
+            <div ng-show="weaveEnabled == 1">
+              <hr class="box-divider">
+              <div class="d-flex">
+                <div class="w-half mr-5">
+                  <config-select label="'_weave_id' | translate" val="selectedSetWeave" options="WeavecfgData" styles="'w-full'" options-type="'id'" change-toggle="weaveTypeChange"></config-select>
+                </div>
+                <div class="w-half">
+                  <config-select label="'_weave_type' | translate" val="selectedSetWeaveType" options="WeaveTypeData" styles="'w-full'" disable="weaveSetDisable"></config-select>
+                  <config-select
+                    ng-show="selectedSetWeaveType.id == 0 || selectedSetWeaveType.id == 1 || selectedSetWeaveType.id == 4 || selectedSetWeaveType.id == 5 || selectedSetWeaveType.id == 6"
+                    label="'_weave_stay_time' | translate" val="selectedWeaveWaitTime" options="weaveWaitTimeData" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-select>
+                  <config-select
+                    ng-show="selectedSetWeaveType.id == 0 || selectedSetWeaveType.id == 1 || selectedSetWeaveType.id == 4 || selectedSetWeaveType.id == 5 || selectedSetWeaveType.id == 6"
+                    label="'_weave_loaction_wait' | translate" val="selectedWeaveLocationWait" options="weaveLocationWaitData" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-select>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 0 || selectedSetWeaveType.id == 1 || selectedSetWeaveType.id == 2 || selectedSetWeaveType.id == 3 || selectedSetWeaveType.id == 4 || selectedSetWeaveType.id == 5 || selectedSetWeaveType.id == 6"
+                    label="'_weave_frequency' | translate" type="'text'" val="selectedSetWeave.freq" min="0" max="10" typeof="'float'" unit="'Hz'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 6"
+                    label="'_weave_left' | translate" type="'text'" val="selectedSetWeave.leftrange" min="0" max="20" typeof="'int'" unit="'mm'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 6"
+                    label="'_weave_right' | translate" type="'text'" val="selectedSetWeave.rightrange" min="0" max="20" typeof="'int'" unit="'mm'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 6"
+                    label="'_weave_dwell_time' | translate" type="'text'" val="selectedSetWeave.origintime" min="0" max="2000" typeof="'int'" unit="'mm'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 0 || selectedSetWeaveType.id == 1 || selectedSetWeaveType.id == 2 || selectedSetWeaveType.id == 3 || selectedSetWeaveType.id == 4 || selectedSetWeaveType.id == 5"
+                    label="'_weave_range' | translate" type="'text'" val="selectedSetWeave.range" min="0" max="20" typeof="'float'" unit="'mm'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 2 || selectedSetWeaveType.id == 3"
+                    label="'_callback_ratio' | translate" type="'text'" val="selectedSetWeave.circleratio" min="0" max="100" typeof="'int'" unit="'%'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 0 || selectedSetWeaveType.id == 1 || selectedSetWeaveType.id == 4 || selectedSetWeaveType.id == 5 || selectedSetWeaveType.id == 6"
+                    label="'_weave_left_dwell_time' | translate" type="'text'" val="selectedSetWeave.ltime" min="0" max="2000" typeof="'int'" unit="'ms'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 0 || selectedSetWeaveType.id == 1 || selectedSetWeaveType.id == 4 || selectedSetWeaveType.id == 5 || selectedSetWeaveType.id == 6"
+                    label="'_weave_right_dwell_time' | translate" type="'text'" val="selectedSetWeave.rtime" min="0" max="2000" typeof="'int'" unit="'ms'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                  <config-input
+                    ng-show="selectedSetWeaveType.id == 0 || selectedSetWeaveType.id == 4"
+                    label="'_weave_direction_angle' | translate" type="'text'" val="selectedSetWeave.yawangle" min="0" max="180" typeof="'int'" unit="'°'" styles="'w-full'" disable="weaveSetDisable"
+                  ></config-input>
+                </div>
+              </div>
+              <div class="mt-10" ng-show="weaveSetDisable">
+                <a class="btn btn-frgreen" ng-click="weaveSetDisable = false" ng-bind="'_config' | translate"></a>
+              </div>
+              <div class="btn-between mt-10" ng-hide="weaveSetDisable">
+                <a class="btn btn-frgrey" ng-click="weaveSetDisable = true" ng-bind="'_cancel' | translate"></a>
+                <a class="btn btn-frblue" ng-click="setMultiLineWeave()" ng-bind="'_config' | translate"></a>
+              </div>
+            </div>
+          </div>
+          <div class="multi-arc pad br-grey mb-10">
+            <div class="d-flex align-items-center justify-content-between">
+              <span ng-bind="'_arc_tracking' | translate"></span>
+              <div class="custom-control custom-switch d-inline-block">
+                <input id="arcMulti" name="arcEnabled" type="checkbox" ng-model="arcEnabled" ng-true-value="1" ng-false-value="0" class="custom-control-input">
+                <label class="custom-control-label" for="arcMulti"></label>
+              </div>
+            </div>
+            <div ng-show="arcEnabled == 1">
+              <hr class="box-divider">
+              <div class="menu-header d-flex text-expand" style="border-bottom: 1px solid #D3D3D3;">
+                <a class="title-item weld-title weld-title-UD active" ng-click="toggleUDLRType('UD')" ng-bind="'_up_down_compensation' | translate"></a>
+                <a class="title-item weld-title weld-title-LR margin-left-24" ng-click="toggleUDLRType('LR')" ng-bind="'_left_right_compensation' | translate"></a>
+              </div>
+              <config-input class="pt-10" styles="w-half" label="'_arc_track_lag_time' | translate" type="'text'" val="WeldTraceLagTime" typeof="'float'" unit="'ms'" blur-value="0"></config-input>
+              <div ng-show="weldTraceType == 'UD'" class="pt-10">
+                <config-select styles="w-half" label="'_weld_trace_isuplow' | translate" val="selectedWeldTraceIsuplow" options="weldTraceIsuplowData"></config-select>
+                <config-input styles="w-half" label="'_weld_trace_kud' | translate" type="'text'" val="WeldTraceKud" typeof="'float'" blur-value="-0.06"></config-input>
+                <config-input styles="w-half" label="'_weld_trace_tstartud' | translate" type="'text'" val="WeldTraceTstartud" typeof="'float'" unit="'cyc'" blur-value="5"></config-input>
+                <config-input styles="w-half" label="'_weld_trace_stepmaxud' | translate" type="'text'" val="WeldTraceStepmaxud" typeof="'float'" unit="'mm'" blur-value="5"></config-input>
+                <config-input styles="w-half" label="'_weld_trace_summaxud' | translate" type="'text'" val="WeldTraceSummaxud" typeof="'float'" unit="'mm'" blur-value="300"></config-input>
+                <config-select styles="w-half" label="'_weld_trace_axisselect' | translate" val="selectedWeldTraceAxisselect" options="weldTraceAxisselectData"></config-select>
+                <config-select styles="w-half" label="'_weld_trace_reference_type' | translate" val="selectedWeldTraceReferenceType" options="weldTraceReferenceTypeData"></config-select>
+                <config-input ng-show="selectedWeldTraceReferenceType.id == '0'" styles="w-half" label="'_up_down_reference_current_start' | translate" 
+                  type="'text'" val="WeldTraceReferenceStartSampCurrent" typeof="'float'" unit="'cyc'"
+                  blur-value="4"
+                ></config-input>
+                <config-input ng-show="selectedWeldTraceReferenceType.id == '0'" styles="w-half" label="'_up_down_reference_current' | translate"
+                  type="'text'" val="WeldTraceReferenceSampCurrent" typeof="'float'" unit="'cyc'"
+                  blur-value="1"
+                ></config-input>
+                <config-input ng-show="selectedWeldTraceReferenceType.id == '1'" styles="w-half" label="'_weld_trace_reference_current' | translate"
+                  type="'text'" val="WeldTraceReferenceCurrent" typeof="'float'" unit="'A'"
+                  blur-value="10"
+                ></config-input>
+              </div>
+              <div ng-show="weldTraceType == 'LR'" class="pt-10">
+                <config-select styles="w-half" label="'_weld_trace_isleftright' | translate" val="selectedTraceIsleftright" options="traceIsleftrightData"></config-select>
+                <config-input styles="w-half" label="'_weld_trace_klr' | translate" type="'text'" val="WeldTraceKlr" typeof="'float'" blur-value="0.06"></config-input>
+                <config-input styles="w-half" label="'_weld_trace_tstartlr' | translate" type="'text'" val="WeldTraceTstartlr" typeof="'float'" unit="'cyc'" blur-value="5"></config-input>
+                <config-input styles="w-half" label="'_weld_trace_stepmaxlr' | translate" type="'text'" val="WeldTraceStepmaxlr" typeof="'float'" unit="'mm'" blur-value="5"></config-input>
+                <config-input styles="w-half" label="'_weld_trace_summaxlr' | translate" type="'text'" val="WeldTraceSummaxlr" typeof="'float'" unit="'mm'" blur-value="300"></config-input>
+              </div>
+            </div>
+          </div>
+          <div class="multi-weave pad br-grey mb-10">
+            <div class="d-flex align-items-center justify-content-between">
+              <config-select styles="w-half" label="'_control_type' | translate" val="selectedArcStartType" options="IOTypeDict"></config-select>
+              <a class="btn btn-frblue" ng-click="nextmulitiline(1)" ng-bind="'_next' | translate"></a>
+            </div>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set1">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_1' | translate"></span>           
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_safepoint()" ng-bind="'_multi_line_pointa_safe' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(1)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(1)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(1)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_back' | translate"></a>
+            <a class="btn btn-frblue" ng-click="checkMultiPoint(1)" ng-bind="'_next' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set2">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_2' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_multi_points_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetMultiMotionType" ng-options="a as a.name for a in multiPointsTypeData"></select>                
+          </div> 
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(2)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(2)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(2)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(1)"ng-bind="'_back' | translate"></a>
+            <a class="btn btn-frblue" ng-click="checkMultiPoint(2)" ng-bind="'_next' | translate"></a>
+          </div>
+          <hr class="box-divider">
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLinePoint(2)" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set3">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_3' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_multi_points_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetMultiMotionType" ng-options="a as a.name for a in multiPointsTypeData"></select>                
+          </div> 
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(3)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(3)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(3)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(2)"ng-bind="'_back' | translate"></a>
+            <a class="btn btn-frblue" ng-click="checkMultiPoint(3)" ng-bind="'_next' | translate"></a>
+          </div>
+          <hr class="box-divider">
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLinePoint(3)" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set4">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_4' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_multi_points_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetMultiMotionType" ng-options="a as a.name for a in multiPointsTypeData"></select>                
+          </div> 
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(4)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(4)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(4)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(3)"ng-bind="'_back' | translate"></a>
+            <a class="btn btn-frblue" ng-click="checkMultiPoint(4)" ng-bind="'_next' | translate"></a>
+          </div>
+          <hr class="box-divider">
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLinePoint(4)" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set5">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_5' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_multi_points_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetMultiMotionType" ng-options="a as a.name for a in multiPointsTypeData"></select>                
+          </div> 
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(5)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(5)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(5)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(4)"ng-bind="'_back' | translate"></a>
+            <!-- <a class="btn btn-frblue" ng-click="checkMultiPoint(5)" ng-bind="'_next' | translate"></a> -->
+          </div>
+          <hr class="box-divider">
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLinePoint(5)" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set6">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_6' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_multi_points_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetMultiMotionType" ng-options="a as a.name for a in multiPointsTypeData"></select>                
+          </div> 
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(6)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(6)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(6)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(5)"ng-bind="'_back' | translate"></a>
+            <a class="btn btn-frblue" ng-click="checkMultiPoint(6)" ng-bind="'_next' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLinePoint(6)" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set7">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_7' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_multi_points_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetMultiMotionType" ng-options="a as a.name for a in multiPointsTypeData"></select>                
+          </div> 
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(7)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(7)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(7)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(5)"ng-bind="'_back' | translate"></a>
+            <a class="btn btn-frblue" ng-click="checkMultiPoint(7)" ng-bind="'_next' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLinePoint(7)" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_set8">
+          <div class="general-item">              
+            <span class="warning-info" ng-bind="'_multi_tips_8' | translate"></span>           
+          </div>
+          <div class="setting-item oneline">              
+            <span class="ip-span" ng-bind="'_multi_points_type' | translate" style="width: 120px;"></span>
+            <select class="ip-select" ng-model="selectedSetMultiMotionType" ng-options="a as a.name for a in multiPointsTypeData"></select>                
+          </div> 
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_originpoint(8)" ng-bind="'_multi_line_pointa' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_xpoint(8)" ng-bind="'_multi_line_pointax' | translate"></a>
+          </div>
+          <div class="right-btn">
+            <a class="btn btn-frblue" ng-click="mulitilinestart_zpoint(8)" ng-bind="'_multi_line_pointaz' | translate"></a>
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLinePoint(8)" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_multi_lineseam_para_set">
+          <table id="tbMultiLineData" class="table table-bordered table-striped" style="width: 320px;height: 200%;word-break: break-all;">
+            <thead>
+              <tr>
+                <th class="w-60">Count</th>
+                <th class="w-70">On/Off</th>
+                <th>X(mm)</th>
+                <th>Z(mm)</th>
+                <th>B(°)</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr ng-repeat="item in multiSeamData">
+                <td class="w-60" ng-bind="item.id"></td>
+                <td class="check-box w-70">
+                  <input type="checkbox" id="cbItem{{item.id}}" name="cbItem" ng-click="clickCbItem(item.id)">
+                </td>
+                <td ng-bind="item.x" contenteditable="true"></td>
+                <td ng-bind="item.z" contenteditable="true"></td>
+                <td ng-bind="item.b" contenteditable="true"></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="btns-box mt-10">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(0)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue" ng-click="applyMultiLineFile()" ng-bind="'_complete' | translate"></a>
+          </div>
+        </div>
+        <div ng-show="show_save_multi_file">
+          <span class="warning-info" style="word-wrap: break-word;display: block;" ng-bind="'_weld_complete_tips' | translate"></span>           
+          <div class="general-item ">
+            <span ng-bind="'_weld_file_name' | translate"></span>
+            <input type="text" id="multiseamName" oninput="limitInput_special(this);">  
+          </div>
+          <div class="btns-box">
+            <a class="btn btn-frgrey" ng-click="nextmulitiline(1)"ng-bind="'_cancel' | translate"></a>
+            <a class="btn btn-frblue"  ng-click="checkWeldLuaSameName('multiseamName')" ng-bind="'_save' | translate"></a>
+          </div>
+        </div>                          
+      </div>
+    </div>    
+  </div>
+</div>
+
+<script type="text/javascript">
+  $("#lineseam").attr("src","./img/lineseam.jpg?v=" + new Date().getTime());
+  $("#arcseam").attr("src","./img/arcseam.jpg?v=" + new Date().getTime());
+  $("#multilineseam1").attr("src","./img/multilineseam1.jpg?v=" + new Date().getTime());
+</script>
