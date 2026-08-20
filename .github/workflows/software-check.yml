@@ -7,6 +7,9 @@ on:
       - main
       - "work/**"
 
+permissions:
+  contents: read
+
 jobs:
   software-check:
     runs-on: ubuntu-22.04
