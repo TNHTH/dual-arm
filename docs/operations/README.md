@@ -6,7 +6,7 @@
 
 ## 包含内容
 
-- `runbooks/`：安全边界、工程流程规范、代码审查和验收 runbook。
+- `runbooks/`：安全边界、工程流程规范、代码审查和验收 runbook（含 `software-only-refactor-guard.md`）。
 
 ## 入口文件或常用命令
 

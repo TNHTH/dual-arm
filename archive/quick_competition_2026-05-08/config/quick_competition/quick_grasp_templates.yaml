@@ -1,0 +1,56 @@
+schema_version: quick_grasp_templates.v1
+
+computed_templates:
+  enabled: true
+  require_collision_check: true
+  require_ik_margin_check: true
+  require_moveit_service: true
+  ik_service_name: /compute_ik
+  ik_frame_id: world
+  ik_service_wait_timeout_s: 0.25
+  ik_call_timeout_s: 1.0
+  ik_attempt_timeout_s: 0.05
+  allow_generated_grasp_candidates: true
+  max_grasp_candidates_per_object: 16
+  fallback_to_manual_waypoint: true
+
+required_anchor_waypoints:
+  left_arm: [home, safe_stow]
+  right_arm: [home, safe_stow]
+  observe_table_required_for_scene_sources: [depth, scene_fusion]
+
+grasp_templates:
+  bottle:
+    geometry: cylinder
+    default_height_m: 0.17
+    default_radius_m: 0.03
+    grip_height_ratio: 0.45
+    approach_dirs_table: ["+x", "-x", "+y", "-y"]
+    pregrasp_distance_m: 0.08
+    grasp_distance_m: 0.02
+    lift_height_m: 0.08
+    pour_height_above_cup_m: 0.12
+    pour_offset_xy_m: [0.05, 0.0]
+    tilt_pitch_deg: 58.0
+    keep_orientation_upright: true
+  cup:
+    geometry: cylinder
+    default_height_m: 0.09
+    default_radius_m: 0.035
+    grip_height_ratio: 0.50
+    approach_dirs_table: ["+x", "-x", "+y", "-y"]
+    pregrasp_distance_m: 0.08
+    grasp_distance_m: 0.02
+    lift_height_m: 0.08
+    hold_above_table_m: 0.11
+    keep_orientation_upright: true
+  ball:
+    geometry: sphere
+    default_radius_m: 0.06
+    cage_spacing_m: 0.13
+    lift_height_m: 0.08
+    release_retreat_m: 0.08
+  basket:
+    geometry: box
+    default_size_m: [0.30, 0.20, 0.12]
+    release_height_above_basket_m: 0.10

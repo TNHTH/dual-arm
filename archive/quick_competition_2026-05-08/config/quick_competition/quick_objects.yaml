@@ -1,0 +1,44 @@
+schema_version: quick_objects.v1
+source: manual
+frame: table_frame
+
+objects:
+  water_bottle:
+    pose: [0.25, -0.15, 0.00, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.06, 0.06, 0.18]
+    grasp_height_ratio: 0.55
+    confidence: 0.5
+    enabled: true
+  cola_bottle:
+    pose: [0.25, 0.15, 0.00, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.06, 0.06, 0.15]
+    grasp_height_ratio: 0.55
+    confidence: 0.5
+    enabled: true
+  cup_1:
+    pose: [-0.15, -0.12, 0.00, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.07, 0.07, 0.09]
+    grasp_height_ratio: 0.45
+    confidence: 0.5
+    enabled: true
+  cup_2:
+    pose: [-0.15, 0.12, 0.00, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.07, 0.07, 0.09]
+    grasp_height_ratio: 0.45
+    confidence: 0.5
+    enabled: true
+  basketball:
+    pose: [0.0, -0.25, 0.25, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.12, 0.12, 0.12]
+    confidence: 0.5
+    enabled: true
+  soccer_ball:
+    pose: [0.0, 0.25, 0.25, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.12, 0.12, 0.12]
+    confidence: 0.5
+    enabled: true
+  basket:
+    pose: [0.35, 0.0, 0.12, 0.0, 0.0, 0.0, 1.0]
+    size_m: [0.30, 0.20, 0.12]
+    confidence: 0.5
+    enabled: true

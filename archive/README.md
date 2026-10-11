@@ -7,6 +7,7 @@
 ## 包含内容
 
 - `legacy/`：旧目录实体与兼容保留内容
+- `quick_competition_2026-05-08/`：快速比赛实验归档（自 `test@76ff9d20` 迁入，含 `COLCON_IGNORE`）
 - `legacy-import-manifest.md`
 - `vendor-archive-manifest.md`
 

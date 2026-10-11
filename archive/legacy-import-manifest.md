@@ -1,6 +1,6 @@
 # Legacy Import Manifest
 
-更新时间：2026-04-16
+更新时间：2026-10-11
 
 ## 审计来源
 
@@ -39,6 +39,12 @@
 | --- | --- |
 | 旧 monolithic `arm_planner/` 目录形态 | 已拆分到 `packages/planning/*`，根目录只保留 legacy 归档 |
 | 旧工作区扁平包布局 | 已重构为 `packages/<domain>/<package>` |
+
+## 快照迁入（2026-10-11）
+
+| 来源分支 | 提交 | 迁入路径 | 说明 |
+| --- | --- | --- | --- |
+| `test` | `76ff9d204d890923bb62bf522cec7b37552c10b3` | `archive/quick_competition_2026-05-08/` | 快速比赛实验包与参考测试；不参与正式构建 |
 
 ## 本轮迁移结果
 
