@@ -129,6 +129,17 @@ ros2 interface show dualarm_interfaces/action/RunCompetition
 ros2 pkg executables competition_console_api
 ```
 
+## 验证映射
+
+2026-10-12 只核对已推送的 `main`。根目录没有 `AGENTS.md`，本次不新增，也不改包结构。
+
+| 检查 | 位置 | 本次结果 |
+|---|---|---|
+| 分支 | 只有 `main` | 已核对 |
+| 路径、README 覆盖、pytest | `.github/workflows/software-check.yml` | 2026-10-11 的 push 运行成功，run `38138438449`。本次没有重跑 |
+| 单元 / 集成 | `tests/unit`、`tests/integration` | 目录说明仍写着没有统一测试文件。空目录通过 pytest 不记成功能验证 |
+| 硬件 / 比赛 | `tests/hardware`、真机双臂 | 未执行，V0 |
+
 ## 文档索引
 
 - 仓库地图：`docs/reference/repo-map.md`
